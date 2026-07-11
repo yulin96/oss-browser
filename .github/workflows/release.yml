@@ -1,0 +1,110 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macOS
+            os: macos-14
+            command: pnpm exec electron-builder --mac dmg --arm64 --x64 --publish never
+            artifact: release-macos
+            files: |
+              dist/*.dmg
+          - name: Windows
+            os: windows-latest
+            command: pnpm exec electron-builder --win nsis zip --x64 --publish never
+            artifact: release-windows
+            files: |
+              dist/*.exe
+              dist/*.zip
+          - name: Linux
+            os: ubuntu-latest
+            command: pnpm exec electron-builder --linux AppImage deb --x64 --publish never
+            artifact: release-linux
+            files: |
+              dist/*.AppImage
+              dist/*.deb
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.34.5
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Verify tag version
+        shell: bash
+        run: |
+          PACKAGE_VERSION="$(node -p "require('./package.json').version")"
+          if [ "${GITHUB_REF_NAME}" != "v${PACKAGE_VERSION}" ]; then
+            echo "Tag ${GITHUB_REF_NAME} does not match package version v${PACKAGE_VERSION}."
+            exit 1
+          fi
+
+      - name: Check renderer types
+        run: pnpm typecheck:web
+
+      - name: Lint source
+        run: pnpm lint
+
+      - name: Compile application
+        run: pnpm exec electron-vite build
+
+      - name: Package application
+        run: ${{ matrix.command }}
+
+      - name: Upload packaged files
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: ${{ matrix.files }}
+          if-no-files-found: error
+
+  release:
+    name: Publish GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download packaged files
+        uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+          merge-multiple: true
+
+      - name: Create release and upload files
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          gh release create "${GITHUB_REF_NAME}"
+          release-assets/*
+          --repo "${GITHUB_REPOSITORY}"
+          --title "OSS Browser ${GITHUB_REF_NAME}"
+          --generate-notes
+          --verify-tag
