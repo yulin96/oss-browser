@@ -24,8 +24,8 @@ Repository: [github.com/yulin96/oss-browser](https://github.com/yulin96/oss-brow
 
 Requirements:
 
-- Node.js 22
-- pnpm 10
+- Node.js 24
+- pnpm 11
 
 Install dependencies:
 
@@ -101,7 +101,13 @@ No personal access token is required for the standard workflow. GitHub provides 
 
 ### Signing notice
 
-Current packages are unsigned. macOS Gatekeeper and Windows SmartScreen may warn users when opening them. Public production releases should add Apple code signing and notarization, and optionally Windows code signing.
+Current packages are unsigned. macOS Gatekeeper and Windows SmartScreen may warn users when opening them.
+
+On macOS, you might see a warning stating `“OSS Browser.app” is damaged and cannot be opened`. You can bypass this by removing the quarantine attribute. Open your terminal and run:
+
+```bash
+sudo xattr -r -d com.apple.quarantine /Applications/OSS\ Browser.app
+```
 
 ## Local Data and Permissions
 
