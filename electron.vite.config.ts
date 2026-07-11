@@ -13,7 +13,6 @@ export default defineConfig({
         '@renderer': resolve('src/renderer/src')
       }
     },
-    //@ts-expect-error tailwindcss plugin type error
     plugins: [vue(), tailwindcss()]
   }
 })
