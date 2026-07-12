@@ -1214,37 +1214,23 @@ input[type='checkbox']:checked::after {
   text-align: center;
 }
 
-@keyframes modal-fade-in {
-  from {
-    opacity: 0;
-    backdrop-filter: blur(0px);
-  }
-  to {
-    opacity: 1;
-    backdrop-filter: blur(3px);
-  }
-}
-
-@keyframes modal-scale-in {
-  from {
-    opacity: 0;
-    transform: scale(0.96) translateY(10px);
-  }
-  to {
-    opacity: 1;
-    transform: scale(1) translateY(0);
-  }
-}
-
 .modal-mask {
   position: fixed;
   z-index: 100;
   inset: 0;
   display: grid;
   place-items: center;
+  background: rgba(13, 24, 39, 0);
+  backdrop-filter: blur(0px);
+  opacity: 0;
+  pointer-events: none;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.modal-mask.is-active {
+  opacity: 1;
+  pointer-events: auto;
   background: rgba(13, 24, 39, 0.43);
   backdrop-filter: blur(3px);
-  animation: modal-fade-in 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 .modal-card {
   display: flex;
@@ -1257,7 +1243,13 @@ input[type='checkbox']:checked::after {
   border-radius: 10px;
   background: var(--surface);
   box-shadow: var(--shadow);
-  animation: modal-scale-in 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  opacity: 0;
+  transform: scale(0.96) translateY(10px);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.modal-card.is-active {
+  opacity: 1;
+  transform: scale(1) translateY(0);
 }
 .modal-card.is-large {
   width: min(820px, calc(100vw - 40px));
