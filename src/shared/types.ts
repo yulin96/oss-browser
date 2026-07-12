@@ -115,6 +115,23 @@ export interface TransferItem {
   error?: string
 }
 
+export type UpdateStatus =
+  | 'idle'
+  | 'checking'
+  | 'available'
+  | 'downloading'
+  | 'downloaded'
+  | 'not-available'
+  | 'error'
+  | 'unsupported'
+
+export interface UpdateState {
+  status: UpdateStatus
+  version?: string
+  percent?: number
+  message?: string
+}
+
 export interface MultipartUploadInfo {
   name: string
   uploadId: string
@@ -201,5 +218,12 @@ export interface OssBrowserApi {
     revealFile: (path: string) => Promise<void>
     writeClipboard: (text: string) => Promise<void>
   }
+  updates: {
+    getState: () => Promise<UpdateState>
+    check: () => Promise<UpdateState>
+    download: () => Promise<void>
+    install: () => Promise<void>
+  }
   onTransfer: (listener: (item: TransferItem) => void) => () => void
+  onUpdate: (listener: (state: UpdateState) => void) => () => void
 }

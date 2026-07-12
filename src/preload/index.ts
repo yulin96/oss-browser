@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
-import type { OssBrowserApi, TransferItem } from '../shared/types'
+import type { OssBrowserApi, TransferItem, UpdateState } from '../shared/types'
 
 const api: OssBrowserApi = {
   auth: {
@@ -80,10 +80,21 @@ const api: OssBrowserApi = {
     revealFile: (path) => ipcRenderer.invoke('system:revealFile', path),
     writeClipboard: (text) => ipcRenderer.invoke('system:writeClipboard', text)
   },
+  updates: {
+    getState: () => ipcRenderer.invoke('updates:getState'),
+    check: () => ipcRenderer.invoke('updates:check'),
+    download: () => ipcRenderer.invoke('updates:download'),
+    install: () => ipcRenderer.invoke('updates:install')
+  },
   onTransfer: (listener) => {
     const handler = (_event: Electron.IpcRendererEvent, item: TransferItem): void => listener(item)
     ipcRenderer.on('transfer:progress', handler)
     return () => ipcRenderer.removeListener('transfer:progress', handler)
+  },
+  onUpdate: (listener) => {
+    const handler = (_event: Electron.IpcRendererEvent, state: UpdateState): void => listener(state)
+    ipcRenderer.on('update:status', handler)
+    return () => ipcRenderer.removeListener('update:status', handler)
   }
 }
 

@@ -26,6 +26,8 @@ jobs:
             artifact: release-macos
             files: |
               dist/*.dmg
+              dist/*.zip
+              dist/latest-mac.yml
           - name: Windows
             os: windows-latest
             command: pnpm exec electron-builder --win nsis zip --x64 --publish never
@@ -33,6 +35,8 @@ jobs:
             files: |
               dist/*.exe
               dist/*.zip
+              dist/*.blockmap
+              dist/latest.yml
           - name: Linux
             os: ubuntu-latest
             command: pnpm exec electron-builder --linux AppImage deb --x64 --publish never
@@ -40,10 +44,16 @@ jobs:
             files: |
               dist/*.AppImage
               dist/*.deb
+              dist/latest-linux.yml
 
     steps:
       - name: Check out source
         uses: actions/checkout@v6
+
+      - name: Verify update configuration
+        env:
+          OSS_UPDATE_URL: ${{ vars.OSS_UPDATE_URL }}
+        run: test -n "$OSS_UPDATE_URL"
 
       - name: Set up pnpm
         uses: pnpm/action-setup@v6
@@ -76,6 +86,8 @@ jobs:
         run: pnpm exec electron-vite build
 
       - name: Package application
+        env:
+          OSS_UPDATE_URL: ${{ vars.OSS_UPDATE_URL }}
         run: ${{ matrix.command }}
 
       - name: Upload packaged files
@@ -90,11 +102,36 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     steps:
+      - name: Check out source
+        uses: actions/checkout@v6
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
       - name: Download packaged files
         uses: actions/download-artifact@v4
         with:
           path: release-assets
           merge-multiple: true
+
+      - name: Upload update files to OSS
+        env:
+          OSS_ACCESS_KEY_ID: ${{ secrets.OSS_ACCESS_KEY_ID }}
+          OSS_ACCESS_KEY_SECRET: ${{ secrets.OSS_ACCESS_KEY_SECRET }}
+          OSS_BUCKET: ${{ vars.OSS_BUCKET }}
+          OSS_REGION: ${{ vars.OSS_REGION }}
+          OSS_ENDPOINT: ${{ vars.OSS_ENDPOINT }}
+          OSS_RELEASE_PREFIX: ${{ vars.OSS_RELEASE_PREFIX }}
+        run: node scripts/upload-release-to-oss.mjs
 
       - name: Create release and upload files
         env:

@@ -4,6 +4,7 @@ import { electronApp, is, optimizer } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
 import { OssService } from './oss-service'
 import { ProfileStore } from './profile-store'
+import { UpdateService } from './update-service'
 import type {
   AppSettings,
   AuthConfig,
@@ -22,6 +23,7 @@ const oss = new OssService((item: TransferItem) => {
   mainWindow?.webContents.send('transfer:progress', item)
 })
 const profiles = new ProfileStore()
+const updates = new UpdateService(() => mainWindow)
 
 function createWindow(): void {
   mainWindow = new BrowserWindow({
@@ -180,6 +182,10 @@ function registerIpc(): void {
   ipcMain.handle('system:openExternal', (_event, url: string) => shell.openExternal(url))
   ipcMain.handle('system:revealFile', (_event, path: string) => shell.showItemInFolder(path))
   ipcMain.handle('system:writeClipboard', (_event, text: string) => clipboard.writeText(text))
+  ipcMain.handle('updates:getState', () => updates.getState())
+  ipcMain.handle('updates:check', () => updates.check())
+  ipcMain.handle('updates:download', () => updates.download())
+  ipcMain.handle('updates:install', () => updates.install())
 }
 
 const hasSingleInstanceLock = app.requestSingleInstanceLock()
@@ -199,6 +205,7 @@ app.whenReady().then(() => {
   app.on('browser-window-created', (_, window) => optimizer.watchWindowShortcuts(window))
   registerIpc()
   createWindow()
+  updates.initialize()
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()

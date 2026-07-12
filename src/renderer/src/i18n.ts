@@ -245,7 +245,26 @@ const translations: Record<Exclude<AppLocale, 'zh-CN'>, Record<string, string>> 
     '选择浅色、深色或跟随系统': 'Choose light, dark, or system appearance',
     跟随系统: 'System',
     浅色: 'Light',
-    深色: 'Dark'
+    深色: 'Dark',
+    软件更新: 'Software updates',
+    检查更新: 'Check for updates',
+    检查中: 'Checking',
+    '正在检查新版本…': 'Checking for updates…',
+    '当前版本：{version}': 'Current version: {version}',
+    '发现新版本 {version}': 'Version {version} is available',
+    发现新版本: 'Update available',
+    '新版本 {version} 已发布，是否现在下载？': 'Version {version} is available. Download it now?',
+    下载更新: 'Download update',
+    '正在下载新版本：{percent}%': 'Downloading update: {percent}%',
+    '新版本 {version} 已下载，重启后安装':
+      'Version {version} is ready and will be installed after restart',
+    更新已准备好: 'Update ready',
+    '程序将关闭并安装新版本，是否立即重启？':
+      'The app will close and install the update. Restart now?',
+    重启安装: 'Restart and install',
+    当前已是最新版本: 'You are using the latest version',
+    '检查更新失败，请稍后重试': 'Could not check for updates. Try again later.',
+    开发模式下不检查更新: 'Updates are disabled in development mode'
   },
   'ja-JP': {
     '快速、安全地管理阿里云对象存储': 'Alibaba Cloud Object Storage をすばやく安全に管理',
@@ -488,7 +507,27 @@ const translations: Record<Exclude<AppLocale, 'zh-CN'>, Record<string, string>> 
     '选择浅色、深色或跟随系统': 'ライト、ダーク、またはシステム設定を選択',
     跟随系统: 'システム',
     浅色: 'ライト',
-    深色: 'ダーク'
+    深色: 'ダーク',
+    软件更新: 'ソフトウェア更新',
+    检查更新: '更新を確認',
+    检查中: '確認中',
+    '正在检查新版本…': '新しいバージョンを確認しています…',
+    '当前版本：{version}': '現在のバージョン：{version}',
+    '发现新版本 {version}': '新しいバージョン {version} があります',
+    发现新版本: '新しいバージョンがあります',
+    '新版本 {version} 已发布，是否现在下载？':
+      '新しいバージョン {version} を今すぐダウンロードしますか？',
+    下载更新: '更新をダウンロード',
+    '正在下载新版本：{percent}%': '更新をダウンロード中：{percent}%',
+    '新版本 {version} 已下载，重启后安装':
+      'バージョン {version} の準備ができました。再起動後にインストールされます',
+    更新已准备好: '更新の準備ができました',
+    '程序将关闭并安装新版本，是否立即重启？':
+      'アプリを終了して更新をインストールします。今すぐ再起動しますか？',
+    重启安装: '再起動してインストール',
+    当前已是最新版本: '現在のバージョンは最新です',
+    '检查更新失败，请稍后重试': '更新を確認できませんでした。後でもう一度お試しください。',
+    开发模式下不检查更新: '開発モードでは更新を確認しません'
   }
 }
 

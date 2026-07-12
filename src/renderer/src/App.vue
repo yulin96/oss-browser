@@ -67,7 +67,8 @@ import type {
   RamAccessKey,
   RamUser,
   SavedProfile,
-  TransferItem
+  TransferItem,
+  UpdateState
 } from '../../shared/types'
 import appIcon from './assets/icon.png'
 import AppButton from './components/AppButton.vue'
@@ -214,6 +215,8 @@ const selectedCdnDomain = ref('')
 const confirmation = shallowRef<Confirmation | null>(null)
 const permissionResults = ref<PermissionProbeItem[]>([])
 const permissionChecking = ref(false)
+const updateState = ref<UpdateState>({ status: 'idle' })
+const manualUpdateCheck = ref(false)
 const thumbnailUrls = reactive<Record<string, string>>({})
 const failedThumbnailNames = ref(new Set<string>())
 
@@ -328,7 +331,10 @@ const previewType = computed(() => {
 })
 
 let removeTransferListener: (() => void) | undefined
+let removeUpdateListener: (() => void) | undefined
 let toastTimer: ReturnType<typeof setTimeout> | undefined
+let promptedAvailableVersion = ''
+let promptedDownloadedVersion = ''
 let dragDepth = 0
 let permissionProbeGeneration = 0
 const darkModeQuery = window.matchMedia('(prefers-color-scheme: dark)')
@@ -343,6 +349,9 @@ onMounted(async () => {
   window.addEventListener('blur', resetDragState)
   darkModeQuery.addEventListener('change', applyTheme)
   viewMode.value = localStorage.getItem('oss-browser-view-mode') === 'grid' ? 'grid' : 'list'
+  removeUpdateListener = window.ossBrowser.onUpdate(handleUpdateState)
+  updateState.value = await window.ossBrowser.updates.getState()
+  handleUpdateState(updateState.value)
   appVersion.value = await window.ossBrowser.system.getVersion()
   try {
     const storedSettings = localStorage.getItem('oss-browser-settings')
@@ -363,6 +372,7 @@ onMounted(async () => {
 
 onBeforeUnmount(() => {
   removeTransferListener?.()
+  removeUpdateListener?.()
   darkModeQuery.removeEventListener('change', applyTheme)
   document.removeEventListener('pointerdown', closeFloatingMenus)
   document.removeEventListener('keydown', handleGlobalKeydown)
@@ -379,6 +389,80 @@ function showToast(message: string): void {
   toastTimer = setTimeout(() => {
     toastMessage.value = ''
   }, 3000)
+}
+
+const updateDescription = computed(() => {
+  if (updateState.value.status === 'checking') return t('正在检查新版本…')
+  if (updateState.value.status === 'available')
+    return t('发现新版本 {version}', { version: updateState.value.version || '' })
+  if (updateState.value.status === 'downloading')
+    return t('正在下载新版本：{percent}%', { percent: updateState.value.percent || 0 })
+  if (updateState.value.status === 'downloaded')
+    return t('新版本 {version} 已下载，重启后安装', { version: updateState.value.version || '' })
+  if (updateState.value.status === 'error') return t('检查更新失败，请稍后重试')
+  if (updateState.value.status === 'unsupported') return t('开发模式下不检查更新')
+  return t('当前版本：{version}', { version: appVersion.value })
+})
+
+const updateButtonLabel = computed(() => {
+  if (updateState.value.status === 'checking') return t('检查中')
+  if (updateState.value.status === 'available') return t('下载更新')
+  if (updateState.value.status === 'downloading') return `${updateState.value.percent || 0}%`
+  if (updateState.value.status === 'downloaded') return t('重启安装')
+  return t('检查更新')
+})
+
+function requestUpdateDownload(): void {
+  requestConfirmation({
+    title: t('发现新版本'),
+    description: t('新版本 {version} 已发布，是否现在下载？', {
+      version: updateState.value.version || ''
+    }),
+    confirmLabel: t('下载更新'),
+    action: () => window.ossBrowser.updates.download()
+  })
+}
+
+function requestUpdateInstall(): void {
+  requestConfirmation({
+    title: t('更新已准备好'),
+    description: t('程序将关闭并安装新版本，是否立即重启？'),
+    confirmLabel: t('重启安装'),
+    action: () => window.ossBrowser.updates.install()
+  })
+}
+
+function handleUpdateState(state: UpdateState): void {
+  updateState.value = state
+  if (state.status === 'available' && state.version !== promptedAvailableVersion) {
+    promptedAvailableVersion = state.version || 'latest'
+    requestUpdateDownload()
+  }
+  if (state.status === 'downloaded' && state.version !== promptedDownloadedVersion) {
+    promptedDownloadedVersion = state.version || 'latest'
+    requestUpdateInstall()
+  }
+  if (manualUpdateCheck.value && state.status === 'not-available') {
+    manualUpdateCheck.value = false
+    showToast(t('当前已是最新版本'))
+  }
+  if (manualUpdateCheck.value && state.status === 'error') {
+    manualUpdateCheck.value = false
+    showToast(t('检查更新失败，请稍后重试'))
+  }
+}
+
+async function handleUpdateAction(): Promise<void> {
+  if (updateState.value.status === 'available') return requestUpdateDownload()
+  if (updateState.value.status === 'downloaded') return requestUpdateInstall()
+  if (updateState.value.status === 'checking' || updateState.value.status === 'downloading') return
+  manualUpdateCheck.value = true
+  try {
+    handleUpdateState(await window.ossBrowser.updates.check())
+  } catch {
+    manualUpdateCheck.value = false
+    showToast(t('检查更新失败，请稍后重试'))
+  }
 }
 
 function handleDragEnter(event: DragEvent): void {
@@ -2732,6 +2816,18 @@ async function checkPermissions(): Promise<void> {
       </div>
 
       <div class="settings-section-title">{{ t('通用设置') }}</div>
+      <div class="setting-row">
+        <div>
+          <strong>{{ t('软件更新') }}</strong
+          ><span>{{ updateDescription }}</span>
+        </div>
+        <AppButton
+          :label="updateButtonLabel"
+          :icon="RefreshCw"
+          :disabled="updateState.status === 'checking' || updateState.status === 'downloading'"
+          @click="handleUpdateAction"
+        />
+      </div>
       <div class="setting-row">
         <div>
           <strong>{{ t('外观主题') }}</strong
