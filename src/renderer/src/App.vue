@@ -150,6 +150,7 @@ const authToken = ref('')
 const directError = ref('')
 const toastMessage = ref('')
 const modal = ref<ModalName>(null)
+const showProfilesModal = ref(false)
 const transfers = ref<TransferItem[]>([])
 const showTransfers = ref(false)
 const showMoreActions = ref(false)
@@ -1383,6 +1384,8 @@ async function useProfile(profile: SavedProfile): Promise<void> {
       buckets.value = result
       loadAccountPreferences()
       saveSession()
+      showProfilesModal.value = false
+      modal.value = null
       await openInitialLocation(result, auth.presetPath || '')
     }
     return
@@ -1392,6 +1395,7 @@ async function useProfile(profile: SavedProfile): Promise<void> {
   permissionChecking.value = false
   auth.alias = profile.config.alias || ''
   Object.assign(auth, profile.config)
+  showProfilesModal.value = false
   modal.value = null
 }
 
@@ -1580,7 +1584,7 @@ async function checkPermissions(): Promise<void> {
           class="saved-profile-entry"
           role="button"
           tabindex="0"
-          @click="modal = 'profiles'"
+          @click="showProfilesModal = true"
         >
           <KeyRound :size="15" />{{ t('使用已保存账号') }}
         </div>
@@ -2013,39 +2017,6 @@ async function checkPermissions(): Promise<void> {
           </div>
         </AppTooltip>
       </div>
-    </ModalShell>
-
-    <ModalShell
-      v-if="modal === 'profiles'"
-      :title="t('已保存账号')"
-      size="large"
-      @close="modal = null"
-    >
-      <div v-if="!savedProfiles.length" class="modal-empty">{{ t('暂无已保存账号') }}</div>
-      <div v-for="profile in savedProfiles" :key="profile.id" class="profile-row">
-        <div>
-          <strong>
-            {{ profile.label }}
-            <span
-              v-if="profile.label !== profile.config.accessKeyId"
-              class="text-xs font-normal text-muted-foreground ml-1"
-            >
-              ({{ profile.config.accessKeyId }})
-            </span>
-          </strong>
-          <span>{{
-            profile.config.endpointMode === 'public' ? t('公共云') : profile.config.endpoint
-          }}</span>
-        </div>
-        <div class="row-actions">
-          <AppButton :label="t('使用')" tone="primary" @click="useProfile(profile)" />
-          <AppButton :label="t('删除')" tone="danger" @click="removeProfile(profile)" />
-        </div>
-      </div>
-      <template #footer>
-        <AppButton :label="t('清空全部')" tone="danger" @click="clearSavedProfile" />
-        <AppButton :label="t('关闭')" @click="modal = null" />
-      </template>
     </ModalShell>
 
     <ModalShell v-if="modal === 'cache'" :title="t('刷新 CDN 缓存')" @close="modal = null">
@@ -2559,7 +2530,7 @@ async function checkPermissions(): Promise<void> {
           <strong>{{ t('本地登录信息') }}</strong
           ><span>{{ t('仅保存在当前电脑') }}</span>
         </div>
-        <AppButton :label="t('管理账号')" @click="modal = 'profiles'" />
+        <AppButton :label="t('管理账号')" @click="showProfilesModal = true" />
       </div>
       <div class="setting-row">
         <div>
@@ -2635,6 +2606,39 @@ async function checkPermissions(): Promise<void> {
             <input v-model.number="settings.listPageSize" type="number" min="10" max="1000" /></div
         ></label>
       </div>
+    </ModalShell>
+
+    <ModalShell
+      v-if="showProfilesModal"
+      :title="t('已保存账号')"
+      width="540px"
+      @close="showProfilesModal = false"
+    >
+      <div v-if="!savedProfiles.length" class="modal-empty">{{ t('暂无已保存账号') }}</div>
+      <div v-for="profile in savedProfiles" :key="profile.id" class="profile-row">
+        <div>
+          <strong>
+            {{ profile.label }}
+            <span
+              v-if="profile.label !== profile.config.accessKeyId"
+              class="text-xs font-normal text-muted-foreground ml-1"
+            >
+              ({{ profile.config.accessKeyId }})
+            </span>
+          </strong>
+          <span>{{
+            profile.config.endpointMode === 'public' ? t('公共云') : profile.config.endpoint
+          }}</span>
+        </div>
+        <div class="row-actions">
+          <AppButton :label="t('使用')" tone="primary" @click="useProfile(profile)" />
+          <AppButton :label="t('删除')" tone="danger" @click="removeProfile(profile)" />
+        </div>
+      </div>
+      <template #footer>
+        <AppButton :label="t('清空全部')" tone="danger" @click="clearSavedProfile" />
+        <AppButton :label="t('关闭')" @click="showProfilesModal = false" />
+      </template>
     </ModalShell>
 
     <ConfirmDialog
