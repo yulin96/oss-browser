@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto'
 import { createWriteStream } from 'node:fs'
 import { mkdir, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises'
-import { basename, join, relative, sep } from 'node:path'
+import { basename, isAbsolute, join, relative, sep } from 'node:path'
 import { pipeline } from 'node:stream/promises'
 import { app } from 'electron'
 import OSS from 'ali-oss'
@@ -625,7 +625,12 @@ export class OssService {
 
     await this.runPool(objects, this.settings.maxDownloadJobs, async (object) => {
       const localPath = join(destination, ...object.relativePath.split('/'))
-      if (!localPath.startsWith(destination)) {
+      const pathFromDestination = relative(destination, localPath)
+      if (
+        pathFromDestination === '..' ||
+        pathFromDestination.startsWith(`..${sep}`) ||
+        isAbsolute(pathFromDestination)
+      ) {
         throw new Error('下载文件路径无效，检测到越界穿越风险')
       }
       const partialPath = `${localPath}.ossbrowser.part`

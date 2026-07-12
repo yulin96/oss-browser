@@ -16,6 +16,7 @@ const defaultSettings: AppSettings = {
 
 export function useAppSettings(options: {
   auth: AuthConfig
+  loggedIn: Ref<boolean>
   savedProfiles: Ref<SavedProfile[]>
   profileId: () => string
   run: <T>(task: () => Promise<T>) => Promise<T | undefined>
@@ -81,6 +82,7 @@ export function useAppSettings(options: {
   watch(
     () => options.auth.secure,
     async (nextSecure) => {
+      if (!options.loggedIn.value) return
       await window.ossBrowser.auth.setSecure(nextSecure)
       if (options.auth.remember) {
         await window.ossBrowser.profiles.save({

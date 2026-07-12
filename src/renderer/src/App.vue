@@ -293,6 +293,7 @@ const mediaForm = reactive({
 })
 const { settings, themeMode, initializeSettings, disposeSettings, openSettings } = useAppSettings({
   auth,
+  loggedIn,
   savedProfiles,
   profileId,
   run: settingsTask.run,
