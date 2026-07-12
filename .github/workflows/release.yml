@@ -51,6 +51,7 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Verify update configuration
+        shell: bash
         env:
           OSS_UPDATE_URL: ${{ vars.OSS_UPDATE_URL }}
         run: test -n "$OSS_UPDATE_URL"
