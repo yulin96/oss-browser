@@ -1471,79 +1471,96 @@ async function checkPermissions(): Promise<void> {
           </div>
         </div>
 
-        <template v-if="authMode === 'token'">
-          <label class="field-label">{{ t('授权码') }}</label>
-          <div class="textarea-wrap">
-            <textarea v-model.trim="authToken" rows="7" :placeholder="t('粘贴 Base64 授权码')" />
-          </div>
-          <div v-if="errorMessage" class="error-box">{{ errorMessage }}</div>
-          <AppButton
-            class="token-connect-button"
-            :label="t('使用授权码连接')"
-            tone="primary"
-            :disabled="!authToken || authTask.pending.value"
-            @click="loginWithToken"
-          />
-        </template>
-
-        <template v-else>
-          <label class="field-label">Endpoint</label>
-          <div class="field-row" :class="{ 'single-field': auth.endpointMode === 'public' }">
-            <div class="select-wrap compact">
-              <select v-model="auth.endpointMode">
-                <option value="public">{{ t('公共云') }}</option>
-                <option value="custom">{{ t('自定义') }}</option>
-                <option value="cname">CNAME</option>
-                <option value="private">{{ t('私网连接') }}</option>
-              </select>
+        <div class="login-form-body">
+          <template v-if="authMode === 'token'">
+            <div class="token-form">
+              <label class="field-label">{{ t('授权码') }}</label>
+              <div class="textarea-wrap">
+                <textarea v-model.trim="authToken" :placeholder="t('粘贴 Base64 授权码')" />
+              </div>
+              <div v-if="errorMessage" class="error-box">{{ errorMessage }}</div>
             </div>
-            <div v-if="auth.endpointMode !== 'public'" class="input-wrap">
-              <input v-model.trim="auth.endpoint" placeholder="oss-cn-hangzhou.aliyuncs.com" />
-            </div>
-          </div>
-
-          <label class="field-label">AccessKey ID</label>
-          <div class="input-wrap">
-            <input v-model.trim="auth.accessKeyId" autocomplete="username" />
-          </div>
-
-          <label class="field-label">{{ t('账号别名（可选）') }}</label>
-          <div class="input-wrap">
-            <input v-model.trim="auth.alias" :placeholder="t('例如：公司生产环境')" />
-          </div>
-
-          <label class="field-label">AccessKey Secret</label>
-          <div class="input-wrap">
-            <input v-model="auth.accessKeySecret" type="password" autocomplete="current-password" />
-          </div>
-
-          <template v-if="auth.accessKeyId.startsWith('STS.')">
-            <label class="field-label">STS Token</label>
-            <div class="input-wrap"><input v-model="auth.stsToken" type="password" /></div>
+            <AppButton
+              class="token-connect-button"
+              :label="t('使用授权码连接')"
+              tone="primary"
+              :disabled="!authToken || authTask.pending.value"
+              @click="loginWithToken"
+            />
           </template>
 
-          <label class="field-label">{{ t('预设路径（可选）') }}</label>
-          <div class="input-wrap">
-            <input v-model.trim="auth.presetPath" placeholder="oss://bucket/path/" />
-          </div>
+          <template v-else>
+            <div class="access-key-form">
+              <label class="field-label">Endpoint</label>
+              <div class="field-row" :class="{ 'single-field': auth.endpointMode === 'public' }">
+                <div class="select-wrap compact">
+                  <select v-model="auth.endpointMode">
+                    <option value="public">{{ t('公共云') }}</option>
+                    <option value="custom">{{ t('自定义') }}</option>
+                    <option value="cname">CNAME</option>
+                    <option value="private">{{ t('私网连接') }}</option>
+                  </select>
+                </div>
+                <div v-if="auth.endpointMode !== 'public'" class="input-wrap">
+                  <input v-model.trim="auth.endpoint" placeholder="oss-cn-hangzhou.aliyuncs.com" />
+                </div>
+              </div>
 
-          <div class="login-options">
-            <label><input v-model="auth.secure" type="checkbox" /> {{ t('使用 HTTPS') }}</label>
-            <label><input v-model="auth.remember" type="checkbox" /> {{ t('记住登录信息') }}</label>
-          </div>
-          <div v-if="errorMessage" class="error-box">{{ errorMessage }}</div>
-          <AppButton
-            :label="t('连接')"
-            tone="primary"
-            :disabled="
-              (auth.endpointMode !== 'public' && !auth.endpoint) ||
-              !auth.accessKeyId ||
-              !auth.accessKeySecret ||
-              authTask.pending.value
-            "
-            @click="login"
-          />
-        </template>
+              <label class="field-label">AccessKey ID</label>
+              <div class="input-wrap">
+                <input v-model.trim="auth.accessKeyId" autocomplete="username" />
+              </div>
+
+              <label class="field-label">AccessKey Secret</label>
+              <div class="input-wrap">
+                <input
+                  v-model="auth.accessKeySecret"
+                  type="password"
+                  autocomplete="current-password"
+                />
+              </div>
+
+              <div class="grid grid-cols-2 gap-2.5">
+                <div>
+                  <label class="field-label">{{ t('账号别名（可选）') }}</label>
+                  <div class="input-wrap">
+                    <input v-model.trim="auth.alias" :placeholder="t('例如：公司生产环境')" />
+                  </div>
+                </div>
+                <div>
+                  <label class="field-label">{{ t('预设路径（可选）') }}</label>
+                  <div class="input-wrap">
+                    <input v-model.trim="auth.presetPath" placeholder="oss://bucket/path/" />
+                  </div>
+                </div>
+              </div>
+
+              <template v-if="auth.accessKeyId.startsWith('STS.')">
+                <label class="field-label">STS Token</label>
+                <div class="input-wrap"><input v-model="auth.stsToken" type="password" /></div>
+              </template>
+
+              <div class="login-options">
+                <label><input v-model="auth.secure" type="checkbox" /> {{ t('使用 HTTPS') }}</label>
+                <label
+                  ><input v-model="auth.remember" type="checkbox" /> {{ t('记住登录信息') }}</label
+                >
+              </div>
+              <div v-if="errorMessage" class="error-box">{{ errorMessage }}</div>
+            </div>
+            <AppButton
+              :label="t('连接')"
+              tone="primary"
+              :disabled="
+                (auth.endpointMode !== 'public' && !auth.endpoint) ||
+                !auth.accessKeyId ||
+                !auth.accessKeySecret ||
+                authTask.pending.value
+              "
+              @click="login"
+            />
+          </template>
+        </div>
         <div
           v-if="savedProfiles.length"
           class="saved-profile-entry"
@@ -1789,8 +1806,22 @@ async function checkPermissions(): Promise<void> {
             </div>
             <div v-if="!filteredObjects.length && !fileBrowser.loading.value" class="empty-state">
               <div class="empty-icon"><Folder :size="42" /></div>
-              <strong>{{ t('当前目录为空') }}</strong
-              ><span>{{ t('上传文件或新建文件夹开始使用') }}</span>
+              <strong>{{ t('当前目录为空') }}</strong>
+              <span>{{ t('上传文件或新建文件夹开始使用') }}</span>
+              <div class="mt-4 flex justify-center gap-3">
+                <AppButton
+                  :label="t('新建文件夹')"
+                  :icon="FolderPlus"
+                  tone="default"
+                  @click="modal = 'create-folder'"
+                />
+                <AppButton
+                  :label="t('上传文件')"
+                  :icon="Upload"
+                  tone="primary"
+                  @click="upload('files')"
+                />
+              </div>
             </div>
             <div
               v-if="hasMoreObjects && !searchText"
@@ -1849,8 +1880,22 @@ async function checkPermissions(): Promise<void> {
             </div>
             <div v-else-if="!fileBrowser.loading.value" class="empty-state">
               <div class="empty-icon"><Folder :size="42" /></div>
-              <strong>{{ t('当前目录为空') }}</strong
-              ><span>{{ t('上传文件或新建文件夹开始使用') }}</span>
+              <strong>{{ t('当前目录为空') }}</strong>
+              <span>{{ t('上传文件或新建文件夹开始使用') }}</span>
+              <div class="mt-4 flex justify-center gap-3">
+                <AppButton
+                  :label="t('新建文件夹')"
+                  :icon="FolderPlus"
+                  tone="default"
+                  @click="modal = 'create-folder'"
+                />
+                <AppButton
+                  :label="t('上传文件')"
+                  :icon="Upload"
+                  tone="primary"
+                  @click="upload('files')"
+                />
+              </div>
             </div>
             <div
               v-if="hasMoreObjects && !searchText"

@@ -27,9 +27,16 @@
   --text: #182230;
   --muted: #65758b;
   --border: #e5eaf0;
+  --border-hover: #b8c5d6;
   --surface: #fff;
+  --surface-hover: #f8fafc;
   --background: #f6f8fb;
   --shadow: 0 16px 50px rgba(31, 47, 70, 0.12);
+  --shadow-hover: 0 4px 12px rgba(31, 47, 70, 0.06);
+  --accent-active: scale(0.98);
+  --tab-bg: #f0f3f7;
+  --tab-active-bg: #fff;
+  --tab-active-text: #1765c5;
   --primary-foreground: #fff;
   --radius: 0.625rem;
 }
@@ -41,6 +48,40 @@ input,
 textarea,
 [contenteditable='true'] {
   cursor: text !important;
+}
+input[type='checkbox'] {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 14px;
+  height: 14px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  outline: none;
+  background-color: var(--surface);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  transition: all 0.12s ease;
+  vertical-align: middle;
+}
+input[type='checkbox']:hover {
+  border-color: var(--primary);
+}
+input[type='checkbox']:checked {
+  background-color: var(--primary);
+  border-color: var(--primary);
+}
+input[type='checkbox']:checked::after {
+  content: '';
+  position: absolute;
+  width: 7px;
+  height: 4px;
+  border-left: 1.5px solid #fff;
+  border-bottom: 1.5px solid #fff;
+  transform: rotate(-45deg);
+  margin-top: -2px;
 }
 
 .app-shell {
@@ -155,7 +196,7 @@ textarea,
 }
 .top-language {
   padding: 6px 7px;
-  border-radius: 7px;
+  border-radius: 6px;
 }
 .top-language:hover {
   background: rgba(255, 255, 255, 0.08);
@@ -235,6 +276,26 @@ textarea,
   justify-self: center;
   width: min(460px, calc(100% - 72px));
 }
+.login-form-body {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  height: 450px;
+}
+.token-form {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+.token-form .textarea-wrap {
+  flex: 1;
+  display: flex;
+  margin-bottom: 50px;
+}
+.token-form textarea {
+  flex: 1;
+  resize: none;
+}
 .login-title {
   font-size: 28px;
   font-weight: 750;
@@ -250,12 +311,12 @@ textarea,
   gap: 4px;
   padding: 4px;
   margin-bottom: 20px;
-  border-radius: 9px;
-  background: #f0f3f7;
+  border-radius: 8px;
+  background: var(--tab-bg);
 }
 .auth-tabs > div {
   padding: 8px;
-  border-radius: 7px;
+  border-radius: 6px;
   color: var(--muted);
   font-size: 13px;
   font-weight: 650;
@@ -263,14 +324,14 @@ textarea,
   cursor: pointer;
 }
 .auth-tabs > div.active {
-  color: #1765c5;
-  background: #fff;
+  color: var(--tab-active-text);
+  background: var(--tab-active-bg);
   box-shadow: 0 2px 8px rgba(28, 45, 70, 0.08);
 }
 .textarea-wrap {
   border: 1px solid var(--border);
-  border-radius: 9px;
-  background: #fff;
+  border-radius: 8px;
+  background: var(--surface);
 }
 .textarea-wrap:focus-within {
   border-color: var(--primary);
@@ -307,8 +368,8 @@ textarea,
   align-items: center;
   min-height: 40px;
   border: 1px solid var(--border);
-  border-radius: 9px;
-  background: #fff;
+  border-radius: 8px;
+  background: var(--surface);
   transition: 0.16s;
 }
 .input-wrap:focus-within,
@@ -387,8 +448,8 @@ textarea,
   padding: 0 14px;
   border: 1px solid var(--border);
   border-radius: 8px;
-  color: #36465b;
-  background: #fff;
+  color: var(--text);
+  background: var(--surface);
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
@@ -397,8 +458,11 @@ textarea,
   gap: 6px;
 }
 .app-button:hover {
-  border-color: #b8c5d6;
-  background: #f8fafc;
+  border-color: var(--border-hover);
+  background: var(--surface-hover);
+}
+.app-button:active {
+  transform: var(--accent-active);
 }
 .app-button.is-primary {
   color: #fff;
@@ -421,13 +485,13 @@ textarea,
   opacity: 0.42;
   cursor: default;
 }
-.login-card > .app-button {
+.login-form-body > .app-button {
   width: 100%;
   min-height: 44px;
   font-size: 15px;
 }
-.login-card > .token-connect-button {
-  margin-top: 14px;
+.login-form-body > .token-connect-button {
+  margin-top: auto;
 }
 .saved-profile-entry {
   display: flex;
@@ -475,7 +539,7 @@ textarea,
   align-items: center;
   gap: 6px;
   padding: 8px 10px;
-  border-radius: 7px;
+  border-radius: 6px;
   cursor: pointer;
   font-size: 13px;
 }
@@ -489,7 +553,7 @@ textarea,
   margin-left: 5px;
   color: #fff;
   background: var(--primary);
-  border-radius: 9px;
+  border-radius: 99px;
   font-size: 11px;
 }
 .account-action {
@@ -498,7 +562,7 @@ textarea,
   gap: 7px;
   max-width: 220px;
   padding: 7px 9px;
-  border-radius: 7px;
+  border-radius: 6px;
   color: #d7e0ec;
   font-size: 12px;
   cursor: pointer;
@@ -516,10 +580,18 @@ textarea,
   place-items: center;
   width: 32px;
   height: 32px;
-  border-radius: 7px;
+  border-radius: 6px;
   cursor: pointer;
   color: #6a7b90;
   font-size: 18px;
+  transition: all 0.12s ease;
+}
+.icon-button:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+.icon-button:active {
+  transform: var(--accent-active);
 }
 .workspace-full {
   height: calc(100% - 58px);
@@ -563,15 +635,18 @@ textarea,
   min-height: 88px;
   padding: 16px;
   border: 1px solid var(--border);
-  border-radius: 12px;
-  background: #fff;
+  border-radius: 10px;
+  background: var(--surface);
   cursor: pointer;
-  transition: 0.16s;
+  transition: all 0.15s ease-in-out;
 }
 .bucket-card:hover {
   transform: translateY(-1px);
-  border-color: #b8d6ff;
-  box-shadow: 0 9px 24px rgba(31, 47, 70, 0.08);
+  border-color: var(--border-hover);
+  box-shadow: var(--shadow-hover);
+}
+.bucket-card:active {
+  transform: var(--accent-active);
 }
 .bucket-card-icon {
   display: grid;
@@ -579,9 +654,9 @@ textarea,
   height: 46px;
   flex: 0 0 auto;
   place-items: center;
-  border-radius: 11px;
-  color: #1677ff;
-  background: #eaf3ff;
+  border-radius: 8px;
+  color: var(--primary);
+  background: var(--primary-soft);
 }
 .bucket-card-info {
   min-width: 0;
@@ -634,9 +709,13 @@ textarea,
   height: 34px;
   flex: 0 0 auto;
   place-items: center;
-  border-radius: 7px;
+  border-radius: 6px;
   color: #607087;
   cursor: pointer;
+  transition: all 0.12s ease;
+}
+.nav-icon:active {
+  transform: var(--accent-active);
 }
 .nav-icon:hover {
   color: var(--primary);
@@ -784,8 +863,8 @@ textarea,
   width: 170px;
   padding: 6px;
   border: 1px solid var(--border);
-  border-radius: 9px;
-  background: #fff;
+  border-radius: 8px;
+  background: var(--surface);
   box-shadow: var(--shadow);
 }
 .context-menu {
@@ -843,13 +922,18 @@ textarea,
   height: 66px;
   padding: 8px 30px 8px 8px;
   border: 1px solid var(--border);
-  border-radius: 11px;
-  background: #fff;
+  border-radius: 10px;
+  background: var(--surface);
   cursor: default;
+  transition: all 0.15s ease-in-out;
 }
 .object-card:hover {
-  border-color: #b7d3f7;
-  box-shadow: 0 5px 16px rgba(40, 76, 120, 0.08);
+  transform: translateY(-1px);
+  border-color: var(--border-hover);
+  box-shadow: var(--shadow-hover);
+}
+.object-card:active {
+  transform: var(--accent-active);
 }
 .object-card.selected {
   border-color: #76acf0;
@@ -1130,6 +1214,28 @@ textarea,
   text-align: center;
 }
 
+@keyframes modal-fade-in {
+  from {
+    opacity: 0;
+    backdrop-filter: blur(0px);
+  }
+  to {
+    opacity: 1;
+    backdrop-filter: blur(3px);
+  }
+}
+
+@keyframes modal-scale-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96) translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
 .modal-mask {
   position: fixed;
   z-index: 100;
@@ -1138,6 +1244,7 @@ textarea,
   place-items: center;
   background: rgba(13, 24, 39, 0.43);
   backdrop-filter: blur(3px);
+  animation: modal-fade-in 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 .modal-card {
   display: flex;
@@ -1146,10 +1253,11 @@ textarea,
   max-height: calc(100vh - 50px);
   flex-direction: column;
   overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.7);
-  border-radius: 14px;
-  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
   box-shadow: var(--shadow);
+  animation: modal-scale-in 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 .modal-card.is-large {
   width: min(820px, calc(100vw - 40px));
@@ -1267,8 +1375,8 @@ textarea,
   display: grid;
   min-height: 460px;
   place-items: center;
-  background: #f3f5f8;
-  border-radius: 9px;
+  background: var(--background);
+  border-radius: 8px;
   overflow: hidden;
 }
 .preview-area img,
@@ -1357,7 +1465,7 @@ textarea,
 .details-list {
   display: grid;
   border: 1px solid var(--border);
-  border-radius: 9px;
+  border-radius: 8px;
   overflow: hidden;
 }
 .details-list > div {
@@ -1577,9 +1685,16 @@ html[data-theme='dark'] {
   --text: #e7edf6;
   --muted: #96a5b8;
   --border: #2c394a;
+  --border-hover: #51627a;
   --surface: #17212f;
+  --surface-hover: #202d3e;
   --background: #0f1722;
   --shadow: 0 18px 55px rgba(0, 0, 0, 0.42);
+  --shadow-hover: 0 8px 24px rgba(0, 0, 0, 0.24);
+  --accent-active: scale(0.98);
+  --tab-bg: #111b28;
+  --tab-active-bg: #223044;
+  --tab-active-text: #7db7ff;
 }
 html[data-theme='dark'],
 html[data-theme='dark'] body {
@@ -1608,7 +1723,6 @@ html[data-theme='dark'] .bucket-home {
   background: var(--background);
 }
 html[data-theme='dark'] .login-language,
-html[data-theme='dark'] .auth-tabs,
 html[data-theme='dark'] .quick-nav,
 html[data-theme='dark'] .search-wrap,
 html[data-theme='dark'] .view-switch,
@@ -1617,19 +1731,9 @@ html[data-theme='dark'] .grant-result textarea {
   color: var(--muted);
   background: #111b28;
 }
-html[data-theme='dark'] .auth-tabs > div.active {
-  color: #7db7ff;
-  background: #223044;
-}
+
 html[data-theme='dark'] .object-preview {
   background: #111b28;
-}
-html[data-theme='dark'] .app-button {
-  color: #d4deeb;
-}
-html[data-theme='dark'] .app-button:hover {
-  border-color: #51627a;
-  background: #202d3e;
 }
 html[data-theme='dark'] .app-button.is-primary {
   color: #fff;
@@ -1641,9 +1745,6 @@ html[data-theme='dark'] .app-button.is-danger {
   border-color: #63363e;
   background: #2a1d24;
 }
-html[data-theme='dark'] .app-button.is-ghost {
-  background: transparent;
-}
 html[data-theme='dark'] .field-label,
 html[data-theme='dark'] .object-info > strong,
 html[data-theme='dark'] .file-name,
@@ -1652,15 +1753,7 @@ html[data-theme='dark'] .welcome-state h2,
 html[data-theme='dark'] .profile-list strong {
   color: var(--text);
 }
-html[data-theme='dark'] .bucket-card:hover,
-html[data-theme='dark'] .object-card:hover {
-  border-color: #4979b3;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.24);
-}
-html[data-theme='dark'] .bucket-card-icon {
-  color: #74b3ff;
-  background: #193b62;
-}
+
 html[data-theme='dark'] .nav-icon {
   color: #93a3b8;
 }
