@@ -5,27 +5,37 @@ import { onMounted, ref } from 'vue'
 defineProps<{ title: string; width?: string; size?: 'default' | 'large' }>()
 const emit = defineEmits<{ close: [] }>()
 
-const show = ref(false)
+const isOpen = ref(false)
+const isClosing = ref(false)
 
 onMounted(() => {
   requestAnimationFrame(() => {
-    show.value = true
+    isOpen.value = true
   })
 })
 
 function handleClose(): void {
-  show.value = false
+  isOpen.value = false
+  isClosing.value = true
+  const closeDur =
+    parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--modal-close-dur')) ||
+    150
   setTimeout(() => {
+    isClosing.value = false
     emit('close')
-  }, 180)
+  }, closeDur)
 }
 </script>
 
 <template>
-  <div class="modal-mask" :class="{ 'is-active': show }" @mousedown.self="handleClose">
+  <div
+    class="modal-mask"
+    :class="{ 'is-active': isOpen, 'is-closing': isClosing }"
+    @mousedown.self="handleClose"
+  >
     <div
       class="modal-card"
-      :class="{ 'is-large': size === 'large', 'is-active': show }"
+      :class="{ 'is-large': size === 'large', 'is-active': isOpen, 'is-closing': isClosing }"
       :style="size === 'large' ? undefined : { width: width || '480px' }"
     >
       <div class="modal-head">

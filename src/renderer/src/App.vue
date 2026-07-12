@@ -572,6 +572,18 @@ function openEmptyContextMenu(event: MouseEvent): void {
   emptyContextMenu.visible = true
 }
 
+function handleBlankClick(event: MouseEvent): void {
+  const target = event.target as HTMLElement
+  if (
+    target.closest(
+      '.object-card, .table-row, .object-card-check, input[type="checkbox"], .context-menu, .toolbar, .quick-nav'
+    )
+  ) {
+    return
+  }
+  selectedNames.value = new Set()
+}
+
 function closeActions(): void {
   showMoreActions.value = false
   contextMenu.visible = false
@@ -1775,7 +1787,7 @@ async function checkPermissions(): Promise<void> {
           </div>
 
           <div v-if="errorMessage" class="error-strip">{{ errorMessage }}</div>
-          <div v-if="viewMode === 'list'" class="file-table">
+          <div v-if="viewMode === 'list'" class="file-table" @click="handleBlankClick">
             <div class="table-row table-head">
               <div>
                 <input
@@ -1851,7 +1863,7 @@ async function checkPermissions(): Promise<void> {
               {{ t('加载更多') }}
             </div>
           </div>
-          <div v-else class="object-grid-scroll">
+          <div v-else class="object-grid-scroll" @click="handleBlankClick">
             <div v-if="filteredObjects.length" class="object-grid">
               <div
                 v-for="item in filteredObjects"
@@ -1996,7 +2008,8 @@ async function checkPermissions(): Promise<void> {
       </div>
     </template>
 
-    <ModalShell
+    <Transition name="modal" appear>
+      <ModalShell
       v-if="modal === 'favorites'"
       :title="t('收藏管理')"
       size="large"
@@ -2018,8 +2031,10 @@ async function checkPermissions(): Promise<void> {
         </AppTooltip>
       </div>
     </ModalShell>
+    </Transition>
 
-    <ModalShell v-if="modal === 'cache'" :title="t('刷新 CDN 缓存')" @close="modal = null">
+    <Transition name="modal" appear>
+      <ModalShell v-if="modal === 'cache'" :title="t('刷新 CDN 缓存')" @close="modal = null">
       <label class="field-label">{{ t('CDN 加速域名') }}</label>
       <div class="select-wrap">
         <select v-model="selectedCdnDomain" @change="updateCacheDomain">
@@ -2055,8 +2070,10 @@ async function checkPermissions(): Promise<void> {
         />
       </template>
     </ModalShell>
+    </Transition>
 
-    <ModalShell v-if="modal === 'create-bucket'" :title="t('新建 Bucket')" @close="modal = null">
+    <Transition name="modal" appear>
+      <ModalShell v-if="modal === 'create-bucket'" :title="t('新建 Bucket')" @close="modal = null">
       <label class="field-label">{{ t('Bucket 名称') }}</label>
       <div class="input-wrap">
         <input v-model.trim="form.name" :placeholder="t('全局唯一名称')" />
@@ -2085,8 +2102,10 @@ async function checkPermissions(): Promise<void> {
           @click="createBucket"
       /></template>
     </ModalShell>
+    </Transition>
 
-    <ModalShell v-if="modal === 'create-folder'" :title="t('新建文件夹')" @close="modal = null">
+    <Transition name="modal" appear>
+      <ModalShell v-if="modal === 'create-folder'" :title="t('新建文件夹')" @close="modal = null">
       <label class="field-label">{{ t('文件夹名称') }}</label>
       <div class="input-wrap"><input v-model.trim="form.name" @keydown.enter="createFolder" /></div>
       <template #footer
@@ -2097,8 +2116,10 @@ async function checkPermissions(): Promise<void> {
           @click="createFolder"
       /></template>
     </ModalShell>
+    </Transition>
 
-    <ModalShell v-if="modal === 'bucket-acl'" :title="t('设置 Bucket 权限')" @close="modal = null">
+    <Transition name="modal" appear>
+      <ModalShell v-if="modal === 'bucket-acl'" :title="t('设置 Bucket 权限')" @close="modal = null">
       <div class="select-wrap">
         <select v-model="form.acl">
           <option value="private">{{ t('私有') }}</option>
@@ -2113,8 +2134,10 @@ async function checkPermissions(): Promise<void> {
           @click="applyBucketAcl"
       /></template>
     </ModalShell>
+    </Transition>
 
-    <ModalShell v-if="modal === 'rename'" :title="t('重命名')" @close="modal = null">
+    <Transition name="modal" appear>
+      <ModalShell v-if="modal === 'rename'" :title="t('重命名')" @close="modal = null">
       <label class="field-label">{{ t('目标名称') }}</label>
       <div class="input-wrap"><input v-model.trim="form.target" /></div>
       <template #footer
@@ -2125,8 +2148,10 @@ async function checkPermissions(): Promise<void> {
           @click="renameSelected"
       /></template>
     </ModalShell>
+    </Transition>
 
-    <ModalShell v-if="modal === 'paste-copy'" :title="t('粘贴副本')" @close="modal = null">
+    <Transition name="modal" appear>
+      <ModalShell v-if="modal === 'paste-copy'" :title="t('粘贴副本')" @close="modal = null">
       <label class="field-label">{{ t('新名称') }}</label>
       <div class="input-wrap"><input v-model.trim="form.target" /></div>
       <p class="modal-hint">
@@ -2144,8 +2169,10 @@ async function checkPermissions(): Promise<void> {
           @click="pasteWithNewName"
       /></template>
     </ModalShell>
+    </Transition>
 
-    <ModalShell v-if="modal === 'move'" :title="t('移动对象')" @close="modal = null">
+    <Transition name="modal" appear>
+      <ModalShell v-if="modal === 'move'" :title="t('移动对象')" @close="modal = null">
       <label class="field-label">{{ t('目标 OSS 路径') }}</label>
       <div class="input-wrap">
         <input v-model.trim="form.target" placeholder="oss://bucket/path/" />
@@ -2159,8 +2186,10 @@ async function checkPermissions(): Promise<void> {
           @click="transferSelected(true)"
       /></template>
     </ModalShell>
+    </Transition>
 
-    <ModalShell v-if="modal === 'acl'" :title="t('设置对象权限')" @close="modal = null">
+    <Transition name="modal" appear>
+      <ModalShell v-if="modal === 'acl'" :title="t('设置对象权限')" @close="modal = null">
       <div class="select-wrap">
         <select v-model="form.acl">
           <option value="default">{{ t('继承 Bucket') }}</option>
@@ -2176,8 +2205,10 @@ async function checkPermissions(): Promise<void> {
           @click="applyAcl"
       /></template>
     </ModalShell>
+    </Transition>
 
-    <ModalShell v-if="modal === 'headers'" :title="t('设置 HTTP 头')" @close="modal = null">
+    <Transition name="modal" appear>
+      <ModalShell v-if="modal === 'headers'" :title="t('设置 HTTP 头')" @close="modal = null">
       <label class="field-label">Cache-Control</label>
       <div class="input-wrap">
         <input v-model.trim="form.cacheControl" placeholder="例如 max-age=3600" />
@@ -2197,8 +2228,10 @@ async function checkPermissions(): Promise<void> {
           @click="applyHeaders"
       /></template>
     </ModalShell>
+    </Transition>
 
-    <ModalShell v-if="modal === 'share'" :title="t('获取地址')" width="680px" @close="modal = null">
+    <Transition name="modal" appear>
+      <ModalShell v-if="modal === 'share'" :title="t('获取地址')" width="680px" @close="modal = null">
       <div v-if="sharePreparing" class="share-loading">{{ t('正在检查地址访问权限…') }}</div>
       <template v-else>
         <label class="field-label">{{ t('访问域名') }}</label>
@@ -2255,8 +2288,10 @@ async function checkPermissions(): Promise<void> {
         </template>
       </template>
     </ModalShell>
+    </Transition>
 
-    <ModalShell
+    <Transition name="modal" appear>
+      <ModalShell
       v-if="modal === 'preview'"
       :title="t('预览：{name}', { name: selectedObjects[0]?.displayName || '' })"
       width="800px"
@@ -2279,8 +2314,10 @@ async function checkPermissions(): Promise<void> {
         </div>
       </div>
     </ModalShell>
+    </Transition>
 
-    <ModalShell
+    <Transition name="modal" appear>
+      <ModalShell
       v-if="modal === 'multipart'"
       :title="t('未完成的分片上传')"
       width="720px"
@@ -2297,8 +2334,10 @@ async function checkPermissions(): Promise<void> {
         <AppButton :label="t('终止')" tone="danger" @click="abortMultipart(part)" />
       </div>
     </ModalShell>
+    </Transition>
 
-    <ModalShell v-if="modal === 'symlink'" :title="t('创建软链接')" @close="modal = null">
+    <Transition name="modal" appear>
+      <ModalShell v-if="modal === 'symlink'" :title="t('创建软链接')" @close="modal = null">
       <label class="field-label">{{ t('软链接名称') }}</label>
       <div class="input-wrap"><input v-model.trim="form.name" /></div>
       <p class="modal-hint">
@@ -2312,8 +2351,10 @@ async function checkPermissions(): Promise<void> {
           @click="createSymlink"
       /></template>
     </ModalShell>
+    </Transition>
 
-    <ModalShell v-if="modal === 'restore'" :title="t('恢复归档对象')" @close="modal = null">
+    <Transition name="modal" appear>
+      <ModalShell v-if="modal === 'restore'" :title="t('恢复归档对象')" @close="modal = null">
       <label class="field-label">{{ t('保持可读天数') }}</label>
       <div class="input-wrap">
         <input v-model.number="form.days" type="number" min="1" max="7" />
@@ -2326,8 +2367,10 @@ async function checkPermissions(): Promise<void> {
           @click="restoreSelected"
       /></template>
     </ModalShell>
+    </Transition>
 
-    <ModalShell
+    <Transition name="modal" appear>
+      <ModalShell
       v-if="modal === 'details'"
       :title="t('对象详情')"
       width="680px"
@@ -2344,8 +2387,10 @@ async function checkPermissions(): Promise<void> {
         </div>
       </div>
     </ModalShell>
+    </Transition>
 
-    <ModalShell
+    <Transition name="modal" appear>
+      <ModalShell
       v-if="modal === 'grant'"
       :title="t('生成临时授权码')"
       width="620px"
@@ -2382,8 +2427,10 @@ async function checkPermissions(): Promise<void> {
           @click="createGrantToken"
       /></template>
     </ModalShell>
+    </Transition>
 
-    <ModalShell
+    <Transition name="modal" appear>
+      <ModalShell
       v-if="modal === 'ram-users'"
       :title="t('RAM 用户')"
       width="760px"
@@ -2405,8 +2452,10 @@ async function checkPermissions(): Promise<void> {
         </div>
       </div>
     </ModalShell>
+    </Transition>
 
-    <ModalShell
+    <Transition name="modal" appear>
+      <ModalShell
       v-if="modal === 'ram-user'"
       :title="activeRamUser ? t('编辑 RAM 用户') : t('新建 RAM 用户')"
       @close="modal = null"
@@ -2425,8 +2474,10 @@ async function checkPermissions(): Promise<void> {
           @click="saveRamUser"
       /></template>
     </ModalShell>
+    </Transition>
 
-    <ModalShell
+    <Transition name="modal" appear>
+      <ModalShell
       v-if="modal === 'ram-keys'"
       :title="`AccessKey：${activeRamUser?.userName || ''}`"
       width="700px"
@@ -2449,8 +2500,10 @@ async function checkPermissions(): Promise<void> {
       </div>
       <template #footer><AppButton :label="t('返回用户列表')" @click="openRamUsers" /></template>
     </ModalShell>
+    </Transition>
 
-    <ModalShell v-if="modal === 'settings'" :title="t('设置')" size="large" @close="modal = null">
+    <Transition name="modal" appear>
+      <ModalShell v-if="modal === 'settings'" :title="t('设置')" size="large" @close="modal = null">
       <div class="setting-row project-setting-row">
         <div>
           <strong>{{ t('项目主页') }}</strong
@@ -2607,8 +2660,10 @@ async function checkPermissions(): Promise<void> {
         ></label>
       </div>
     </ModalShell>
+    </Transition>
 
-    <ModalShell
+    <Transition name="modal" appear>
+      <ModalShell
       v-if="showProfilesModal"
       :title="t('已保存账号')"
       width="540px"
@@ -2640,6 +2695,7 @@ async function checkPermissions(): Promise<void> {
         <AppButton :label="t('关闭')" @click="showProfilesModal = false" />
       </template>
     </ModalShell>
+    </Transition>
 
     <ConfirmDialog
       :open="Boolean(confirmation)"

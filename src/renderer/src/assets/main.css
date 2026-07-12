@@ -638,10 +638,12 @@ input[type='checkbox']:checked::after {
   border-radius: 10px;
   background: var(--surface);
   cursor: pointer;
-  transition: all 0.15s ease-in-out;
+  transition:
+    border-color 0.15s ease-in-out,
+    box-shadow 0.15s ease-in-out,
+    transform 0.1s ease-in-out;
 }
 .bucket-card:hover {
-  transform: translateY(-1px);
   border-color: var(--border-hover);
   box-shadow: var(--shadow-hover);
 }
@@ -925,10 +927,12 @@ input[type='checkbox']:checked::after {
   border-radius: 10px;
   background: var(--surface);
   cursor: default;
-  transition: all 0.15s ease-in-out;
+  transition:
+    border-color 0.15s ease-in-out,
+    box-shadow 0.15s ease-in-out,
+    transform 0.1s ease-in-out;
 }
 .object-card:hover {
-  transform: translateY(-1px);
   border-color: var(--border-hover);
   box-shadow: var(--shadow-hover);
 }
@@ -1150,11 +1154,9 @@ input[type='checkbox']:checked::after {
 @keyframes transfer-mask-fade-in {
   from {
     opacity: 0;
-    backdrop-filter: blur(0px);
   }
   to {
     opacity: 1;
-    backdrop-filter: blur(1px);
   }
 }
 
@@ -1172,8 +1174,7 @@ input[type='checkbox']:checked::after {
   z-index: 95;
   top: 58px;
   inset: 58px 0 0 0;
-  background: rgba(13, 24, 39, 0.08);
-  backdrop-filter: blur(1px);
+  background: rgba(13, 24, 39, 0.2);
   animation: transfer-mask-fade-in 0.2s ease-out forwards;
 }
 
@@ -1252,17 +1253,20 @@ input[type='checkbox']:checked::after {
   inset: 0;
   display: grid;
   place-items: center;
-  background: rgba(13, 24, 39, 0);
-  backdrop-filter: blur(0px);
+  background: rgba(13, 24, 39, 0.45);
   opacity: 0;
   pointer-events: none;
-  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: opacity var(--modal-open-dur) var(--modal-ease);
+  will-change: opacity;
 }
 .modal-mask.is-active {
   opacity: 1;
   pointer-events: auto;
-  background: rgba(13, 24, 39, 0.43);
-  backdrop-filter: blur(3px);
+}
+.modal-mask.is-closing {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--modal-close-dur) var(--modal-ease);
 }
 .modal-card {
   display: flex;
@@ -1276,16 +1280,34 @@ input[type='checkbox']:checked::after {
   background: var(--surface);
   box-shadow: var(--shadow);
   opacity: 0;
-  transform: scale(0.96) translateY(10px);
-  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  transform: scale(var(--modal-scale));
+  transition:
+    transform var(--modal-open-dur) var(--modal-ease),
+    opacity var(--modal-open-dur) var(--modal-ease);
+  will-change: transform, opacity;
 }
 .modal-card.is-active {
   opacity: 1;
-  transform: scale(1) translateY(0);
+  transform: scale(1);
+}
+.modal-card.is-closing {
+  opacity: 0;
+  pointer-events: none;
+  transform: scale(var(--modal-scale-close));
+  transition:
+    transform var(--modal-close-dur) var(--modal-ease),
+    opacity var(--modal-close-dur) var(--modal-ease);
 }
 .modal-card.is-large {
   width: min(820px, calc(100vw - 40px));
   height: min(640px, calc(100vh - 50px));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .modal-mask,
+  .modal-card {
+    transition: none !important;
+  }
 }
 .modal-head {
   display: flex;
