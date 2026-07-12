@@ -285,6 +285,9 @@ const settings = reactive<AppSettings>({
   listPageSize: 1000,
   showImagePreview: true
 })
+const settingsDraft = reactive<AppSettings>({ ...settings })
+const secureDraft = ref(auth.secure)
+const themeDraft = ref<ThemeMode>(themeMode.value)
 
 const selectedObjects = computed(() =>
   objects.value.filter((item) => selectedNames.value.has(item.name))
@@ -337,6 +340,7 @@ let promptedAvailableVersion = ''
 let promptedDownloadedVersion = ''
 let dragDepth = 0
 let permissionProbeGeneration = 0
+let objectLoadGeneration = 0
 const darkModeQuery = window.matchMedia('(prefers-color-scheme: dark)')
 applyTheme()
 
@@ -355,7 +359,13 @@ onMounted(async () => {
   appVersion.value = await window.ossBrowser.system.getVersion()
   try {
     const storedSettings = localStorage.getItem('oss-browser-settings')
-    if (storedSettings) Object.assign(settings, JSON.parse(storedSettings))
+    if (storedSettings) {
+      try {
+        Object.assign(settings, JSON.parse(storedSettings))
+      } catch {
+        localStorage.removeItem('oss-browser-settings')
+      }
+    }
     await window.ossBrowser.settings.update({ ...settings })
     savedProfiles.value = await window.ossBrowser.profiles.list()
     removeTransferListener = window.ossBrowser.onTransfer((item) => {
@@ -486,6 +496,7 @@ function resetDragState(): void {
 }
 
 function resetAccountRuntimeState(): void {
+  objectLoadGeneration += 1
   errorMessage.value = ''
   toastMessage.value = ''
   buckets.value = []
@@ -623,10 +634,12 @@ function openBucketMenu(event: MouseEvent, bucket: BucketInfo): void {
   bucketMenu.visible = true
 }
 
-function openBucketAcl(bucket: BucketInfo): void {
+async function openBucketAcl(bucket: BucketInfo): Promise<void> {
   bucketActionTarget.value = bucket
   bucketMenu.visible = false
-  form.acl = bucket.acl || 'private'
+  const acl = await run(() => window.ossBrowser.buckets.getAcl(bucket.name))
+  if (!acl) return
+  form.acl = acl
   modal.value = 'bucket-acl'
 }
 
@@ -634,12 +647,6 @@ function applyTheme(): void {
   const resolvedTheme =
     themeMode.value === 'system' ? (darkModeQuery.matches ? 'dark' : 'light') : themeMode.value
   document.documentElement.dataset.theme = resolvedTheme
-}
-
-function changeTheme(event: Event): void {
-  themeMode.value = (event.target as HTMLSelectElement).value as ThemeMode
-  localStorage.setItem('oss-browser-theme', themeMode.value)
-  applyTheme()
 }
 
 async function run<T>(task: () => Promise<T>): Promise<T | undefined> {
@@ -857,6 +864,7 @@ async function goUp(): Promise<void> {
   if (!currentBucket.value) return
   const parts = prefix.value.split('/').filter(Boolean)
   if (!parts.length) {
+    objectLoadGeneration += 1
     currentBucket.value = null
     prefix.value = ''
     objects.value = []
@@ -875,6 +883,7 @@ async function goHome(): Promise<void> {
     await visit(bucket, home?.prefix || '')
     return
   }
+  objectLoadGeneration += 1
   currentBucket.value = null
   prefix.value = ''
   objects.value = []
@@ -920,19 +929,38 @@ function removeFavorite(favorite: Favorite): void {
 
 async function loadObjects(append = false): Promise<void> {
   if (!currentBucket.value) return
-  const result = await run(() =>
-    window.ossBrowser.objects.list(
-      currentBucket.value!.name,
-      prefix.value,
-      append ? nextMarker.value : undefined
-    )
-  )
-  if (!result) return
-  objects.value = append ? [...objects.value, ...result.objects] : result.objects
+  const generation = ++objectLoadGeneration
+  const bucketName = currentBucket.value.name
+  const requestedPrefix = prefix.value
+  const marker = append ? nextMarker.value : undefined
   if (!append) {
+    objects.value = []
+    nextMarker.value = undefined
+    hasMoreObjects.value = false
+    selectedNames.value = new Set()
     Object.keys(thumbnailUrls).forEach((key) => delete thumbnailUrls[key])
     failedThumbnailNames.value = new Set()
   }
+  busy.value = true
+  errorMessage.value = ''
+  let result
+  try {
+    result = await window.ossBrowser.objects.list(bucketName, requestedPrefix, marker)
+  } catch (error) {
+    if (generation === objectLoadGeneration) {
+      errorMessage.value = error instanceof Error ? error.message : String(error)
+    }
+    return
+  } finally {
+    if (generation === objectLoadGeneration) busy.value = false
+  }
+  if (
+    generation !== objectLoadGeneration ||
+    currentBucket.value?.name !== bucketName ||
+    prefix.value !== requestedPrefix
+  )
+    return
+  objects.value = append ? [...objects.value, ...result.objects] : result.objects
   void loadThumbnails(result.objects)
   nextMarker.value = result.nextMarker
   hasMoreObjects.value = result.isTruncated
@@ -1054,6 +1082,7 @@ async function openCacheRefresh(item?: ObjectInfo): Promise<void> {
 }
 
 function updateCacheDomain(): void {
+  if (!cacheForm.objectPath.trim()) return
   const url = new URL(cacheForm.objectPath)
   url.hostname = selectedCdnDomain.value
   cacheForm.objectPath = url.toString()
@@ -1351,7 +1380,20 @@ async function createRamAccessKey(): Promise<void> {
   ramAccessKeys.value = await window.ossBrowser.ram.listAccessKeys(activeRamUser.value.userName)
 }
 
-async function removeRamAccessKey(key: RamAccessKey): Promise<void> {
+function removeRamAccessKey(key: RamAccessKey): void {
+  if (!activeRamUser.value) return
+  requestConfirmation({
+    title: t('删除 AccessKey'),
+    description: t('确定删除 AccessKey「{name}」吗？删除后无法恢复。', {
+      name: key.accessKeyId
+    }),
+    confirmLabel: t('删除'),
+    destructive: true,
+    action: () => performRemoveRamAccessKey(key)
+  })
+}
+
+async function performRemoveRamAccessKey(key: RamAccessKey): Promise<void> {
   if (!activeRamUser.value) return
   const done = await run(() =>
     window.ossBrowser.ram.removeAccessKey(activeRamUser.value!.userName, key.accessKeyId)
@@ -1534,7 +1576,17 @@ async function openMultipart(bucket: BucketInfo): Promise<void> {
   modal.value = 'multipart'
 }
 
-async function abortMultipart(upload: MultipartUploadInfo): Promise<void> {
+function abortMultipart(upload: MultipartUploadInfo): void {
+  requestConfirmation({
+    title: t('终止分片上传'),
+    description: t('确定终止「{name}」的未完成分片上传吗？', { name: upload.name }),
+    confirmLabel: t('终止'),
+    destructive: true,
+    action: () => performAbortMultipart(upload)
+  })
+}
+
+async function performAbortMultipart(upload: MultipartUploadInfo): Promise<void> {
   if (!multipartBucket.value) return
   const bucket = multipartBucket.value
   const done = await run(() =>
@@ -1564,7 +1616,17 @@ function openPreviewExternally(): Promise<void> {
   return window.ossBrowser.system.openExternal(previewUrl.value)
 }
 
-async function clearSavedProfile(): Promise<void> {
+function clearSavedProfile(): void {
+  requestConfirmation({
+    title: t('清空已保存账号'),
+    description: t('确定清空全部已保存账号吗？此操作无法撤销。'),
+    confirmLabel: t('清空全部'),
+    destructive: true,
+    action: performClearSavedProfile
+  })
+}
+
+async function performClearSavedProfile(): Promise<void> {
   await window.ossBrowser.profiles.clear()
   savedProfiles.value = []
   localStorage.removeItem('oss-browser-session')
@@ -1602,16 +1664,53 @@ function changeLocale(event: Event): void {
   setLocale((event.target as HTMLSelectElement).value as AppLocale)
 }
 
-async function removeProfile(profile: SavedProfile): Promise<void> {
+function removeProfile(profile: SavedProfile): void {
+  requestConfirmation({
+    title: t('删除已保存账号'),
+    description: t('确定删除已保存账号「{name}」吗？', { name: profile.label }),
+    confirmLabel: t('删除'),
+    destructive: true,
+    action: () => performRemoveProfile(profile)
+  })
+}
+
+async function performRemoveProfile(profile: SavedProfile): Promise<void> {
   await window.ossBrowser.profiles.remove(profile.id)
   savedProfiles.value = await window.ossBrowser.profiles.list()
 }
 
 async function saveSettings(): Promise<void> {
+  const nextSettings = { ...settingsDraft }
+  const done = await run(() =>
+    Promise.all([
+      window.ossBrowser.settings.update(nextSettings),
+      window.ossBrowser.auth.setSecure(secureDraft.value)
+    ]).then(() => undefined)
+  )
+  if (done === undefined && errorMessage.value) return
+  Object.assign(settings, nextSettings)
+  auth.secure = secureDraft.value
+  themeMode.value = themeDraft.value
   localStorage.setItem('oss-browser-settings', JSON.stringify(settings))
-  await window.ossBrowser.settings.update({ ...settings })
+  localStorage.setItem('oss-browser-theme', themeMode.value)
+  applyTheme()
+  if (auth.remember) {
+    await window.ossBrowser.profiles.save({
+      id: profileId(),
+      label: auth.alias?.trim() || auth.accessKeyId,
+      config: { ...auth }
+    })
+    savedProfiles.value = await window.ossBrowser.profiles.list()
+  }
   modal.value = null
   showToast(t('设置已保存'))
+}
+
+function openSettings(): void {
+  Object.assign(settingsDraft, settings)
+  secureDraft.value = auth.secure
+  themeDraft.value = themeMode.value
+  modal.value = 'settings'
 }
 
 async function checkPermissions(): Promise<void> {
@@ -1803,7 +1902,7 @@ async function checkPermissions(): Promise<void> {
             <ListTodo :size="16" /> {{ t('传输任务') }}
             <span v-if="transfers.length" class="badge">{{ transfers.length }}</span>
           </div>
-          <div class="transfer-trigger" role="button" tabindex="0" @click="modal = 'settings'">
+          <div class="transfer-trigger" role="button" tabindex="0" @click="openSettings">
             <Settings :size="16" /> {{ t('设置') }}
           </div>
           <div class="account-action" role="button" tabindex="0" @click="confirmLogout">
@@ -2235,19 +2334,44 @@ async function checkPermissions(): Promise<void> {
         >
           <Pencil :size="15" />{{ t('重命名') }}
         </div>
-        <div @click="openModal('acl')"><ShieldCheck :size="15" />{{ t('对象权限') }}</div>
+        <div
+          :class="{ disabled: selectedObjects.length !== 1 }"
+          @click="selectedObjects.length === 1 && openModal('acl')"
+        >
+          <ShieldCheck :size="15" />{{ t('对象权限') }}
+        </div>
         <div @click="openModal('headers')"><FileCog :size="15" />{{ t('HTTP 头') }}</div>
         <div
-          :class="{ disabled: selectedObjects[0]?.isDirectory }"
-          @click="!selectedObjects[0]?.isDirectory && openModal('share')"
+          :class="{ disabled: selectedObjects.length !== 1 || selectedObjects[0]?.isDirectory }"
+          @click="
+            selectedObjects.length === 1 && !selectedObjects[0]?.isDirectory && openModal('share')
+          "
         >
           <Link :size="15" />{{ t('获取地址') }}
         </div>
-        <div @click="openModal('symlink')"><Link :size="15" />{{ t('创建软链接') }}</div>
+        <div
+          :class="{ disabled: selectedObjects.length !== 1 }"
+          @click="selectedObjects.length === 1 && openModal('symlink')"
+        >
+          <Link :size="15" />{{ t('创建软链接') }}
+        </div>
         <div @click="openModal('restore')"><Undo2 :size="15" />{{ t('恢复归档对象') }}</div>
-        <div @click="showDetails"><Info :size="15" />{{ t('对象详情') }}</div>
-        <div @click="openModal('grant')"><KeyRound :size="15" />{{ t('生成授权码') }}</div>
-        <div @click="openCacheRefresh(selectedObjects[0])">
+        <div
+          :class="{ disabled: selectedObjects.length !== 1 }"
+          @click="selectedObjects.length === 1 && showDetails()"
+        >
+          <Info :size="15" />{{ t('对象详情') }}
+        </div>
+        <div
+          :class="{ disabled: selectedObjects.length > 1 }"
+          @click="selectedObjects.length <= 1 && openModal('grant')"
+        >
+          <KeyRound :size="15" />{{ t('生成授权码') }}
+        </div>
+        <div
+          :class="{ disabled: selectedObjects.length !== 1 }"
+          @click="selectedObjects.length === 1 && openCacheRefresh(selectedObjects[0])"
+        >
           <CloudCog :size="15" />{{ t('刷新此项缓存') }}
         </div>
         <div class="danger" @click="removeSelected"><Trash2 :size="15" />{{ t('删除') }}</div>
@@ -2847,7 +2971,7 @@ async function checkPermissions(): Promise<void> {
           ><span>{{ t('选择浅色、深色或跟随系统') }}</span>
         </div>
         <div class="select-wrap setting-select">
-          <select :value="themeMode" @change="changeTheme">
+          <select v-model="themeDraft">
             <option value="system">{{ t('跟随系统') }}</option>
             <option value="light">{{ t('浅色') }}</option>
             <option value="dark">{{ t('深色') }}</option>
@@ -2859,14 +2983,16 @@ async function checkPermissions(): Promise<void> {
           <strong>{{ t('连接安全') }}</strong
           ><span>{{ t('OSS 请求默认使用 HTTPS') }}</span>
         </div>
-        <label><input v-model="auth.secure" type="checkbox" /> HTTPS</label>
+        <label><input v-model="secureDraft" type="checkbox" /> HTTPS</label>
       </div>
       <div class="setting-row">
         <div>
           <strong>{{ t('图片缩略图') }}</strong
           ><span>{{ t('在文件列表中显示图片预览') }}</span>
         </div>
-        <label><input v-model="settings.showImagePreview" type="checkbox" /> {{ t('显示') }}</label>
+        <label
+          ><input v-model="settingsDraft.showImagePreview" type="checkbox" /> {{ t('显示') }}</label
+        >
       </div>
 
       <div class="settings-section-title">{{ t('账号与权限') }}</div>
@@ -2913,18 +3039,28 @@ async function checkPermissions(): Promise<void> {
         <label
           >{{ t('同时上传任务') }}
           <div class="input-wrap">
-            <input v-model.number="settings.maxUploadJobs" type="number" min="1" max="10" /></div
+            <input
+              v-model.number="settingsDraft.maxUploadJobs"
+              type="number"
+              min="1"
+              max="10"
+            /></div
         ></label>
         <label
           >{{ t('同时下载任务') }}
           <div class="input-wrap">
-            <input v-model.number="settings.maxDownloadJobs" type="number" min="1" max="10" /></div
+            <input
+              v-model.number="settingsDraft.maxDownloadJobs"
+              type="number"
+              min="1"
+              max="10"
+            /></div
         ></label>
         <label
           >{{ t('单任务并发分片') }}
           <div class="input-wrap">
             <input
-              v-model.number="settings.multipartParallel"
+              v-model.number="settingsDraft.multipartParallel"
               type="number"
               min="1"
               max="10"
@@ -2933,22 +3069,32 @@ async function checkPermissions(): Promise<void> {
         <label
           >{{ t('上传分片大小（MB）') }}
           <div class="input-wrap">
-            <input v-model.number="settings.partSizeMb" type="number" min="1" max="1024" /></div
+            <input
+              v-model.number="settingsDraft.partSizeMb"
+              type="number"
+              min="1"
+              max="1024"
+            /></div
         ></label>
         <label
           >{{ t('连接超时（秒）') }}
           <div class="input-wrap">
-            <input v-model.number="settings.timeoutSeconds" type="number" min="10" /></div
+            <input v-model.number="settingsDraft.timeoutSeconds" type="number" min="10" /></div
         ></label>
         <label
           >{{ t('失败重试次数') }}
           <div class="input-wrap">
-            <input v-model.number="settings.retryTimes" type="number" min="0" max="10" /></div
+            <input v-model.number="settingsDraft.retryTimes" type="number" min="0" max="10" /></div
         ></label>
         <label
           >{{ t('每页对象数量') }}
           <div class="input-wrap">
-            <input v-model.number="settings.listPageSize" type="number" min="10" max="1000" /></div
+            <input
+              v-model.number="settingsDraft.listPageSize"
+              type="number"
+              min="10"
+              max="1000"
+            /></div
         ></label>
       </div>
 

@@ -93,6 +93,11 @@ export class OssService {
     this.bucketRegions.clear()
   }
 
+  setSecure(secure: boolean): void {
+    if (!this.auth) throw new Error('请先登录')
+    this.auth.secure = secure
+  }
+
   updateSettings(settings: AppSettings): void {
     this.settings = settings
   }
@@ -304,6 +309,11 @@ export class OssService {
     }
     await client.putBucket(name, { region })
     if (acl) await client.putBucketACL(name, acl)
+  }
+
+  async getBucketAcl(name: string): Promise<string> {
+    const result = await this.bucketClient(name).getBucketACL(name)
+    return result.acl
   }
 
   async removeBucket(name: string): Promise<void> {
@@ -543,36 +553,57 @@ export class OssService {
   async upload(bucket: string, prefix: string, paths: string[]): Promise<void> {
     const files = await this.expandLocalPaths(paths)
 
-    await this.runPool(files, this.settings.maxUploadJobs, async ({ localPath, relativePath }) => {
-      const name = `${prefix}${relativePath.split(sep).join('/')}`
-      const transfer = this.newTransfer('upload', name)
-      const client = this.bucketClient(bucket)
-      const checkpointPath = this.checkpointPath(bucket, name, localPath)
-      const checkpoint = await this.readCheckpoint(checkpointPath)
-      this.activeTransfers.set(transfer.id, client)
-      try {
-        await client.multipartUpload(name, localPath, {
-          checkpoint,
-          parallel: this.settings.multipartParallel,
-          partSize: this.settings.partSizeMb * 1024 * 1024,
-          progress: async (progress: number, nextCheckpoint: unknown) => {
-            this.updateTransfer(transfer, progress, 'running')
-            if (nextCheckpoint) await writeFile(checkpointPath, JSON.stringify(nextCheckpoint))
+    await this.runPool(
+      files,
+      this.settings.maxUploadJobs,
+      async ({ localPath, relativePath, isDirectory }) => {
+        const name = `${prefix}${relativePath.split(sep).join('/')}${isDirectory ? '/' : ''}`
+        const transfer = this.newTransfer('upload', name)
+        const client = this.bucketClient(bucket)
+        if (isDirectory) {
+          this.activeTransfers.set(transfer.id, client)
+          try {
+            await client.put(name, Buffer.alloc(0))
+            this.updateTransfer(transfer, 1, 'done')
+          } catch (error) {
+            if (this.isCancelError(error)) {
+              this.updateTransfer(transfer, transfer.progress, 'cancelled')
+              return
+            }
+            this.failTransfer(transfer, error)
+            throw error
+          } finally {
+            this.activeTransfers.delete(transfer.id)
           }
-        })
-        await rm(checkpointPath, { force: true })
-        this.updateTransfer(transfer, 1, 'done')
-      } catch (error) {
-        if (this.isCancelError(error)) {
-          this.updateTransfer(transfer, transfer.progress, 'cancelled')
           return
         }
-        this.failTransfer(transfer, error)
-        throw error
-      } finally {
-        this.activeTransfers.delete(transfer.id)
+        const checkpointPath = this.checkpointPath(bucket, name, localPath)
+        const checkpoint = await this.readCheckpoint(checkpointPath)
+        this.activeTransfers.set(transfer.id, client)
+        try {
+          await client.multipartUpload(name, localPath, {
+            checkpoint,
+            parallel: this.settings.multipartParallel,
+            partSize: this.settings.partSizeMb * 1024 * 1024,
+            progress: async (progress: number, nextCheckpoint: unknown) => {
+              this.updateTransfer(transfer, progress, 'running')
+              if (nextCheckpoint) await writeFile(checkpointPath, JSON.stringify(nextCheckpoint))
+            }
+          })
+          await rm(checkpointPath, { force: true })
+          this.updateTransfer(transfer, 1, 'done')
+        } catch (error) {
+          if (this.isCancelError(error)) {
+            this.updateTransfer(transfer, transfer.progress, 'cancelled')
+            return
+          }
+          this.failTransfer(transfer, error)
+          throw error
+        } finally {
+          this.activeTransfers.delete(transfer.id)
+        }
       }
-    })
+    )
   }
 
   async download(bucket: string, items: ObjectInfo[], destination: string): Promise<void> {
@@ -713,17 +744,19 @@ export class OssService {
 
   private async expandLocalPaths(
     paths: string[]
-  ): Promise<Array<{ localPath: string; relativePath: string }>> {
-    const files: Array<{ localPath: string; relativePath: string }> = []
+  ): Promise<Array<{ localPath: string; relativePath: string; isDirectory: boolean }>> {
+    const files: Array<{ localPath: string; relativePath: string; isDirectory: boolean }> = []
     for (const path of paths) {
       const pathStat = await stat(path)
-      if (pathStat.isFile()) files.push({ localPath: path, relativePath: basename(path) })
+      if (pathStat.isFile())
+        files.push({ localPath: path, relativePath: basename(path), isDirectory: false })
       else {
         const children = await this.walk(path)
         files.push(
-          ...children.map((localPath) => ({
-            localPath,
-            relativePath: join(basename(path), relative(path, localPath))
+          ...children.map((entry) => ({
+            localPath: entry.path,
+            relativePath: join(basename(path), relative(path, entry.path)),
+            isDirectory: entry.isDirectory
           }))
         )
       }
@@ -731,12 +764,14 @@ export class OssService {
     return files
   }
 
-  private async walk(directory: string): Promise<string[]> {
-    const files: string[] = []
-    for (const entry of await readdir(directory, { withFileTypes: true })) {
+  private async walk(directory: string): Promise<Array<{ path: string; isDirectory: boolean }>> {
+    const entries = await readdir(directory, { withFileTypes: true })
+    if (!entries.length) return [{ path: directory, isDirectory: true }]
+    const files: Array<{ path: string; isDirectory: boolean }> = []
+    for (const entry of entries) {
       const path = join(directory, entry.name)
       if (entry.isDirectory()) files.push(...(await this.walk(path)))
-      else if (entry.isFile()) files.push(path)
+      else if (entry.isFile()) files.push({ path, isDirectory: false })
     }
     return files
   }

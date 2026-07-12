@@ -5,6 +5,7 @@ const api: OssBrowserApi = {
   auth: {
     connect: (config) => ipcRenderer.invoke('auth:connect', config),
     disconnect: () => ipcRenderer.invoke('auth:disconnect'),
+    setSecure: (secure) => ipcRenderer.invoke('auth:setSecure', secure),
     probePermissions: () => ipcRenderer.invoke('auth:probePermissions')
   },
   profiles: {
@@ -31,6 +32,7 @@ const api: OssBrowserApi = {
   },
   buckets: {
     list: () => ipcRenderer.invoke('buckets:list'),
+    getAcl: (name) => ipcRenderer.invoke('buckets:getAcl', name),
     create: (name, region, acl) => ipcRenderer.invoke('buckets:create', name, region, acl),
     remove: (name) => ipcRenderer.invoke('buckets:remove', name),
     setAcl: (name, acl) => ipcRenderer.invoke('buckets:setAcl', name, acl),

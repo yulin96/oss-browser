@@ -63,6 +63,7 @@ function createWindow(): void {
 function registerIpc(): void {
   ipcMain.handle('auth:connect', (_event, config: AuthConfig) => oss.connect(config))
   ipcMain.handle('auth:disconnect', () => oss.disconnect())
+  ipcMain.handle('auth:setSecure', (_event, secure: boolean) => oss.setSecure(secure))
   ipcMain.handle('auth:probePermissions', () => oss.probePermissions())
   ipcMain.handle('profiles:list', () => profiles.list())
   ipcMain.handle('profiles:save', (_event, profile: SavedProfile) => profiles.save(profile))
@@ -90,6 +91,7 @@ function registerIpc(): void {
   )
 
   ipcMain.handle('buckets:list', () => oss.listBuckets())
+  ipcMain.handle('buckets:getAcl', (_event, name: string) => oss.getBucketAcl(name))
   ipcMain.handle('buckets:create', (_event, name: string, region: string, acl: string) =>
     oss.createBucket(name, region, acl)
   )

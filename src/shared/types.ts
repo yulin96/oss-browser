@@ -142,6 +142,7 @@ export interface OssBrowserApi {
   auth: {
     connect: (config: AuthConfig) => Promise<BucketInfo[]>
     disconnect: () => Promise<void>
+    setSecure: (secure: boolean) => Promise<void>
     probePermissions: () => Promise<PermissionProbeItem[]>
   }
   profiles: {
@@ -171,6 +172,7 @@ export interface OssBrowserApi {
   }
   buckets: {
     list: () => Promise<BucketInfo[]>
+    getAcl: (name: string) => Promise<string>
     create: (name: string, region: string, acl: string) => Promise<void>
     remove: (name: string) => Promise<void>
     setAcl: (name: string, acl: string) => Promise<void>
