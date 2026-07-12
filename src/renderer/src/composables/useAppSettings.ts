@@ -1,6 +1,5 @@
-import { reactive, ref, type Ref } from 'vue'
+import { reactive, ref, watch, type Ref } from 'vue'
 import type { AppSettings, AuthConfig, SavedProfile } from '../../../shared/types'
-import { t } from '../i18n'
 
 export type ThemeMode = 'system' | 'light' | 'dark'
 
@@ -25,23 +24,16 @@ export function useAppSettings(options: {
   openModal: () => void
 }): {
   settings: AppSettings
-  settingsDraft: AppSettings
-  secureDraft: Ref<boolean>
   themeMode: Ref<ThemeMode>
-  themeDraft: Ref<ThemeMode>
   initializeSettings: () => Promise<void>
   disposeSettings: () => void
   openSettings: () => void
-  saveSettings: () => Promise<void>
 } {
   const settings = reactive<AppSettings>({ ...defaultSettings })
-  const settingsDraft = reactive<AppSettings>({ ...defaultSettings })
-  const secureDraft = ref(options.auth.secure)
   const storedTheme = localStorage.getItem('oss-browser-theme')
   const themeMode = ref<ThemeMode>(
     storedTheme === 'light' || storedTheme === 'dark' ? storedTheme : 'system'
   )
-  const themeDraft = ref<ThemeMode>(themeMode.value)
   const darkModeQuery = window.matchMedia('(prefers-color-scheme: dark)')
 
   function applyTheme(): void {
@@ -66,48 +58,46 @@ export function useAppSettings(options: {
   }
 
   function openSettings(): void {
-    Object.assign(settingsDraft, settings)
-    secureDraft.value = options.auth.secure
-    themeDraft.value = themeMode.value
     options.openModal()
   }
 
-  async function saveSettings(): Promise<void> {
-    const nextSettings = { ...settingsDraft }
-    const done = await options.run(() =>
-      Promise.all([
-        window.ossBrowser.settings.update(nextSettings),
-        window.ossBrowser.auth.setSecure(secureDraft.value)
-      ]).then(() => undefined)
-    )
-    if (done === undefined && options.taskError.value) return
-    Object.assign(settings, nextSettings)
-    options.auth.secure = secureDraft.value
-    themeMode.value = themeDraft.value
-    localStorage.setItem('oss-browser-settings', JSON.stringify(settings))
-    localStorage.setItem('oss-browser-theme', themeMode.value)
+  // 监听 settings 改变，实时同步到主进程和 localStorage
+  watch(
+    settings,
+    async (nextVal) => {
+      await window.ossBrowser.settings.update({ ...nextVal })
+      localStorage.setItem('oss-browser-settings', JSON.stringify(nextVal))
+    },
+    { deep: true }
+  )
+
+  // 监听主题改变，实时同步到 localStorage 并应用
+  watch(themeMode, (nextTheme) => {
+    localStorage.setItem('oss-browser-theme', nextTheme)
     applyTheme()
-    if (options.auth.remember) {
-      await window.ossBrowser.profiles.save({
-        id: options.profileId(),
-        label: options.auth.alias?.trim() || options.auth.accessKeyId,
-        config: { ...options.auth }
-      })
-      options.savedProfiles.value = await window.ossBrowser.profiles.list()
+  })
+
+  // 监听 HTTPS 设置改变，实时写入主进程并保存 profile
+  watch(
+    () => options.auth.secure,
+    async (nextSecure) => {
+      await window.ossBrowser.auth.setSecure(nextSecure)
+      if (options.auth.remember) {
+        await window.ossBrowser.profiles.save({
+          id: options.profileId(),
+          label: options.auth.alias?.trim() || options.auth.accessKeyId,
+          config: { ...options.auth }
+        })
+        options.savedProfiles.value = await window.ossBrowser.profiles.list()
+      }
     }
-    options.openModal()
-    options.showToast(t('设置已保存'))
-  }
+  )
 
   return {
     settings,
-    settingsDraft,
-    secureDraft,
     themeMode,
-    themeDraft,
     initializeSettings,
     disposeSettings: () => darkModeQuery.removeEventListener('change', applyTheme),
-    openSettings,
-    saveSettings
+    openSettings
   }
 }

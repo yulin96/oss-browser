@@ -1481,6 +1481,38 @@ input[type='checkbox']:checked::after {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.theme-select-buttons {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: center;
+  background: var(--tab-bg);
+  padding: 4px;
+  border-radius: 8px;
+  gap: 4px;
+  border: 1px solid var(--border);
+}
+.theme-select-buttons > div {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 6px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 550;
+  cursor: pointer;
+  transition: all 0.16s ease;
+  user-select: none;
+}
+.theme-select-buttons > div:hover {
+  color: var(--text);
+  background: var(--surface-hover);
+}
+.theme-select-buttons > div.active {
+  color: var(--text);
+  background: var(--surface);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1), 0 1px 2px rgba(0, 0, 0, 0.06);
+}
 .modal-empty {
   padding: 40px;
   color: var(--muted);

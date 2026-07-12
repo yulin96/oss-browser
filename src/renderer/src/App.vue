@@ -28,6 +28,8 @@ import {
   KeyRound,
   LayoutGrid,
   List,
+  Monitor,
+  Moon,
   MoreHorizontal,
   Presentation,
   RefreshCw,
@@ -36,6 +38,7 @@ import {
   Square,
   SquareCheck,
   Star,
+  Sun,
   Upload,
   X
 } from '@lucide/vue'
@@ -288,16 +291,7 @@ const mediaForm = reactive({
   videoTime: 0,
   custom: ''
 })
-const {
-  settings,
-  settingsDraft,
-  secureDraft,
-  themeDraft,
-  initializeSettings,
-  disposeSettings,
-  openSettings,
-  saveSettings
-} = useAppSettings({
+const { settings, themeMode, initializeSettings, disposeSettings, openSettings } = useAppSettings({
   auth,
   savedProfiles,
   profileId,
@@ -2524,12 +2518,34 @@ async function checkPermissions(): Promise<void> {
           <strong>{{ t('外观主题') }}</strong
           ><span>{{ t('选择浅色、深色或跟随系统') }}</span>
         </div>
-        <div class="select-wrap setting-select">
-          <select v-model="themeDraft">
-            <option value="system">{{ t('跟随系统') }}</option>
-            <option value="light">{{ t('浅色') }}</option>
-            <option value="dark">{{ t('深色') }}</option>
-          </select>
+        <div class="theme-select-buttons">
+          <div
+            :class="{ active: themeMode === 'system' }"
+            role="button"
+            tabindex="0"
+            @click="themeMode = 'system'"
+          >
+            <Monitor :size="14" />
+            <span>{{ t('跟随系统') }}</span>
+          </div>
+          <div
+            :class="{ active: themeMode === 'light' }"
+            role="button"
+            tabindex="0"
+            @click="themeMode = 'light'"
+          >
+            <Sun :size="14" />
+            <span>{{ t('浅色') }}</span>
+          </div>
+          <div
+            :class="{ active: themeMode === 'dark' }"
+            role="button"
+            tabindex="0"
+            @click="themeMode = 'dark'"
+          >
+            <Moon :size="14" />
+            <span>{{ t('深色') }}</span>
+          </div>
         </div>
       </div>
       <div class="setting-row">
@@ -2537,16 +2553,14 @@ async function checkPermissions(): Promise<void> {
           <strong>{{ t('连接安全') }}</strong
           ><span>{{ t('OSS 请求默认使用 HTTPS') }}</span>
         </div>
-        <label><input v-model="secureDraft" type="checkbox" /> HTTPS</label>
+        <label><input v-model="auth.secure" type="checkbox" /> HTTPS</label>
       </div>
       <div class="setting-row">
         <div>
           <strong>{{ t('图片缩略图') }}</strong
           ><span>{{ t('在文件列表中显示图片预览') }}</span>
         </div>
-        <label
-          ><input v-model="settingsDraft.showImagePreview" type="checkbox" /> {{ t('显示') }}</label
-        >
+        <label><input v-model="settings.showImagePreview" type="checkbox" /> {{ t('显示') }}</label>
       </div>
 
       <div class="settings-section-title">{{ t('账号与权限') }}</div>
@@ -2593,28 +2607,18 @@ async function checkPermissions(): Promise<void> {
         <label
           >{{ t('同时上传任务') }}
           <div class="input-wrap">
-            <input
-              v-model.number="settingsDraft.maxUploadJobs"
-              type="number"
-              min="1"
-              max="10"
-            /></div
+            <input v-model.number="settings.maxUploadJobs" type="number" min="1" max="10" /></div
         ></label>
         <label
           >{{ t('同时下载任务') }}
           <div class="input-wrap">
-            <input
-              v-model.number="settingsDraft.maxDownloadJobs"
-              type="number"
-              min="1"
-              max="10"
-            /></div
+            <input v-model.number="settings.maxDownloadJobs" type="number" min="1" max="10" /></div
         ></label>
         <label
           >{{ t('单任务并发分片') }}
           <div class="input-wrap">
             <input
-              v-model.number="settingsDraft.multipartParallel"
+              v-model.number="settings.multipartParallel"
               type="number"
               min="1"
               max="10"
@@ -2623,41 +2627,24 @@ async function checkPermissions(): Promise<void> {
         <label
           >{{ t('上传分片大小（MB）') }}
           <div class="input-wrap">
-            <input
-              v-model.number="settingsDraft.partSizeMb"
-              type="number"
-              min="1"
-              max="1024"
-            /></div
+            <input v-model.number="settings.partSizeMb" type="number" min="1" max="1024" /></div
         ></label>
         <label
           >{{ t('连接超时（秒）') }}
           <div class="input-wrap">
-            <input v-model.number="settingsDraft.timeoutSeconds" type="number" min="10" /></div
+            <input v-model.number="settings.timeoutSeconds" type="number" min="10" /></div
         ></label>
         <label
           >{{ t('失败重试次数') }}
           <div class="input-wrap">
-            <input v-model.number="settingsDraft.retryTimes" type="number" min="0" max="10" /></div
+            <input v-model.number="settings.retryTimes" type="number" min="0" max="10" /></div
         ></label>
         <label
           >{{ t('每页对象数量') }}
           <div class="input-wrap">
-            <input
-              v-model.number="settingsDraft.listPageSize"
-              type="number"
-              min="10"
-              max="1000"
-            /></div
+            <input v-model.number="settings.listPageSize" type="number" min="10" max="1000" /></div
         ></label>
       </div>
-
-      <template #footer
-        ><AppButton :label="t('取消')" @click="modal = null" /><AppButton
-          :label="t('保存设置')"
-          tone="primary"
-          @click="saveSettings"
-      /></template>
     </ModalShell>
 
     <ConfirmDialog
