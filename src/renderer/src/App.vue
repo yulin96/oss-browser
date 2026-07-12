@@ -2024,7 +2024,15 @@ async function checkPermissions(): Promise<void> {
       <div v-if="!savedProfiles.length" class="modal-empty">{{ t('暂无已保存账号') }}</div>
       <div v-for="profile in savedProfiles" :key="profile.id" class="profile-row">
         <div>
-          <strong>{{ profile.label }}</strong>
+          <strong>
+            {{ profile.label }}
+            <span
+              v-if="profile.label !== profile.config.accessKeyId"
+              class="text-xs font-normal text-muted-foreground ml-1"
+            >
+              ({{ profile.config.accessKeyId }})
+            </span>
+          </strong>
           <span>{{
             profile.config.endpointMode === 'public' ? t('公共云') : profile.config.endpoint
           }}</span>
