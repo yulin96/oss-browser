@@ -737,6 +737,11 @@ function readHomeLocation(): HomeLocation | null {
 
 function setCurrentAsHome(): void {
   if (!currentBucket.value) return
+  if (isCurrentHome()) {
+    homeLocation.value = null
+    localStorage.removeItem(homeStorageKey())
+    return
+  }
   homeLocation.value = { bucket: currentBucket.value.name, prefix: prefix.value }
   localStorage.setItem(homeStorageKey(), JSON.stringify(homeLocation.value))
 }
@@ -851,6 +856,14 @@ async function goForward(): Promise<void> {
 async function goUp(): Promise<void> {
   if (!currentBucket.value) return
   const parts = prefix.value.split('/').filter(Boolean)
+  if (!parts.length) {
+    currentBucket.value = null
+    prefix.value = ''
+    objects.value = []
+    selectedNames.value = new Set()
+    addressInput.value = ''
+    return
+  }
   parts.pop()
   await visit(currentBucket.value, parts.length ? `${parts.join('/')}/` : '')
 }
@@ -1921,7 +1934,7 @@ async function checkPermissions(): Promise<void> {
                 <Star :size="18" />
               </div>
             </AppTooltip>
-            <AppTooltip :label="t('设为首页')">
+            <AppTooltip :label="t(isCurrentHome() ? '取消首页' : '设为首页')">
               <div class="nav-icon" :class="{ active: isCurrentHome() }" @click="setCurrentAsHome">
                 <HousePlus :size="18" />
               </div>
