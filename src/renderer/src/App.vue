@@ -33,6 +33,8 @@ import {
   RefreshCw,
   Search,
   ShieldCheck,
+  Square,
+  SquareCheck,
   Star,
   Upload,
   X
@@ -1658,6 +1660,15 @@ async function checkPermissions(): Promise<void> {
               @click="openModal('create-folder')"
             />
             <div class="toolbar-divider" />
+            <AppButton
+              :label="t('全选')"
+              :icon="
+                selectedNames.size === filteredObjects.length && filteredObjects.length > 0
+                  ? SquareCheck
+                  : Square
+              "
+              @click="toggleAll"
+            />
             <AppButton
               :label="t('下载')"
               :icon="Download"
