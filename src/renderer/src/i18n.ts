@@ -303,7 +303,11 @@ const translations: Record<Exclude<AppLocale, 'zh-CN'>, Record<string, string>> 
     '泰国 (曼谷)': 'Thailand (Bangkok)',
     '印度 (孟买)': 'India (Mumbai)',
     '德国 (法兰克福)': 'Germany (Frankfurt)',
-    '英国 (伦敦)': 'UK (London)'
+    '英国 (伦敦)': 'UK (London)',
+    低频: 'IA',
+    归档: 'Archive',
+    冷归档: 'Cold Archive',
+    深度冷归档: 'Deep Cold Archive'
   },
   'ja-JP': {
     '快速、安全地管理阿里云对象存储': 'Alibaba Cloud Object Storage をすばやく安全に管理',
@@ -605,7 +609,11 @@ const translations: Record<Exclude<AppLocale, 'zh-CN'>, Record<string, string>> 
     '泰国 (曼谷)': 'タイ (バンコク)',
     '印度 (孟买)': 'インド (ムンバイ)',
     '德国 (法兰克福)': 'ドイツ (フランクフルト)',
-    '英国 (伦敦)': '英国 (ロンドン)'
+    '英国 (伦敦)': '英国 (ロンドン)',
+    低频: '低頻',
+    归档: 'アーカイブ',
+    冷归档: 'コールドアーカイブ',
+    深度冷归档: 'ディープコールドアーカイブ'
   }
 }
 

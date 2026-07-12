@@ -1316,6 +1316,13 @@ function formatSize(size: number): string {
   return `${(size / 1024 ** 3).toFixed(1)} GB`
 }
 
+function getFileExtension(name: string): string {
+  const index = name.lastIndexOf('.')
+  if (index === -1 || index === name.length - 1) return '-'
+  const ext = name.slice(index + 1).toLowerCase()
+  return ext.length <= 10 && /^[a-z0-9]+$/i.test(ext) ? ext : '-'
+}
+
 function cancelTransfer(id: string): Promise<void> {
   return window.ossBrowser.transfers.cancel(id)
 }
@@ -1810,7 +1817,16 @@ async function checkPermissions(): Promise<void> {
                 </div>
                 <div class="object-info">
                   <strong :title="item.displayName">{{ item.displayName }}</strong>
-                  <span>{{ item.isDirectory ? t('文件夹') : formatSize(item.size) }}</span>
+                  <span style="display: flex; align-items: center">
+                    <template v-if="item.isDirectory">
+                      <span>{{ t('文件夹') }}</span>
+                    </template>
+                    <template v-else>
+                      <span>{{ formatSize(item.size) }}</span>
+                      <span class="mx-1">·</span>
+                      <span class="uppercase">{{ getFileExtension(item.name) }}</span>
+                    </template>
+                  </span>
                 </div>
               </div>
             </div>
