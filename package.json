@@ -1,7 +1,7 @@
 {
   "name": "oss-browser",
   "productName": "OSS Browser",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "A modern Apple Silicon compatible desktop client for Alibaba Cloud OSS",
   "license": "MIT",
   "main": "./out/main/index.js",
