@@ -1936,44 +1936,46 @@ async function checkPermissions(): Promise<void> {
         </div>
       </div>
 
-      <aside v-if="showTransfers" class="transfer-panel">
-        <div class="transfer-head">
-          <strong>{{ t('传输任务') }}</strong>
-          <AppTooltip :label="t('关闭')">
-            <div class="icon-button" role="button" tabindex="0" @click="showTransfers = false">
-              <X :size="18" />
-            </div>
-          </AppTooltip>
-        </div>
-        <div v-if="!transfers.length" class="transfer-empty">{{ t('暂无传输任务') }}</div>
-        <div v-for="transfer in transfers" :key="transfer.id" class="transfer-item">
-          <div class="transfer-line">
-            <span
-              ><Upload v-if="transfer.direction === 'upload'" :size="14" /><Download
-                v-else
-                :size="14"
-              />
-              {{ transfer.name }}</span
-            ><b>{{
-              transfer.status === 'done'
-                ? t('完成')
-                : transfer.status === 'error'
-                  ? t('失败')
-                  : transfer.status === 'cancelled'
-                    ? t('已取消')
-                    : `${Math.round(transfer.progress * 100)}%`
-            }}</b>
-            <AppButton
-              v-if="transfer.status === 'running'"
-              :label="t('取消')"
-              tone="ghost"
-              @click="cancelTransfer(transfer.id)"
-            />
+      <div v-if="showTransfers" class="transfer-mask" @mousedown.self="showTransfers = false">
+        <aside class="transfer-panel">
+          <div class="transfer-head">
+            <strong>{{ t('传输任务') }}</strong>
+            <AppTooltip :label="t('关闭')">
+              <div class="icon-button" role="button" tabindex="0" @click="showTransfers = false">
+                <X :size="18" />
+              </div>
+            </AppTooltip>
           </div>
-          <div class="progress"><i :style="{ width: `${transfer.progress * 100}%` }" /></div>
-          <div v-if="transfer.error" class="transfer-error">{{ transfer.error }}</div>
-        </div>
-      </aside>
+          <div v-if="!transfers.length" class="transfer-empty">{{ t('暂无传输任务') }}</div>
+          <div v-for="transfer in transfers" :key="transfer.id" class="transfer-item">
+            <div class="transfer-line">
+              <span
+                ><Upload v-if="transfer.direction === 'upload'" :size="14" /><Download
+                  v-else
+                  :size="14"
+                />
+                {{ transfer.name }}</span
+              ><b>{{
+                transfer.status === 'done'
+                  ? t('完成')
+                  : transfer.status === 'error'
+                    ? t('失败')
+                    : transfer.status === 'cancelled'
+                      ? t('已取消')
+                      : `${Math.round(transfer.progress * 100)}%`
+              }}</b>
+              <AppButton
+                v-if="transfer.status === 'running'"
+                :label="t('取消')"
+                tone="ghost"
+                @click="cancelTransfer(transfer.id)"
+              />
+            </div>
+            <div class="progress"><i :style="{ width: `${transfer.progress * 100}%` }" /></div>
+            <div v-if="transfer.error" class="transfer-error">{{ transfer.error }}</div>
+          </div>
+        </aside>
+      </div>
     </template>
 
     <ModalShell
