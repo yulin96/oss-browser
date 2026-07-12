@@ -1,7 +1,7 @@
 import { computed, ref, type ComputedRef, type Ref } from 'vue'
 import type { UpdateState } from '../../../shared/types'
-import type { ConfirmationRequest } from './useConfirmation'
 import { t } from '../i18n'
+import type { ConfirmationRequest } from './useConfirmation'
 
 export function useAppUpdates(
   requestConfirmation: (request: ConfirmationRequest) => void,

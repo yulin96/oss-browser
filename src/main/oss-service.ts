@@ -1,11 +1,8 @@
-import { createHash, randomUUID } from 'node:crypto'
-import { createWriteStream } from 'node:fs'
-import { mkdir, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises'
-import { basename, isAbsolute, join, relative, sep } from 'node:path'
-import { pipeline } from 'node:stream/promises'
-import { app } from 'electron'
-import OSS from 'ali-oss'
-import StsClient, { AssumeRoleRequest } from '@alicloud/sts20150401'
+import CdnModule, {
+  DescribeUserDomainsRequest,
+  RefreshObjectCachesRequest
+} from '@alicloud/cdn20180510'
+import { $OpenApiUtil } from '@alicloud/openapi-core'
 import RamClient, {
   CreateAccessKeyRequest,
   CreateUserRequest,
@@ -17,14 +14,17 @@ import RamClient, {
   ListUsersRequest,
   UpdateUserRequest
 } from '@alicloud/ram20150501'
-import CdnModule, {
-  DescribeUserDomainsRequest,
-  RefreshObjectCachesRequest
-} from '@alicloud/cdn20180510'
-import { $OpenApiUtil } from '@alicloud/openapi-core'
+import StsClient, { AssumeRoleRequest } from '@alicloud/sts20150401'
+import OSS from 'ali-oss'
+import { app } from 'electron'
+import { createHash, randomUUID } from 'node:crypto'
+import { createWriteStream } from 'node:fs'
+import { mkdir, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises'
+import { basename, isAbsolute, join, relative, sep } from 'node:path'
+import { pipeline } from 'node:stream/promises'
 import type {
-  AuthConfig,
   AppSettings,
+  AuthConfig,
   BucketInfo,
   CacheRefreshRequest,
   GrantOptions,

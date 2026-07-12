@@ -25,14 +25,14 @@ const emit = defineEmits<{
 
 <template>
   <AlertDialog :open="open" @update:open="emit('update:open', $event)">
-    <AlertDialogContent class="border-[var(--border)] bg-[var(--surface)] text-[var(--text)]">
+    <AlertDialogContent class="border-(--border) bg-(--surface) text-foreground">
       <AlertDialogHeader>
         <AlertDialogTitle>{{ title }}</AlertDialogTitle>
         <AlertDialogDescription>{{ description }}</AlertDialogDescription>
       </AlertDialogHeader>
       <AlertDialogFooter>
         <div
-          class="inline-flex h-9 items-center justify-center rounded-md border border-[var(--border)] px-4 text-sm font-medium hover:bg-[var(--background)]"
+          class="inline-flex h-9 items-center justify-center rounded-md border border-(--border) px-4 text-sm font-medium hover:bg-background"
           role="button"
           tabindex="0"
           @click="emit('update:open', false)"
@@ -43,8 +43,8 @@ const emit = defineEmits<{
         <div
           :class="`inline-flex h-9 items-center justify-center rounded-md px-4 text-sm font-medium ${
             destructive
-              ? 'bg-[var(--danger)] text-white hover:opacity-90'
-              : 'bg-[var(--primary)] text-white hover:opacity-90'
+              ? 'bg-destructive text-white hover:opacity-90'
+              : 'bg-(--primary) text-white hover:opacity-90'
           }`"
           role="button"
           tabindex="0"

@@ -1,10 +1,7 @@
+import { electronApp, is, optimizer } from '@electron-toolkit/utils'
 import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, shell } from 'electron'
 import { join } from 'node:path'
-import { electronApp, is, optimizer } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
-import { OssService } from './oss-service'
-import { ProfileStore } from './profile-store'
-import { UpdateService } from './update-service'
 import type {
   AppSettings,
   AuthConfig,
@@ -14,6 +11,9 @@ import type {
   SavedProfile,
   TransferItem
 } from '../shared/types'
+import { OssService } from './oss-service'
+import { ProfileStore } from './profile-store'
+import { UpdateService } from './update-service'
 
 app.setPath('userData', join(app.getPath('appData'), 'oss-browser'))
 app.setName('OSS Browser')
