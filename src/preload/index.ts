@@ -47,6 +47,7 @@ const api: OssBrowserApi = {
     copy: (bucket, source, target) => ipcRenderer.invoke('objects:copy', bucket, source, target),
     transfer: (bucket, items, targetPath, move) =>
       ipcRenderer.invoke('objects:transfer', bucket, items, targetPath, move),
+    isPublic: (bucket, name) => ipcRenderer.invoke('objects:isPublic', bucket, name),
     setAcl: (bucket, name, acl) => ipcRenderer.invoke('objects:setAcl', bucket, name, acl),
     setHeaders: (bucket, name, headers) =>
       ipcRenderer.invoke('objects:setHeaders', bucket, name, headers),

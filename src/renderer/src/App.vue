@@ -42,7 +42,6 @@ import {
   Upload,
   X
 } from '@lucide/vue'
-import QRCode from 'qrcode'
 import { computed, onBeforeUnmount, onMounted, reactive, ref, shallowRef } from 'vue'
 import type {
   AuthConfig,
@@ -127,6 +126,17 @@ const objectIconRules = [
   { pattern: /\.pdf$/i, icon: FileText, kind: 'pdf' }
 ]
 
+const imageProcessOptions = [
+  { id: 'auto-orient', label: '自动方向', process: 'auto-orient,1' },
+  { id: 'resize-50', label: '缩放 50%', process: 'resize,p_50' },
+  { id: 'crop-300', label: '自定义裁剪 300 * 300', process: 'crop,w_300,h_300' },
+  { id: 'rotate-90', label: '旋转 90°', process: 'rotate,90' },
+  { id: 'quality-80', label: '质量 80%', process: 'quality,q_80' },
+  { id: 'format-webp', label: '转 WebP', process: 'format,webp' }
+]
+
+const videoProcessOptions = [{ id: 'snapshot', label: '截取首帧', process: 'snapshot,t_0,f_jpg' }]
+
 function getObjectVisual(item: ObjectInfo): { icon: typeof File; kind: string } {
   if (item.isDirectory) return { icon: Folder, kind: 'folder' }
   const match = objectIconRules.find((rule) => rule.pattern.test(item.name))
@@ -149,7 +159,9 @@ const bucketMenu = reactive({ visible: false, x: 0, y: 0 })
 const dragActive = ref(false)
 const previewUrl = ref('')
 const previewText = ref('')
-const qrCodeUrl = ref('')
+const shareNeedsExpiry = ref(true)
+const sharePreparing = ref(false)
+const shareCopied = ref(false)
 const grantToken = ref('')
 const grantExpiration = ref('')
 const ramUsers = ref<RamUser[]>([])
@@ -267,7 +279,6 @@ const form = reactive({
   contentDisposition: '',
   expires: 3600,
   days: 1,
-  customDomain: '',
   roleArn: '',
   privilege: 'readOnly' as 'readOnly' | 'readWrite' | 'all',
   durationSeconds: 3600,
@@ -280,17 +291,14 @@ const cacheForm = reactive({
   objectPath: '',
   force: false
 })
-const mediaForm = reactive({
-  mode: 'none' as 'none' | 'image' | 'video' | 'custom',
-  width: 0,
-  height: 0,
-  quality: 90,
-  format: '',
-  resizeMode: 'lfit',
-  rotate: 0,
-  videoTime: 0,
-  custom: ''
-})
+const selectedMediaProcesses = ref<string[]>([])
+const mediaProcessOptions = computed(() =>
+  previewType.value === 'image'
+    ? imageProcessOptions
+    : previewType.value === 'video'
+      ? videoProcessOptions
+      : []
+)
 const { settings, themeMode, initializeSettings, disposeSettings, openSettings } = useAppSettings({
   auth,
   loggedIn,
@@ -395,6 +403,7 @@ const previewType = computed(() => {
 
 let removeTransferListener: (() => void) | undefined
 let toastTimer: ReturnType<typeof setTimeout> | undefined
+let shareCopyTimer: ReturnType<typeof setTimeout> | undefined
 let dragDepth = 0
 let permissionProbeGeneration = 0
 
@@ -433,6 +442,7 @@ onBeforeUnmount(() => {
   window.removeEventListener('drop', resetDragState)
   window.removeEventListener('blur', resetDragState)
   if (toastTimer) clearTimeout(toastTimer)
+  if (shareCopyTimer) clearTimeout(shareCopyTimer)
 })
 
 function showToast(message: string): void {
@@ -476,7 +486,9 @@ function resetAccountRuntimeState(): void {
   resetDragState()
   previewUrl.value = ''
   previewText.value = ''
-  qrCodeUrl.value = ''
+  shareNeedsExpiry.value = true
+  sharePreparing.value = false
+  shareCopied.value = false
   grantToken.value = ''
   grantExpiration.value = ''
   ramUsers.value = []
@@ -507,7 +519,6 @@ function resetAccountRuntimeState(): void {
     contentDisposition: '',
     expires: 3600,
     days: 1,
-    customDomain: '',
     roleArn: '',
     privilege: 'readOnly',
     durationSeconds: 3600,
@@ -516,17 +527,7 @@ function resetAccountRuntimeState(): void {
     ramComments: ''
   })
   Object.assign(cacheForm, { objectType: 'File', objectPath: '', force: false })
-  Object.assign(mediaForm, {
-    mode: 'none',
-    width: 0,
-    height: 0,
-    quality: 90,
-    format: '',
-    resizeMode: 'lfit',
-    rotate: 0,
-    videoTime: 0,
-    custom: ''
-  })
+  selectedMediaProcesses.value = []
 }
 
 function closeFloatingMenus(event: PointerEvent): void {
@@ -740,8 +741,21 @@ function handleObjectAction(action: ObjectAction): void {
 
 async function prepareAddressModal(): Promise<void> {
   previewUrl.value = ''
-  qrCodeUrl.value = ''
-  await loadDomainOptions()
+  shareCopied.value = false
+  selectedMediaProcesses.value = []
+  sharePreparing.value = true
+  try {
+    await loadDomainOptions()
+    if (!currentBucket.value || selectedObjects.value.length !== 1) return
+    const item = selectedObjects.value[0]
+    shareNeedsExpiry.value = !(await window.ossBrowser.objects.isPublic(
+      currentBucket.value.name,
+      item.name
+    ))
+    if (!shareNeedsExpiry.value) await createShareLink()
+  } finally {
+    sharePreparing.value = false
+  }
 }
 
 async function loadDomainOptions(): Promise<void> {
@@ -1182,57 +1196,62 @@ async function applyHeaders(): Promise<void> {
 async function createShareLink(): Promise<void> {
   if (!currentBucket.value || selectedObjects.value.length !== 1) return
   const process = buildMediaProcess()
-  const url = await run(() =>
-    window.ossBrowser.objects.signedUrl(
-      currentBucket.value!.name,
-      selectedObjects.value[0].name,
-      Number(form.expires),
-      process || undefined
+  let url = ''
+  if (shareNeedsExpiry.value) {
+    const signedUrl = await run(() =>
+      window.ossBrowser.objects.signedUrl(
+        currentBucket.value!.name,
+        selectedObjects.value[0].name,
+        Number(form.expires),
+        process || undefined
+      )
     )
-  )
-  if (!url) return
-  const domain = form.customDomain || selectedDomain.value
+    if (!signedUrl) return
+    url = signedUrl
+  } else {
+    const objectPath = selectedObjects.value[0].name
+      .split('/')
+      .map((part) => encodeURIComponent(part))
+      .join('/')
+    url = `${auth.secure ? 'https' : 'http'}://${selectedDomain.value}/${objectPath}`
+    if (process) url += `?x-oss-process=${process}`
+  }
+  const domain = selectedDomain.value
   previewUrl.value = domain
     ? url.replace(/\/\/[^/]+\//, `//${domain.replace(/^https?:\/\//, '').replace(/\/$/, '')}/`)
     : url
+  shareCopied.value = false
   if (selectedDomain.value && currentBucket.value) {
     localStorage.setItem(
       `oss-browser-domain:${profileId()}:${currentBucket.value.name}`,
       selectedDomain.value
     )
   }
-  qrCodeUrl.value = await QRCode.toDataURL(previewUrl.value, { width: 220, margin: 1 })
-  await window.ossBrowser.system.writeClipboard(previewUrl.value)
 }
 
 function buildMediaProcess(): string {
-  if (mediaForm.mode === 'custom') return mediaForm.custom.trim().replace(/^x-oss-process=/, '')
-  if (mediaForm.mode === 'video') {
-    const options = [`t_${Math.max(0, mediaForm.videoTime)}`, `f_${mediaForm.format || 'jpg'}`]
-    if (mediaForm.width > 0) options.push(`w_${mediaForm.width}`)
-    if (mediaForm.height > 0) options.push(`h_${mediaForm.height}`)
-    return `video/snapshot,${options.join(',')}`
-  }
-  if (mediaForm.mode === 'image') {
-    const operations: string[] = []
-    const resize = [`m_${mediaForm.resizeMode}`]
-    if (mediaForm.width > 0) resize.push(`w_${mediaForm.width}`)
-    if (mediaForm.height > 0) resize.push(`h_${mediaForm.height}`)
-    if (resize.length > 1) operations.push(`resize,${resize.join(',')}`)
-    if (mediaForm.quality > 0) operations.push(`quality,q_${mediaForm.quality}`)
-    if (mediaForm.rotate) operations.push(`rotate,${mediaForm.rotate}`)
-    if (mediaForm.format) operations.push(`format,${mediaForm.format}`)
-    return operations.length ? `image/${operations.join('/')}` : ''
-  }
-  return ''
+  const operations = mediaProcessOptions.value
+    .filter((option) => selectedMediaProcesses.value.includes(option.id))
+    .map((option) => option.process)
+  if (!operations.length) return ''
+  return `${previewType.value === 'video' ? 'video' : 'image'}/${operations.join('/')}`
 }
 
-function shareByEmail(): Promise<void> {
-  const subject = encodeURIComponent(
-    t('OSS 文件：{name}', { name: selectedObjects.value[0]?.displayName || '' })
-  )
-  const body = encodeURIComponent(previewUrl.value)
-  return window.ossBrowser.system.openExternal(`mailto:?subject=${subject}&body=${body}`)
+async function toggleMediaProcess(id: string): Promise<void> {
+  selectedMediaProcesses.value = selectedMediaProcesses.value.includes(id)
+    ? selectedMediaProcesses.value.filter((item) => item !== id)
+    : [...selectedMediaProcesses.value, id]
+  if (previewUrl.value || !shareNeedsExpiry.value) await createShareLink()
+}
+
+async function copyShareUrl(): Promise<void> {
+  if (!previewUrl.value) return
+  await window.ossBrowser.system.writeClipboard(previewUrl.value)
+  shareCopied.value = true
+  if (shareCopyTimer) clearTimeout(shareCopyTimer)
+  shareCopyTimer = setTimeout(() => {
+    shareCopied.value = false
+  }, 1600)
 }
 
 async function openPreview(): Promise<void> {
@@ -2200,100 +2219,62 @@ async function checkPermissions(): Promise<void> {
       /></template>
     </ModalShell>
 
-    <ModalShell v-if="modal === 'share'" :title="t('获取地址')" size="large" @close="modal = null">
-      <label class="field-label">{{ t('有效期（秒）') }}</label>
-      <div class="input-wrap"><input v-model.number="form.expires" type="number" min="1" /></div>
-      <label class="field-label">{{ t('访问域名') }}</label>
-      <div class="select-wrap">
-        <select v-model="selectedDomain">
-          <option v-for="domain in domainOptions" :key="domain" :value="domain">
-            {{ domain }}
-          </option>
-        </select>
-      </div>
-      <label class="field-label">{{ t('其他域名（可选）') }}</label>
-      <div class="input-wrap">
-        <input v-model.trim="form.customDomain" placeholder="static.example.com" />
-      </div>
-      <label class="field-label">{{ t('媒体处理') }}</label>
-      <div class="select-wrap">
-        <select v-model="mediaForm.mode">
-          <option value="none">{{ t('不处理') }}</option>
-          <option v-if="previewType === 'image'" value="image">{{ t('图片处理') }}</option>
-          <option v-if="previewType === 'video'" value="video">{{ t('视频截帧') }}</option>
-          <option value="custom">{{ t('自定义参数') }}</option>
-        </select>
-      </div>
-      <div v-if="mediaForm.mode === 'image' || mediaForm.mode === 'video'" class="media-options">
-        <label v-if="mediaForm.mode === 'image'"
-          >{{ t('缩放方式') }}
-          <div class="select-wrap">
-            <select v-model="mediaForm.resizeMode">
-              <option value="lfit">{{ t('等比缩放') }}</option>
-              <option value="mfit">{{ t('等比缩放填充') }}</option>
-              <option value="fill">{{ t('固定宽高') }}</option>
-              <option value="pad">{{ t('缩放并留白') }}</option>
-            </select>
-          </div></label
-        >
-        <label
-          >{{ t('宽度') }}
-          <div class="input-wrap">
-            <input v-model.number="mediaForm.width" type="number" min="0" /></div
-        ></label>
-        <label
-          >{{ t('高度') }}
-          <div class="input-wrap">
-            <input v-model.number="mediaForm.height" type="number" min="0" /></div
-        ></label>
-        <label v-if="mediaForm.mode === 'image'"
-          >{{ t('质量') }}
-          <div class="input-wrap">
-            <input v-model.number="mediaForm.quality" type="number" min="1" max="100" /></div
-        ></label>
-        <label v-if="mediaForm.mode === 'image'"
-          >{{ t('旋转角度') }}
-          <div class="input-wrap">
-            <input v-model.number="mediaForm.rotate" type="number" min="0" max="360" /></div
-        ></label>
-        <label v-if="mediaForm.mode === 'video'"
-          >{{ t('截帧时间（毫秒）') }}
-          <div class="input-wrap">
-            <input v-model.number="mediaForm.videoTime" type="number" min="0" /></div
-        ></label>
-        <label
-          >{{ t('格式') }}
-          <div class="select-wrap">
-            <select v-model="mediaForm.format">
-              <option value="">{{ t('保持原格式') }}</option>
-              <option value="jpg">JPG</option>
-              <option value="png">PNG</option>
-              <option v-if="mediaForm.mode === 'image'" value="webp">WebP</option>
-              <option v-if="mediaForm.mode === 'image'" value="avif">AVIF</option>
-            </select>
-          </div></label
-        >
-      </div>
-      <template v-if="mediaForm.mode === 'custom'">
-        <label class="field-label">x-oss-process</label>
-        <div class="input-wrap">
-          <input v-model.trim="mediaForm.custom" placeholder="image/resize,w_800/quality,q_90" />
+    <ModalShell v-if="modal === 'share'" :title="t('获取地址')" width="680px" @close="modal = null">
+      <div v-if="sharePreparing" class="share-loading">{{ t('正在检查地址访问权限…') }}</div>
+      <template v-else>
+        <label class="field-label">{{ t('访问域名') }}</label>
+        <div class="select-wrap">
+          <select v-model="selectedDomain" @change="previewUrl && createShareLink()">
+            <option v-for="domain in domainOptions" :key="domain" :value="domain">
+              {{ domain }}
+            </option>
+          </select>
         </div>
+        <div v-if="shareNeedsExpiry && !previewUrl" class="share-expiry-step">
+          <div>
+            <label class="field-label">{{ t('有效期（秒）') }}</label>
+            <div class="input-wrap">
+              <input
+                v-model.number="form.expires"
+                type="number"
+                min="1"
+                @keydown.enter="createShareLink"
+              />
+            </div>
+          </div>
+          <AppButton :label="t('生成')" tone="primary" @click="createShareLink" />
+        </div>
+
+        <template v-if="previewUrl">
+          <label class="field-label">{{ t('地址') }}</label>
+          <div class="textarea-wrap share-address-input">
+            <textarea :value="previewUrl" rows="3" readonly />
+            <AppButton
+              class="share-copy-button"
+              :class="{ 'is-copied': shareCopied }"
+              :label="shareCopied ? t('已复制') : t('复制')"
+              :icon="shareCopied ? CircleCheck : Copy"
+              tone="default"
+              @click="copyShareUrl"
+            />
+          </div>
+          <div v-if="previewType === 'image' || previewType === 'video'" class="share-media-row">
+            <span>{{ t('媒体处理') }}</span>
+            <div
+              v-for="option in mediaProcessOptions"
+              :key="option.id"
+              class="media-process-tag"
+              :class="{ active: selectedMediaProcesses.includes(option.id) }"
+              role="button"
+              tabindex="0"
+              @click="toggleMediaProcess(option.id)"
+              @keydown.enter="toggleMediaProcess(option.id)"
+            >
+              {{ t(option.label) }}
+            </div>
+          </div>
+        </template>
       </template>
-      <div v-if="previewUrl" class="share-url">{{ previewUrl }}</div>
-      <div v-if="qrCodeUrl" class="share-qrcode">
-        <img :src="qrCodeUrl" alt="QR code" /><AppButton
-          :label="t('通过邮件发送')"
-          @click="shareByEmail"
-        />
-      </div>
-      <p class="modal-hint">{{ t('生成后会自动复制到剪贴板。') }}</p>
-      <template #footer
-        ><AppButton :label="t('关闭')" @click="modal = null" /><AppButton
-          :label="t('生成并复制')"
-          tone="primary"
-          @click="createShareLink"
-      /></template>
     </ModalShell>
 
     <ModalShell

@@ -126,6 +126,9 @@ function registerIpc(): void {
   ipcMain.handle('objects:setAcl', (_event, bucket: string, name: string, acl: string) =>
     oss.setObjectAcl(bucket, name, acl)
   )
+  ipcMain.handle('objects:isPublic', (_event, bucket: string, name: string) =>
+    oss.isObjectPublic(bucket, name)
+  )
   ipcMain.handle(
     'objects:setHeaders',
     (_event, bucket: string, name: string, headers: Record<string, string>) =>

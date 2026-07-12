@@ -190,6 +190,7 @@ export interface OssBrowserApi {
       targetPath: string,
       move: boolean
     ) => Promise<void>
+    isPublic: (bucket: string, name: string) => Promise<boolean>
     setAcl: (bucket: string, name: string, acl: string) => Promise<void>
     setHeaders: (bucket: string, name: string, headers: Record<string, string>) => Promise<void>
     signedUrl: (bucket: string, name: string, expires: number, process?: string) => Promise<string>

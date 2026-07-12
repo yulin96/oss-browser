@@ -516,6 +516,24 @@ export class OssService {
     await this.bucketClient(bucket).putACL(name, acl)
   }
 
+  async isObjectPublic(bucket: string, name: string): Promise<boolean> {
+    const region = this.bucketRegions.get(bucket)
+    if (!region) return false
+    const objectPath = name
+      .split('/')
+      .map((part) => encodeURIComponent(part))
+      .join('/')
+    const protocol = this.auth?.secure === false ? 'http' : 'https'
+    try {
+      const response = await fetch(`${protocol}://${bucket}.${region}.aliyuncs.com/${objectPath}`, {
+        headers: { Range: 'bytes=0-1', 'Cache-Control': 'no-cache' }
+      })
+      return response.ok
+    } catch {
+      return false
+    }
+  }
+
   async setObjectHeaders(
     bucket: string,
     name: string,
