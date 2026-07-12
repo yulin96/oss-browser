@@ -611,14 +611,23 @@ export class OssService {
     const objects: Array<{ name: string; relativePath: string }> = []
     for (const item of items) {
       if (item.isDirectory) {
+        const folderName = item.displayName.replace(/\/$/, '')
         for (const name of await this.listAllObjectNames(listClient, item.name)) {
-          if (!name.endsWith('/')) objects.push({ name, relativePath: name })
+          if (!name.endsWith('/')) {
+            const subPath = name.slice(item.name.length)
+            objects.push({ name, relativePath: `${folderName}/${subPath}` })
+          }
         }
-      } else objects.push({ name: item.name, relativePath: item.name })
+      } else {
+        objects.push({ name: item.name, relativePath: item.displayName })
+      }
     }
 
     await this.runPool(objects, this.settings.maxDownloadJobs, async (object) => {
       const localPath = join(destination, ...object.relativePath.split('/'))
+      if (!localPath.startsWith(destination)) {
+        throw new Error('下载文件路径无效，检测到越界穿越风险')
+      }
       const partialPath = `${localPath}.ossbrowser.part`
       await mkdir(join(localPath, '..'), { recursive: true })
       const transfer = this.newTransfer('download', object.name)

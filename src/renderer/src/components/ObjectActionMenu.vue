@@ -2,6 +2,7 @@
 import {
   CloudCog,
   Copy,
+  Download,
   FileCog,
   Info,
   KeyRound,
@@ -16,6 +17,7 @@ import type { ObjectInfo } from '../../../shared/types'
 import { t } from '../i18n'
 
 export type ObjectAction =
+  | 'download'
   | 'copy'
   | 'move'
   | 'rename'
@@ -47,6 +49,9 @@ function select(action: ObjectAction): void {
 
 <template>
   <div class="more-menu">
+    <div :class="{ disabled: !enabled('download') }" @click="select('download')">
+      <Download :size="15" />{{ t('下载') }}
+    </div>
     <div :class="{ disabled: !enabled('copy') }" @click="select('copy')">
       <Copy :size="15" />{{ t('复制') }}
     </div>

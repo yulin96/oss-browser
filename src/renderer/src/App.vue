@@ -726,6 +726,7 @@ function openModal(name: ModalName): void {
 
 function handleObjectAction(action: ObjectAction): void {
   closeActions()
+  if (action === 'download') return void downloadSelected()
   if (action === 'copy') return copySelected()
   if (action === 'move') return openModal('move')
   if (action === 'rename') return openModal('rename')
@@ -737,7 +738,7 @@ function handleObjectAction(action: ObjectAction): void {
   if (action === 'details') return void showDetails()
   if (action === 'grant') return openModal('grant')
   if (action === 'cache') return void openCacheRefresh(selectedObjects.value[0])
-  removeSelected()
+  if (action === 'delete') return removeSelected()
 }
 
 async function prepareAddressModal(): Promise<void> {
@@ -902,7 +903,7 @@ async function transferSelected(move: boolean): Promise<void> {
   const done = await run(() =>
     window.ossBrowser.objects.transfer(
       currentBucket.value!.name,
-      selectedObjects.value,
+      JSON.parse(JSON.stringify(selectedObjects.value)),
       form.target,
       move
     )
@@ -1141,7 +1142,11 @@ async function downloadSelected(): Promise<void> {
   const destination = await window.ossBrowser.files.pickDownloadFolder()
   if (!destination) return
   const done = await run(() =>
-    window.ossBrowser.files.download(currentBucket.value!.name, selectedObjects.value, destination)
+    window.ossBrowser.files.download(
+      currentBucket.value!.name,
+      JSON.parse(JSON.stringify(selectedObjects.value)),
+      destination
+    )
   )
   if (done === undefined && errorMessage.value) return
   showToast(t('下载任务已完成'))
