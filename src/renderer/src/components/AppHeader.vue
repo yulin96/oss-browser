@@ -1,0 +1,63 @@
+<script setup lang="ts">
+import { CloudCog, Globe2, ListTodo, LogOut, Settings, StarCheck, UserRound } from '@lucide/vue'
+
+import appIcon from '../assets/icon.png'
+import { t } from '../i18n'
+
+defineProps<{
+  appVersion: string
+  locale: string
+  accountLabel: string
+  transferCount: number
+}>()
+
+const emit = defineEmits<{
+  localeChange: [locale: string]
+  favorites: []
+  cacheRefresh: []
+  transfers: []
+  settings: []
+  logout: []
+}>()
+
+function changeLocale(event: Event): void {
+  emit('localeChange', (event.target as HTMLSelectElement).value)
+}
+</script>
+
+<template>
+  <header class="topbar">
+    <div class="top-brand">
+      <div class="small-mark"><img :src="appIcon" alt="" /></div>
+      <strong>OSS Browser</strong>
+      <span v-if="appVersion" class="app-version">v{{ appVersion }}</span>
+    </div>
+    <div class="top-actions">
+      <div class="language-picker top-language">
+        <Globe2 :size="15" />
+        <select :value="locale" aria-label="Language" @change="changeLocale">
+          <option value="zh-CN">中文</option>
+          <option value="en-US">EN</option>
+          <option value="ja-JP">日本語</option>
+        </select>
+      </div>
+      <div class="transfer-trigger" role="button" tabindex="0" @click="emit('favorites')">
+        <StarCheck :size="16" /> {{ t('收藏夹') }}
+      </div>
+      <div class="transfer-trigger" role="button" tabindex="0" @click="emit('cacheRefresh')">
+        <CloudCog :size="16" /> {{ t('刷新缓存') }}
+      </div>
+      <div class="transfer-trigger" role="button" tabindex="0" @click="emit('transfers')">
+        <ListTodo :size="16" /> {{ t('传输任务') }}
+        <span v-if="transferCount" class="badge">{{ transferCount }}</span>
+      </div>
+      <div class="transfer-trigger" role="button" tabindex="0" @click="emit('settings')">
+        <Settings :size="16" /> {{ t('设置') }}
+      </div>
+      <div class="account-action" role="button" tabindex="0" @click="emit('logout')">
+        <UserRound :size="16" /><span>{{ accountLabel }}</span
+        ><LogOut :size="16" />
+      </div>
+    </div>
+  </header>
+</template>

@@ -1,19 +1,16 @@
 <script setup lang="ts">
-import { bucket as bucketIcon } from '@lucide/lab'
 import {
   ArrowLeft,
   ArrowRight,
   ArrowUp,
   CircleCheck,
   ClipboardPaste,
-  CloudCog,
   Copy,
   Download,
   File,
   FileArchive,
   FileAudio,
   FileCode2,
-  FileCog,
   FileImage,
   FileJson2,
   FileSpreadsheet,
@@ -28,35 +25,21 @@ import {
   Globe2,
   Home,
   HousePlus,
-  Info,
   KeyRound,
   LayoutGrid,
-  Link,
   List,
-  ListTodo,
-  LogOut,
-  Icon as LucideIcon,
   MoreHorizontal,
-  Move,
-  Pencil,
-  Plus,
   Presentation,
   RefreshCw,
   Search,
-  Settings,
   ShieldCheck,
   Star,
-  StarCheck,
-  Trash2,
-  Undo2,
   Upload,
-  UserRound,
   X
 } from '@lucide/vue'
 import QRCode from 'qrcode'
 import { computed, onBeforeUnmount, onMounted, reactive, ref, shallowRef } from 'vue'
 import type {
-  AppSettings,
   AuthConfig,
   BucketInfo,
   CacheRefreshType,
@@ -67,14 +50,21 @@ import type {
   RamAccessKey,
   RamUser,
   SavedProfile,
-  TransferItem,
-  UpdateState
+  TransferItem
 } from '../../shared/types'
 import appIcon from './assets/icon.png'
 import AppButton from './components/AppButton.vue'
+import AppHeader from './components/AppHeader.vue'
 import AppTooltip from './components/AppTooltip.vue'
+import BucketHome from './components/BucketHome.vue'
 import ConfirmDialog from './components/ConfirmDialog.vue'
 import ModalShell from './components/ModalShell.vue'
+import ObjectActionMenu, { type ObjectAction } from './components/ObjectActionMenu.vue'
+import { useAppSettings } from './composables/useAppSettings'
+import { useAppUpdates } from './composables/useAppUpdates'
+import { useAsyncTask } from './composables/useAsyncTask'
+import { useConfirmation } from './composables/useConfirmation'
+import { useFileBrowser } from './composables/useFileBrowser'
 import { locale, setLocale, t, type AppLocale } from './i18n'
 
 type ModalName =
@@ -102,34 +92,14 @@ type ModalName =
   | 'settings'
   | null
 
-type ThemeMode = 'system' | 'light' | 'dark'
-
-interface Favorite {
-  bucket: string
-  prefix: string
-}
-
 interface SessionState {
   profileId: string
-}
-
-interface HomeLocation {
-  bucket?: string
-  prefix?: string
 }
 
 interface CopyBuffer {
   bucket: string
   prefix: string
   items: ObjectInfo[]
-}
-
-interface Confirmation {
-  title: string
-  description: string
-  confirmLabel: string
-  destructive?: boolean
-  action: () => void | Promise<void>
 }
 
 const objectIconRules = [
@@ -162,28 +132,9 @@ const loggedIn = ref(false)
 const initializing = ref(true)
 const authMode = ref<'access-key' | 'token'>('access-key')
 const authToken = ref('')
-const busy = ref(false)
-const errorMessage = ref('')
+const directError = ref('')
 const toastMessage = ref('')
-const appVersion = ref('')
 const modal = ref<ModalName>(null)
-const buckets = ref<BucketInfo[]>([])
-const currentBucket = ref<BucketInfo | null>(null)
-const prefix = ref('')
-const objects = ref<ObjectInfo[]>([])
-const nextMarker = ref<string>()
-const hasMoreObjects = ref(false)
-const selectedNames = ref(new Set<string>())
-const searchText = ref('')
-const bucketSearchText = ref('')
-const viewMode = ref<'list' | 'grid'>('list')
-const storedTheme = localStorage.getItem('oss-browser-theme')
-const themeMode = ref<ThemeMode>(
-  storedTheme === 'light' || storedTheme === 'dark' ? storedTheme : 'system'
-)
-const addressInput = ref('')
-const navigationHistory = ref<string[]>([])
-const navigationIndex = ref(-1)
 const transfers = ref<TransferItem[]>([])
 const showTransfers = ref(false)
 const showMoreActions = ref(false)
@@ -205,30 +156,15 @@ const multipartBucket = ref<BucketInfo | null>(null)
 const bucketActionTarget = ref<BucketInfo | null>(null)
 const objectDetails = ref<ObjectDetails | null>(null)
 const savedProfiles = ref<SavedProfile[]>([])
-const favorites = ref<Favorite[]>([])
-const homeLocation = ref<HomeLocation | null>(null)
 const copyBuffer = shallowRef<CopyBuffer | null>(null)
 const domainOptions = ref<string[]>([])
 const selectedDomain = ref('')
 const cdnDomains = ref<string[]>([])
 const selectedCdnDomain = ref('')
-const confirmation = shallowRef<Confirmation | null>(null)
 const permissionResults = ref<PermissionProbeItem[]>([])
 const permissionChecking = ref(false)
-const updateState = ref<UpdateState>({ status: 'idle' })
-const manualUpdateCheck = ref(false)
-const thumbnailUrls = reactive<Record<string, string>>({})
-const failedThumbnailNames = ref(new Set<string>())
 
-function requestConfirmation(value: Confirmation): void {
-  confirmation.value = value
-}
-
-async function confirmPendingAction(): Promise<void> {
-  const pending = confirmation.value
-  confirmation.value = null
-  await pending?.action()
-}
+const { confirmation, requestConfirmation, confirmPendingAction } = useConfirmation()
 
 const auth = reactive<AuthConfig>({
   alias: '',
@@ -241,6 +177,52 @@ const auth = reactive<AuthConfig>({
   remember: false,
   presetPath: ''
 })
+const authTask = useAsyncTask(clearAsyncErrors)
+const browserTask = useAsyncTask(clearAsyncErrors)
+const operationTask = useAsyncTask(clearAsyncErrors)
+const cloudTask = useAsyncTask(clearAsyncErrors)
+const settingsTask = useAsyncTask(clearAsyncErrors)
+const anyPending = computed(
+  () =>
+    authTask.pending.value ||
+    browserTask.pending.value ||
+    operationTask.pending.value ||
+    cloudTask.pending.value ||
+    settingsTask.pending.value ||
+    fileBrowser.loading.value
+)
+const errorMessage = computed({
+  get: () =>
+    directError.value ||
+    fileBrowser.error.value ||
+    authTask.error.value ||
+    browserTask.error.value ||
+    operationTask.error.value ||
+    cloudTask.error.value ||
+    settingsTask.error.value,
+  set: (value: string) => {
+    directError.value = value
+    if (!value) {
+      fileBrowser.error.value = ''
+      authTask.clearError()
+      browserTask.clearError()
+      operationTask.clearError()
+      cloudTask.clearError()
+      settingsTask.clearError()
+    }
+  }
+})
+const run = operationTask.run
+
+function clearAsyncErrors(): void {
+  directError.value = ''
+  fileBrowser.error.value = ''
+  authTask.clearError()
+  browserTask.clearError()
+  operationTask.clearError()
+  cloudTask.clearError()
+  settingsTask.clearError()
+}
 const form = reactive({
   name: '',
   region: 'oss-cn-hangzhou',
@@ -275,38 +257,89 @@ const mediaForm = reactive({
   videoTime: 0,
   custom: ''
 })
-const settings = reactive<AppSettings>({
-  maxUploadJobs: 3,
-  maxDownloadJobs: 3,
-  multipartParallel: 4,
-  partSizeMb: 10,
-  timeoutSeconds: 60,
-  retryTimes: 5,
-  listPageSize: 1000,
-  showImagePreview: true
+const {
+  settings,
+  settingsDraft,
+  secureDraft,
+  themeDraft,
+  initializeSettings,
+  disposeSettings,
+  openSettings,
+  saveSettings
+} = useAppSettings({
+  auth,
+  savedProfiles,
+  profileId,
+  run: settingsTask.run,
+  taskError: settingsTask.error,
+  showToast,
+  openModal: () => {
+    modal.value = modal.value === 'settings' ? null : 'settings'
+  }
 })
-const settingsDraft = reactive<AppSettings>({ ...settings })
-const secureDraft = ref(auth.secure)
-const themeDraft = ref<ThemeMode>(themeMode.value)
 
-const selectedObjects = computed(() =>
-  objects.value.filter((item) => selectedNames.value.has(item.name))
-)
-const filteredObjects = computed(() => {
-  const keyword = searchText.value.trim().toLowerCase()
-  if (!keyword) return objects.value
-  return objects.value.filter((item) => item.displayName.toLowerCase().includes(keyword))
+const fileBrowser = useFileBrowser({
+  settings,
+  profileId,
+  saveSession,
+  closeModal: () => {
+    modal.value = null
+  },
+  runBrowserTask: browserTask.run
 })
-const filteredBuckets = computed(() => {
-  const keyword = bucketSearchText.value.trim().toLowerCase()
-  return keyword
-    ? buckets.value.filter((bucket) => bucket.name.toLowerCase().includes(keyword))
-    : buckets.value
-})
-const pageCounts = computed(() => ({
-  directories: objects.value.filter((item) => item.isDirectory).length,
-  files: objects.value.filter((item) => !item.isDirectory).length
-}))
+const {
+  buckets,
+  currentBucket,
+  prefix,
+  objects,
+  hasMoreObjects,
+  selectedNames,
+  searchText,
+  bucketSearchText,
+  viewMode,
+  addressInput,
+  navigationHistory,
+  navigationIndex,
+  favorites,
+  thumbnailUrls,
+  failedThumbnailNames,
+  selectedObjects,
+  filteredObjects,
+  filteredBuckets,
+  pageCounts,
+  loadAccountPreferences,
+  openInitialLocation,
+  refreshBuckets,
+  openBucket,
+  goToAddress,
+  goBack,
+  goForward,
+  goUp,
+  goHome,
+  toggleFavorite,
+  isCurrentFavorite,
+  openFavorite,
+  removeFavorite,
+  setCurrentAsHome,
+  isCurrentHome,
+  loadObjects,
+  markThumbnailFailed,
+  setViewMode,
+  enterDirectory,
+  toggleSelection,
+  toggleAll
+} = fileBrowser
+
+const {
+  appVersion,
+  updateState,
+  updateDescription,
+  updateButtonLabel,
+  initializeUpdates,
+  disposeUpdates,
+  handleUpdateAction
+} = useAppUpdates(requestConfirmation, showToast)
+
 const canPaste = computed(() => Boolean(copyBuffer.value && currentBucket.value))
 const isSamePasteLocation = computed(
   () =>
@@ -334,15 +367,9 @@ const previewType = computed(() => {
 })
 
 let removeTransferListener: (() => void) | undefined
-let removeUpdateListener: (() => void) | undefined
 let toastTimer: ReturnType<typeof setTimeout> | undefined
-let promptedAvailableVersion = ''
-let promptedDownloadedVersion = ''
 let dragDepth = 0
 let permissionProbeGeneration = 0
-let objectLoadGeneration = 0
-const darkModeQuery = window.matchMedia('(prefers-color-scheme: dark)')
-applyTheme()
 
 onMounted(async () => {
   document.addEventListener('pointerdown', closeFloatingMenus)
@@ -351,22 +378,10 @@ onMounted(async () => {
   window.addEventListener('dragend', resetDragState)
   window.addEventListener('drop', resetDragState)
   window.addEventListener('blur', resetDragState)
-  darkModeQuery.addEventListener('change', applyTheme)
   viewMode.value = localStorage.getItem('oss-browser-view-mode') === 'grid' ? 'grid' : 'list'
-  removeUpdateListener = window.ossBrowser.onUpdate(handleUpdateState)
-  updateState.value = await window.ossBrowser.updates.getState()
-  handleUpdateState(updateState.value)
-  appVersion.value = await window.ossBrowser.system.getVersion()
+  await initializeUpdates()
   try {
-    const storedSettings = localStorage.getItem('oss-browser-settings')
-    if (storedSettings) {
-      try {
-        Object.assign(settings, JSON.parse(storedSettings))
-      } catch {
-        localStorage.removeItem('oss-browser-settings')
-      }
-    }
-    await window.ossBrowser.settings.update({ ...settings })
+    await initializeSettings()
     savedProfiles.value = await window.ossBrowser.profiles.list()
     removeTransferListener = window.ossBrowser.onTransfer((item) => {
       const index = transfers.value.findIndex((transfer) => transfer.id === item.id)
@@ -382,8 +397,8 @@ onMounted(async () => {
 
 onBeforeUnmount(() => {
   removeTransferListener?.()
-  removeUpdateListener?.()
-  darkModeQuery.removeEventListener('change', applyTheme)
+  disposeUpdates()
+  disposeSettings()
   document.removeEventListener('pointerdown', closeFloatingMenus)
   document.removeEventListener('keydown', handleGlobalKeydown)
   document.removeEventListener('dragleave', handleDocumentDragLeave)
@@ -399,80 +414,6 @@ function showToast(message: string): void {
   toastTimer = setTimeout(() => {
     toastMessage.value = ''
   }, 3000)
-}
-
-const updateDescription = computed(() => {
-  if (updateState.value.status === 'checking') return t('正在检查新版本…')
-  if (updateState.value.status === 'available')
-    return t('发现新版本 {version}', { version: updateState.value.version || '' })
-  if (updateState.value.status === 'downloading')
-    return t('正在下载新版本：{percent}%', { percent: updateState.value.percent || 0 })
-  if (updateState.value.status === 'downloaded')
-    return t('新版本 {version} 已下载，重启后安装', { version: updateState.value.version || '' })
-  if (updateState.value.status === 'error') return t('检查更新失败，请稍后重试')
-  if (updateState.value.status === 'unsupported') return t('开发模式下不检查更新')
-  return t('当前版本：{version}', { version: appVersion.value })
-})
-
-const updateButtonLabel = computed(() => {
-  if (updateState.value.status === 'checking') return t('检查中')
-  if (updateState.value.status === 'available') return t('下载更新')
-  if (updateState.value.status === 'downloading') return `${updateState.value.percent || 0}%`
-  if (updateState.value.status === 'downloaded') return t('重启安装')
-  return t('检查更新')
-})
-
-function requestUpdateDownload(): void {
-  requestConfirmation({
-    title: t('发现新版本'),
-    description: t('新版本 {version} 已发布，是否现在下载？', {
-      version: updateState.value.version || ''
-    }),
-    confirmLabel: t('下载更新'),
-    action: () => window.ossBrowser.updates.download()
-  })
-}
-
-function requestUpdateInstall(): void {
-  requestConfirmation({
-    title: t('更新已准备好'),
-    description: t('程序将关闭并安装新版本，是否立即重启？'),
-    confirmLabel: t('重启安装'),
-    action: () => window.ossBrowser.updates.install()
-  })
-}
-
-function handleUpdateState(state: UpdateState): void {
-  updateState.value = state
-  if (state.status === 'available' && state.version !== promptedAvailableVersion) {
-    promptedAvailableVersion = state.version || 'latest'
-    requestUpdateDownload()
-  }
-  if (state.status === 'downloaded' && state.version !== promptedDownloadedVersion) {
-    promptedDownloadedVersion = state.version || 'latest'
-    requestUpdateInstall()
-  }
-  if (manualUpdateCheck.value && state.status === 'not-available') {
-    manualUpdateCheck.value = false
-    showToast(t('当前已是最新版本'))
-  }
-  if (manualUpdateCheck.value && state.status === 'error') {
-    manualUpdateCheck.value = false
-    showToast(t('检查更新失败，请稍后重试'))
-  }
-}
-
-async function handleUpdateAction(): Promise<void> {
-  if (updateState.value.status === 'available') return requestUpdateDownload()
-  if (updateState.value.status === 'downloaded') return requestUpdateInstall()
-  if (updateState.value.status === 'checking' || updateState.value.status === 'downloading') return
-  manualUpdateCheck.value = true
-  try {
-    handleUpdateState(await window.ossBrowser.updates.check())
-  } catch {
-    manualUpdateCheck.value = false
-    showToast(t('检查更新失败，请稍后重试'))
-  }
 }
 
 function handleDragEnter(event: DragEvent): void {
@@ -496,21 +437,9 @@ function resetDragState(): void {
 }
 
 function resetAccountRuntimeState(): void {
-  objectLoadGeneration += 1
+  fileBrowser.reset()
   errorMessage.value = ''
   toastMessage.value = ''
-  buckets.value = []
-  currentBucket.value = null
-  prefix.value = ''
-  objects.value = []
-  nextMarker.value = undefined
-  hasMoreObjects.value = false
-  selectedNames.value = new Set()
-  searchText.value = ''
-  bucketSearchText.value = ''
-  addressInput.value = ''
-  navigationHistory.value = []
-  navigationIndex.value = -1
   transfers.value = []
   showTransfers.value = false
   showMoreActions.value = false
@@ -531,8 +460,6 @@ function resetAccountRuntimeState(): void {
   multipartBucket.value = null
   bucketActionTarget.value = null
   objectDetails.value = null
-  favorites.value = []
-  homeLocation.value = null
   copyBuffer.value = null
   domainOptions.value = []
   selectedDomain.value = ''
@@ -573,8 +500,6 @@ function resetAccountRuntimeState(): void {
     videoTime: 0,
     custom: ''
   })
-  for (const name of Object.keys(thumbnailUrls)) delete thumbnailUrls[name]
-  failedThumbnailNames.value = new Set()
 }
 
 function closeFloatingMenus(event: PointerEvent): void {
@@ -637,39 +562,20 @@ function openBucketMenu(event: MouseEvent, bucket: BucketInfo): void {
 async function openBucketAcl(bucket: BucketInfo): Promise<void> {
   bucketActionTarget.value = bucket
   bucketMenu.visible = false
-  const acl = await run(() => window.ossBrowser.buckets.getAcl(bucket.name))
+  const acl = await browserTask.run(() => window.ossBrowser.buckets.getAcl(bucket.name))
   if (!acl) return
   form.acl = acl
   modal.value = 'bucket-acl'
 }
 
-function applyTheme(): void {
-  const resolvedTheme =
-    themeMode.value === 'system' ? (darkModeQuery.matches ? 'dark' : 'light') : themeMode.value
-  document.documentElement.dataset.theme = resolvedTheme
-}
-
-async function run<T>(task: () => Promise<T>): Promise<T | undefined> {
-  busy.value = true
-  errorMessage.value = ''
-  try {
-    return await task()
-  } catch (error) {
-    errorMessage.value = error instanceof Error ? error.message : String(error)
-    return undefined
-  } finally {
-    busy.value = false
-  }
-}
-
 async function login(): Promise<void> {
   if (auth.endpointMode === 'public') auth.endpoint = 'oss-cn-hangzhou.aliyuncs.com'
-  const result = await run(() => window.ossBrowser.auth.connect({ ...auth }))
+  const result = await authTask.run(() => window.ossBrowser.auth.connect({ ...auth }))
   if (!result) return
   resetAccountRuntimeState()
   buckets.value = result
   loggedIn.value = true
-  favorites.value = JSON.parse(localStorage.getItem(favoriteStorageKey()) || '[]')
+  loadAccountPreferences()
   if (auth.remember) {
     const profile: SavedProfile = {
       id: `${auth.endpoint}|${auth.accessKeyId}`,
@@ -682,7 +588,7 @@ async function login(): Promise<void> {
   } else {
     localStorage.removeItem('oss-browser-session')
   }
-  await openInitialLocation(result)
+  await openInitialLocation(result, auth.presetPath || '')
 }
 
 async function restoreSession(): Promise<void> {
@@ -697,8 +603,8 @@ async function restoreSession(): Promise<void> {
     resetAccountRuntimeState()
     buckets.value = result
     loggedIn.value = true
-    favorites.value = JSON.parse(localStorage.getItem(favoriteStorageKey()) || '[]')
-    await openInitialLocation(result)
+    loadAccountPreferences()
+    await openInitialLocation(result, auth.presetPath || '')
   } catch {
     localStorage.removeItem('oss-browser-session')
   }
@@ -714,51 +620,8 @@ function saveSession(): void {
   )
 }
 
-async function openInitialLocation(availableBuckets: BucketInfo[]): Promise<void> {
-  const configuredPath = auth.presetPath || ''
-  const configuredMatch = /^oss:\/\/([^/]+)\/?(.*)$/.exec(configuredPath)
-  homeLocation.value = readHomeLocation()
-  const home =
-    homeLocation.value ||
-    (configuredMatch ? { bucket: configuredMatch[1], prefix: configuredMatch[2] } : null)
-  if (!home?.bucket) return
-  const bucket = availableBuckets.find((item) => item.name === home.bucket)
-  if (!bucket) return
-  let homePrefix = home.prefix || ''
-  if (homePrefix && !homePrefix.endsWith('/')) homePrefix += '/'
-  await visit(bucket, homePrefix, false)
-}
-
 function profileId(): string {
   return `${auth.endpoint}|${auth.accessKeyId}`
-}
-
-function homeStorageKey(): string {
-  return `oss-browser-home:${profileId()}`
-}
-
-function readHomeLocation(): HomeLocation | null {
-  const raw = localStorage.getItem(homeStorageKey())
-  return raw ? (JSON.parse(raw) as HomeLocation) : null
-}
-
-function setCurrentAsHome(): void {
-  if (!currentBucket.value) return
-  if (isCurrentHome()) {
-    homeLocation.value = null
-    localStorage.removeItem(homeStorageKey())
-    return
-  }
-  homeLocation.value = { bucket: currentBucket.value.name, prefix: prefix.value }
-  localStorage.setItem(homeStorageKey(), JSON.stringify(homeLocation.value))
-}
-
-function isCurrentHome(): boolean {
-  return Boolean(
-    currentBucket.value &&
-    homeLocation.value?.bucket === currentBucket.value.name &&
-    (homeLocation.value.prefix || '') === prefix.value
-  )
 }
 
 async function loginWithToken(): Promise<void> {
@@ -809,215 +672,13 @@ function confirmLogout(): void {
   })
 }
 
-async function refreshBuckets(): Promise<void> {
-  const result = await run(() => window.ossBrowser.buckets.list())
-  if (result) buckets.value = result
-}
-
-async function openBucket(bucket: BucketInfo): Promise<void> {
-  await visit(bucket, '')
-}
-
-async function visit(bucket: BucketInfo, path: string, record = true): Promise<void> {
-  currentBucket.value = bucket
-  prefix.value = path
-  addressInput.value = `oss://${bucket.name}/${path}`
-  if (record) {
-    navigationHistory.value = navigationHistory.value.slice(0, navigationIndex.value + 1)
-    navigationHistory.value.push(addressInput.value)
-    navigationIndex.value = navigationHistory.value.length - 1
-  }
-  await loadObjects()
-  saveSession()
-}
-
-async function goToAddress(record = true): Promise<void> {
-  const match = /^oss:\/\/([^/]+)\/?(.*)$/.exec(addressInput.value.trim())
-  if (!match) {
-    errorMessage.value = t('请输入正确的 OSS 路径，例如 oss://bucket/path/')
-    return
-  }
-  const bucket = buckets.value.find((item) => item.name === match[1])
-  if (!bucket) {
-    errorMessage.value = t('未找到 Bucket：{name}', { name: match[1] })
-    return
-  }
-  const path = match[2] && !match[2].endsWith('/') ? `${match[2]}/` : match[2]
-  await visit(bucket, path, record)
-}
-
-async function goBack(): Promise<void> {
-  if (navigationIndex.value <= 0) return
-  navigationIndex.value -= 1
-  addressInput.value = navigationHistory.value[navigationIndex.value]
-  await goToAddress(false)
-}
-
-async function goForward(): Promise<void> {
-  if (navigationIndex.value >= navigationHistory.value.length - 1) return
-  navigationIndex.value += 1
-  addressInput.value = navigationHistory.value[navigationIndex.value]
-  await goToAddress(false)
-}
-
-async function goUp(): Promise<void> {
-  if (!currentBucket.value) return
-  const parts = prefix.value.split('/').filter(Boolean)
-  if (!parts.length) {
-    objectLoadGeneration += 1
-    currentBucket.value = null
-    prefix.value = ''
-    objects.value = []
-    selectedNames.value = new Set()
-    addressInput.value = ''
-    return
-  }
-  parts.pop()
-  await visit(currentBucket.value, parts.length ? `${parts.join('/')}/` : '')
-}
-
-async function goHome(): Promise<void> {
-  const home = homeLocation.value
-  const bucket = home?.bucket ? buckets.value.find((item) => item.name === home.bucket) : undefined
-  if (bucket) {
-    await visit(bucket, home?.prefix || '')
-    return
-  }
-  objectLoadGeneration += 1
-  currentBucket.value = null
-  prefix.value = ''
-  objects.value = []
-  addressInput.value = ''
-}
-
-function favoriteStorageKey(): string {
-  return `oss-browser-favorites:${profileId()}`
-}
-
-function toggleFavorite(): void {
-  if (!currentBucket.value) return
-  const index = favorites.value.findIndex(
-    (item) => item.bucket === currentBucket.value!.name && item.prefix === prefix.value
-  )
-  if (index === -1) favorites.value.push({ bucket: currentBucket.value.name, prefix: prefix.value })
-  else favorites.value.splice(index, 1)
-  localStorage.setItem(favoriteStorageKey(), JSON.stringify(favorites.value))
-}
-
-function isCurrentFavorite(): boolean {
-  return Boolean(
-    currentBucket.value &&
-    favorites.value.some(
-      (item) => item.bucket === currentBucket.value!.name && item.prefix === prefix.value
-    )
-  )
-}
-
-async function openFavorite(favorite: Favorite): Promise<void> {
-  const bucket = buckets.value.find((item) => item.name === favorite.bucket)
-  if (!bucket) return
-  modal.value = null
-  await visit(bucket, favorite.prefix)
-}
-
-function removeFavorite(favorite: Favorite): void {
-  favorites.value = favorites.value.filter(
-    (item) => item.bucket !== favorite.bucket || item.prefix !== favorite.prefix
-  )
-  localStorage.setItem(favoriteStorageKey(), JSON.stringify(favorites.value))
-}
-
-async function loadObjects(append = false): Promise<void> {
-  if (!currentBucket.value) return
-  const generation = ++objectLoadGeneration
-  const bucketName = currentBucket.value.name
-  const requestedPrefix = prefix.value
-  const marker = append ? nextMarker.value : undefined
-  if (!append) {
-    objects.value = []
-    nextMarker.value = undefined
-    hasMoreObjects.value = false
-    selectedNames.value = new Set()
-    Object.keys(thumbnailUrls).forEach((key) => delete thumbnailUrls[key])
-    failedThumbnailNames.value = new Set()
-  }
-  busy.value = true
-  errorMessage.value = ''
-  let result
-  try {
-    result = await window.ossBrowser.objects.list(bucketName, requestedPrefix, marker)
-  } catch (error) {
-    if (generation === objectLoadGeneration) {
-      errorMessage.value = error instanceof Error ? error.message : String(error)
-    }
-    return
-  } finally {
-    if (generation === objectLoadGeneration) busy.value = false
-  }
-  if (
-    generation !== objectLoadGeneration ||
-    currentBucket.value?.name !== bucketName ||
-    prefix.value !== requestedPrefix
-  )
-    return
-  objects.value = append ? [...objects.value, ...result.objects] : result.objects
-  void loadThumbnails(result.objects)
-  nextMarker.value = result.nextMarker
-  hasMoreObjects.value = result.isTruncated
-  selectedNames.value = new Set()
-}
-
-async function loadThumbnails(items: ObjectInfo[]): Promise<void> {
-  if (!currentBucket.value || !settings.showImagePreview) return
-  await Promise.all(
-    items
-      .filter((item) => !item.isDirectory && /\.(png|jpe?g|gif|webp|bmp)$/i.test(item.name))
-      .map(async (item) => {
-        try {
-          thumbnailUrls[item.name] = await window.ossBrowser.objects.signedUrl(
-            currentBucket.value!.name,
-            item.name,
-            3600,
-            'image/resize,m_lfit,w_320,h_200/quality,q_80'
-          )
-          failedThumbnailNames.value.delete(item.name)
-        } catch {
-          failedThumbnailNames.value.add(item.name)
-        }
-      })
-  )
-}
-
-function markThumbnailFailed(name: string): void {
-  failedThumbnailNames.value.add(name)
-}
-
-function setViewMode(mode: 'list' | 'grid'): void {
-  viewMode.value = mode
-  localStorage.setItem('oss-browser-view-mode', mode)
-}
-
 async function openItem(item: ObjectInfo): Promise<void> {
   if (item.isDirectory) {
-    await visit(currentBucket.value!, item.name)
+    await enterDirectory(item)
   } else {
     selectedNames.value = new Set([item.name])
     await openPreview()
   }
-}
-
-function toggleSelection(item: ObjectInfo): void {
-  const next = new Set(selectedNames.value)
-  if (next.has(item.name)) next.delete(item.name)
-  else next.add(item.name)
-  selectedNames.value = next
-}
-
-function toggleAll(): void {
-  selectedNames.value =
-    selectedNames.value.size === filteredObjects.value.length
-      ? new Set()
-      : new Set(filteredObjects.value.map((item) => item.name))
 }
 
 function openModal(name: ModalName): void {
@@ -1031,6 +692,22 @@ function openModal(name: ModalName): void {
   if (name === 'share') void prepareAddressModal()
   if (name === 'cache') prepareCacheRefresh()
   modal.value = name
+}
+
+function handleObjectAction(action: ObjectAction): void {
+  closeActions()
+  if (action === 'copy') return copySelected()
+  if (action === 'move') return openModal('move')
+  if (action === 'rename') return openModal('rename')
+  if (action === 'acl') return openModal('acl')
+  if (action === 'headers') return openModal('headers')
+  if (action === 'share') return openModal('share')
+  if (action === 'symlink') return openModal('symlink')
+  if (action === 'restore') return openModal('restore')
+  if (action === 'details') return void showDetails()
+  if (action === 'grant') return openModal('grant')
+  if (action === 'cache') return void openCacheRefresh(selectedObjects.value[0])
+  removeSelected()
 }
 
 async function prepareAddressModal(): Promise<void> {
@@ -1067,7 +744,7 @@ function prepareCacheRefresh(item?: ObjectInfo): void {
 
 async function openCacheRefresh(item?: ObjectInfo): Promise<void> {
   if (item) selectedNames.value = new Set([item.name])
-  const domains = await run(() => window.ossBrowser.cache.domains())
+  const domains = await cloudTask.run(() => window.ossBrowser.cache.domains())
   if (!domains) return
   cdnDomains.value = domains
   if (!cdnDomains.value.length) {
@@ -1090,7 +767,7 @@ function updateCacheDomain(): void {
 }
 
 async function submitCacheRefresh(): Promise<void> {
-  const taskId = await run(() => window.ossBrowser.cache.refresh({ ...cacheForm }))
+  const taskId = await cloudTask.run(() => window.ossBrowser.cache.refresh({ ...cacheForm }))
   if (!taskId) return
   modal.value = null
   showToast(t('缓存刷新任务已提交：{id}', { id: taskId }))
@@ -1289,7 +966,7 @@ async function restoreSelected(): Promise<void> {
 
 async function showDetails(): Promise<void> {
   if (!currentBucket.value || selectedObjects.value.length !== 1) return
-  const result = await run(() =>
+  const result = await cloudTask.run(() =>
     window.ossBrowser.objects.details(currentBucket.value!.name, selectedObjects.value[0].name)
   )
   if (!result) return
@@ -1318,7 +995,7 @@ async function createGrantToken(): Promise<void> {
 }
 
 async function openRamUsers(): Promise<void> {
-  const result = await run(() => window.ossBrowser.ram.listUsers())
+  const result = await cloudTask.run(() => window.ossBrowser.ram.listUsers())
   if (!result) return
   ramUsers.value = result
   modal.value = 'ram-users'
@@ -1333,7 +1010,7 @@ function editRamUser(user?: RamUser): void {
 }
 
 async function saveRamUser(): Promise<void> {
-  const done = await run(() =>
+  const done = await cloudTask.run(() =>
     window.ossBrowser.ram.saveUser(
       form.ramUserName,
       form.ramDisplayName,
@@ -1356,13 +1033,13 @@ function removeRamUser(user: RamUser): void {
 }
 
 async function performRemoveRamUser(user: RamUser): Promise<void> {
-  const done = await run(() => window.ossBrowser.ram.removeUser(user.userName))
+  const done = await cloudTask.run(() => window.ossBrowser.ram.removeUser(user.userName))
   if (done === undefined && errorMessage.value) return
   await openRamUsers()
 }
 
 async function openRamKeys(user: RamUser): Promise<void> {
-  const result = await run(() => window.ossBrowser.ram.listAccessKeys(user.userName))
+  const result = await cloudTask.run(() => window.ossBrowser.ram.listAccessKeys(user.userName))
   if (!result) return
   activeRamUser.value = user
   ramAccessKeys.value = result
@@ -1372,7 +1049,7 @@ async function openRamKeys(user: RamUser): Promise<void> {
 
 async function createRamAccessKey(): Promise<void> {
   if (!activeRamUser.value) return
-  const result = await run(() =>
+  const result = await cloudTask.run(() =>
     window.ossBrowser.ram.createAccessKey(activeRamUser.value!.userName)
   )
   if (!result) return
@@ -1395,7 +1072,7 @@ function removeRamAccessKey(key: RamAccessKey): void {
 
 async function performRemoveRamAccessKey(key: RamAccessKey): Promise<void> {
   if (!activeRamUser.value) return
-  const done = await run(() =>
+  const done = await cloudTask.run(() =>
     window.ossBrowser.ram.removeAccessKey(activeRamUser.value!.userName, key.accessKeyId)
   )
   if (done === undefined && errorMessage.value) return
@@ -1569,7 +1246,7 @@ async function savePreviewText(): Promise<void> {
 
 async function openMultipart(bucket: BucketInfo): Promise<void> {
   bucketMenu.visible = false
-  const result = await run(() => window.ossBrowser.buckets.listMultipart(bucket.name))
+  const result = await browserTask.run(() => window.ossBrowser.buckets.listMultipart(bucket.name))
   if (!result) return
   multipartBucket.value = bucket
   multipartUploads.value = result
@@ -1634,7 +1311,7 @@ async function performClearSavedProfile(): Promise<void> {
 
 async function useProfile(profile: SavedProfile): Promise<void> {
   if (loggedIn.value) {
-    const result = await run(() => window.ossBrowser.auth.connect({ ...profile.config }))
+    const result = await authTask.run(() => window.ossBrowser.auth.connect({ ...profile.config }))
     if (!result) {
       const message = errorMessage.value
       loggedIn.value = false
@@ -1646,9 +1323,9 @@ async function useProfile(profile: SavedProfile): Promise<void> {
       auth.alias = profile.config.alias || ''
       Object.assign(auth, profile.config)
       buckets.value = result
-      favorites.value = JSON.parse(localStorage.getItem(favoriteStorageKey()) || '[]')
+      loadAccountPreferences()
       saveSession()
-      await openInitialLocation(result)
+      await openInitialLocation(result, auth.presetPath || '')
     }
     return
   }
@@ -1679,40 +1356,6 @@ async function performRemoveProfile(profile: SavedProfile): Promise<void> {
   savedProfiles.value = await window.ossBrowser.profiles.list()
 }
 
-async function saveSettings(): Promise<void> {
-  const nextSettings = { ...settingsDraft }
-  const done = await run(() =>
-    Promise.all([
-      window.ossBrowser.settings.update(nextSettings),
-      window.ossBrowser.auth.setSecure(secureDraft.value)
-    ]).then(() => undefined)
-  )
-  if (done === undefined && errorMessage.value) return
-  Object.assign(settings, nextSettings)
-  auth.secure = secureDraft.value
-  themeMode.value = themeDraft.value
-  localStorage.setItem('oss-browser-settings', JSON.stringify(settings))
-  localStorage.setItem('oss-browser-theme', themeMode.value)
-  applyTheme()
-  if (auth.remember) {
-    await window.ossBrowser.profiles.save({
-      id: profileId(),
-      label: auth.alias?.trim() || auth.accessKeyId,
-      config: { ...auth }
-    })
-    savedProfiles.value = await window.ossBrowser.profiles.list()
-  }
-  modal.value = null
-  showToast(t('设置已保存'))
-}
-
-function openSettings(): void {
-  Object.assign(settingsDraft, settings)
-  secureDraft.value = auth.secure
-  themeDraft.value = themeMode.value
-  modal.value = 'settings'
-}
-
 async function checkPermissions(): Promise<void> {
   const generation = ++permissionProbeGeneration
   permissionChecking.value = true
@@ -1730,7 +1373,7 @@ async function checkPermissions(): Promise<void> {
 
 <template>
   <main class="app-shell">
-    <div v-if="busy" class="loading-bar" />
+    <div v-if="anyPending" class="loading-bar" />
     <div v-if="toastMessage" class="success-toast">
       <CircleCheck :size="18" />
       <span>{{ toastMessage }}</span>
@@ -1794,7 +1437,7 @@ async function checkPermissions(): Promise<void> {
             class="token-connect-button"
             :label="t('使用授权码连接')"
             tone="primary"
-            :disabled="!authToken || busy"
+            :disabled="!authToken || authTask.pending.value"
             @click="loginWithToken"
           />
         </template>
@@ -1852,7 +1495,7 @@ async function checkPermissions(): Promise<void> {
               (auth.endpointMode !== 'public' && !auth.endpoint) ||
               !auth.accessKeyId ||
               !auth.accessKeySecret ||
-              busy
+              authTask.pending.value
             "
             @click="login"
           />
@@ -1870,122 +1513,35 @@ async function checkPermissions(): Promise<void> {
     </section>
 
     <template v-else>
-      <header class="topbar">
-        <div class="top-brand">
-          <div class="small-mark">
-            <img :src="appIcon" alt="" />
-          </div>
-          <strong>OSS Browser</strong>
-          <span v-if="appVersion" class="app-version">v{{ appVersion }}</span>
-        </div>
-        <div class="top-actions">
-          <div class="language-picker top-language">
-            <Globe2 :size="15" />
-            <select :value="locale" aria-label="Language" @change="changeLocale">
-              <option value="zh-CN">中文</option>
-              <option value="en-US">EN</option>
-              <option value="ja-JP">日本語</option>
-            </select>
-          </div>
-          <div class="transfer-trigger" role="button" tabindex="0" @click="modal = 'favorites'">
-            <StarCheck :size="16" /> {{ t('收藏夹') }}
-          </div>
-          <div class="transfer-trigger" role="button" tabindex="0" @click="openCacheRefresh()">
-            <CloudCog :size="16" /> {{ t('刷新缓存') }}
-          </div>
-          <div
-            class="transfer-trigger"
-            role="button"
-            tabindex="0"
-            @click="showTransfers = !showTransfers"
-          >
-            <ListTodo :size="16" /> {{ t('传输任务') }}
-            <span v-if="transfers.length" class="badge">{{ transfers.length }}</span>
-          </div>
-          <div class="transfer-trigger" role="button" tabindex="0" @click="openSettings">
-            <Settings :size="16" /> {{ t('设置') }}
-          </div>
-          <div class="account-action" role="button" tabindex="0" @click="confirmLogout">
-            <UserRound :size="16" /><span>{{ auth.alias?.trim() || auth.accessKeyId }}</span
-            ><LogOut :size="16" />
-          </div>
-        </div>
-      </header>
+      <AppHeader
+        :app-version="appVersion"
+        :locale="locale"
+        :account-label="auth.alias?.trim() || auth.accessKeyId"
+        :transfer-count="transfers.length"
+        @locale-change="setLocale($event as AppLocale)"
+        @favorites="modal = 'favorites'"
+        @cache-refresh="openCacheRefresh()"
+        @transfers="showTransfers = !showTransfers"
+        @settings="openSettings"
+        @logout="confirmLogout"
+      />
 
       <div class="workspace-full">
-        <section v-if="!currentBucket" class="bucket-home">
-          <div class="bucket-home-head">
-            <div>
-              <h1>{{ t('选择 Bucket') }}</h1>
-              <p>{{ t('选择一个 Bucket 开始管理文件') }}</p>
-            </div>
-            <div class="bucket-home-actions">
-              <div class="search-wrap">
-                <Search :size="15" /><input
-                  v-model="bucketSearchText"
-                  :placeholder="t('搜索 Bucket')"
-                />
-              </div>
-              <AppButton :label="t('刷新')" :icon="RefreshCw" @click="refreshBuckets" />
-              <AppButton
-                :label="t('新建 Bucket')"
-                :icon="Plus"
-                tone="primary"
-                @click="openModal('create-bucket')"
-              />
-            </div>
-          </div>
-          <div class="bucket-grid">
-            <div
-              v-for="bucket in filteredBuckets"
-              :key="bucket.name"
-              class="bucket-card"
-              role="button"
-              tabindex="0"
-              @click="openBucket(bucket)"
-              @contextmenu="openBucketMenu($event, bucket)"
-            >
-              <div class="bucket-card-icon">
-                <LucideIcon name="bucket" :icon-node="bucketIcon" :size="26" />
-              </div>
-              <div class="bucket-card-info">
-                <strong>{{ bucket.name }}</strong
-                ><span
-                  >{{ bucket.region || t('自定义 Endpoint') }} ·
-                  {{ bucket.storageClass || t('标准存储') }}</span
-                >
-              </div>
-              <div class="bucket-card-actions">
-                <AppTooltip :label="t('更多')">
-                  <div class="icon-button" @click="openBucketMenu($event, bucket)">
-                    <MoreHorizontal :size="17" />
-                  </div>
-                </AppTooltip>
-              </div>
-            </div>
-          </div>
-          <div
-            v-if="bucketMenu.visible && bucketActionTarget"
-            class="more-menu context-menu bucket-menu"
-            :style="{ left: `${bucketMenu.x}px`, top: `${bucketMenu.y}px` }"
-            @click="bucketMenu.visible = false"
-          >
-            <div @click="openBucketAcl(bucketActionTarget)">
-              <KeyRound :size="15" />{{ t('Bucket 权限') }}
-            </div>
-            <div @click="openMultipart(bucketActionTarget)">
-              <ListTodo :size="15" />{{ t('未完成的分片上传') }}
-            </div>
-            <div class="danger" @click="deleteBucket(bucketActionTarget)">
-              <Trash2 :size="15" />{{ t('删除 Bucket') }}
-            </div>
-          </div>
-          <div v-if="!filteredBuckets.length" class="welcome-state">
-            <LucideIcon name="bucket" :icon-node="bucketIcon" :size="48" />
-            <h2>{{ t('暂无 Bucket') }}</h2>
-            <p>{{ t('新建 Bucket 后即可开始使用。') }}</p>
-          </div>
-        </section>
+        <BucketHome
+          v-if="!currentBucket"
+          v-model:search-text="bucketSearchText"
+          :buckets="filteredBuckets"
+          :menu="bucketMenu"
+          :action-target="bucketActionTarget"
+          @refresh="refreshBuckets"
+          @create="openModal('create-bucket')"
+          @open="openBucket"
+          @open-menu="openBucketMenu"
+          @close-menu="bucketMenu.visible = false"
+          @acl="openBucketAcl"
+          @multipart="openMultipart"
+          @delete="deleteBucket"
+        />
 
         <section
           v-else
@@ -2087,87 +1643,11 @@ async function checkPermissions(): Promise<void> {
                 tone="ghost"
                 @click="showMoreActions = !showMoreActions"
               />
-              <div v-if="showMoreActions" class="more-menu">
-                <div
-                  :class="{ disabled: !selectedObjects.length }"
-                  @click="selectedObjects.length && copySelected()"
-                >
-                  <Copy :size="15" />{{ t('复制') }}
-                </div>
-                <div
-                  :class="{ disabled: !selectedObjects.length }"
-                  @click="selectedObjects.length && openModal('move')"
-                >
-                  <Move :size="15" />{{ t('移动') }}
-                </div>
-                <div
-                  :class="{ disabled: selectedObjects.length !== 1 }"
-                  @click="selectedObjects.length === 1 && openModal('rename')"
-                >
-                  <Pencil :size="15" />{{ t('重命名') }}
-                </div>
-                <div
-                  :class="{ disabled: selectedObjects.length !== 1 }"
-                  @click="selectedObjects.length === 1 && openModal('acl')"
-                >
-                  <ShieldCheck :size="15" />{{ t('对象权限') }}
-                </div>
-                <div
-                  :class="{ disabled: !selectedObjects.length }"
-                  @click="selectedObjects.length && openModal('headers')"
-                >
-                  <FileCog :size="15" />{{ t('HTTP 头') }}
-                </div>
-                <div
-                  :class="{
-                    disabled: selectedObjects.length !== 1 || selectedObjects[0]?.isDirectory
-                  }"
-                  @click="
-                    selectedObjects.length === 1 &&
-                    !selectedObjects[0]?.isDirectory &&
-                    openModal('share')
-                  "
-                >
-                  <Link :size="15" />{{ t('获取地址') }}
-                </div>
-                <div
-                  :class="{ disabled: selectedObjects.length !== 1 }"
-                  @click="selectedObjects.length === 1 && openModal('symlink')"
-                >
-                  <Link :size="15" />{{ t('创建软链接') }}
-                </div>
-                <div
-                  :class="{ disabled: !selectedObjects.length }"
-                  @click="selectedObjects.length && openModal('restore')"
-                >
-                  <Undo2 :size="15" />{{ t('恢复归档对象') }}
-                </div>
-                <div
-                  :class="{ disabled: selectedObjects.length !== 1 }"
-                  @click="selectedObjects.length === 1 && showDetails()"
-                >
-                  <Info :size="15" />{{ t('对象详情') }}
-                </div>
-                <div
-                  :class="{ disabled: selectedObjects.length > 1 }"
-                  @click="selectedObjects.length <= 1 && openModal('grant')"
-                >
-                  <KeyRound :size="15" />{{ t('生成授权码') }}
-                </div>
-                <div
-                  :class="{ disabled: selectedObjects.length !== 1 }"
-                  @click="selectedObjects.length === 1 && openCacheRefresh(selectedObjects[0])"
-                >
-                  <CloudCog :size="15" />{{ t('刷新此项缓存') }}
-                </div>
-                <div
-                  class="danger"
-                  :class="{ disabled: !selectedObjects.length }"
-                  @click="selectedObjects.length && removeSelected()"
-                >
-                  <Trash2 :size="15" />{{ t('删除') }}
-                </div>
-              </div>
+              <ObjectActionMenu
+                v-if="showMoreActions"
+                :selected="selectedObjects"
+                @select="handleObjectAction"
+              />
             </div>
             <div class="toolbar-spacer" />
             <div class="page-counts">
@@ -2248,7 +1728,7 @@ async function checkPermissions(): Promise<void> {
                 {{ item.lastModified ? new Date(item.lastModified).toLocaleString() : '—' }}
               </div>
             </div>
-            <div v-if="!filteredObjects.length && !busy" class="empty-state">
+            <div v-if="!filteredObjects.length && !fileBrowser.loading.value" class="empty-state">
               <div class="empty-icon"><Folder :size="42" /></div>
               <strong>{{ t('当前目录为空') }}</strong
               ><span>{{ t('上传文件或新建文件夹开始使用') }}</span>
@@ -2299,7 +1779,7 @@ async function checkPermissions(): Promise<void> {
                 </div>
               </div>
             </div>
-            <div v-else-if="!busy" class="empty-state">
+            <div v-else-if="!fileBrowser.loading.value" class="empty-state">
               <div class="empty-icon"><Folder :size="42" /></div>
               <strong>{{ t('当前目录为空') }}</strong
               ><span>{{ t('上传文件或新建文件夹开始使用') }}</span>
@@ -2320,62 +1800,13 @@ async function checkPermissions(): Promise<void> {
         </section>
       </div>
 
-      <div
+      <ObjectActionMenu
         v-if="contextMenu.visible"
-        class="more-menu context-menu"
+        class="context-menu"
+        :selected="selectedObjects"
         :style="{ left: `${contextMenu.x}px`, top: `${contextMenu.y}px` }"
-        @click="closeActions"
-      >
-        <div @click="copySelected"><Copy :size="15" />{{ t('复制') }}</div>
-        <div @click="openModal('move')"><Move :size="15" />{{ t('移动') }}</div>
-        <div
-          :class="{ disabled: selectedObjects.length !== 1 }"
-          @click="selectedObjects.length === 1 && openModal('rename')"
-        >
-          <Pencil :size="15" />{{ t('重命名') }}
-        </div>
-        <div
-          :class="{ disabled: selectedObjects.length !== 1 }"
-          @click="selectedObjects.length === 1 && openModal('acl')"
-        >
-          <ShieldCheck :size="15" />{{ t('对象权限') }}
-        </div>
-        <div @click="openModal('headers')"><FileCog :size="15" />{{ t('HTTP 头') }}</div>
-        <div
-          :class="{ disabled: selectedObjects.length !== 1 || selectedObjects[0]?.isDirectory }"
-          @click="
-            selectedObjects.length === 1 && !selectedObjects[0]?.isDirectory && openModal('share')
-          "
-        >
-          <Link :size="15" />{{ t('获取地址') }}
-        </div>
-        <div
-          :class="{ disabled: selectedObjects.length !== 1 }"
-          @click="selectedObjects.length === 1 && openModal('symlink')"
-        >
-          <Link :size="15" />{{ t('创建软链接') }}
-        </div>
-        <div @click="openModal('restore')"><Undo2 :size="15" />{{ t('恢复归档对象') }}</div>
-        <div
-          :class="{ disabled: selectedObjects.length !== 1 }"
-          @click="selectedObjects.length === 1 && showDetails()"
-        >
-          <Info :size="15" />{{ t('对象详情') }}
-        </div>
-        <div
-          :class="{ disabled: selectedObjects.length > 1 }"
-          @click="selectedObjects.length <= 1 && openModal('grant')"
-        >
-          <KeyRound :size="15" />{{ t('生成授权码') }}
-        </div>
-        <div
-          :class="{ disabled: selectedObjects.length !== 1 }"
-          @click="selectedObjects.length === 1 && openCacheRefresh(selectedObjects[0])"
-        >
-          <CloudCog :size="15" />{{ t('刷新此项缓存') }}
-        </div>
-        <div class="danger" @click="removeSelected"><Trash2 :size="15" />{{ t('删除') }}</div>
-      </div>
+        @select="handleObjectAction"
+      />
 
       <div
         v-if="emptyContextMenu.visible"
