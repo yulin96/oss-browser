@@ -1,0 +1,72 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-07-12T20:50:00Z",
+  "title": "Design System: OSS Browser",
+  "extensions": {
+    "colorMeta": {
+      "primary":        { "role": "primary",  "displayName": "Aliyun Blue", "canonical": "oklch(60.18% 0.2334 260.78)" },
+      "primary-dark":   { "role": "primary",  "displayName": "Brighter Aliyun Blue", "canonical": "oklch(69.87% 0.1983 252.12)" },
+      "danger":         { "role": "danger",   "displayName": "Danger Red", "canonical": "oklch(57.29% 0.2173 19.34)" },
+      "danger-dark":    { "role": "danger",   "displayName": "Soft Danger Red", "canonical": "oklch(67.43% 0.203 16.92)" },
+      "bg-light":       { "role": "neutral",  "displayName": "Light Grey Background", "canonical": "oklch(96.93% 0.0076 256.44)" },
+      "bg-dark":        { "role": "neutral",  "displayName": "Dark Navy Background", "canonical": "oklch(19.2% 0.0243 256.55)" },
+      "text-light":     { "role": "neutral",  "displayName": "Light Mode Text", "canonical": "oklch(22.38% 0.0202 258.91)" },
+      "text-dark":      { "role": "neutral",  "displayName": "Dark Mode Text", "canonical": "oklch(93.18% 0.0152 249.25)" }
+    },
+    "typographyMeta": {
+      "display": { "displayName": "Display Title", "purpose": "App header titles, page main titles, modal header titles." },
+      "body": { "displayName": "Body Text", "purpose": "Standard content text, list tables, metadata." },
+      "label": { "displayName": "Label / Monospace", "purpose": "File size, Bucket name, Object path, technical identifiers." }
+    },
+    "shadows": [
+      { "name": "ambient-shadow-light", "value": "0 16px 50px rgba(31, 47, 70, 0.12)", "purpose": "Light mode dialog popover shadow" },
+      { "name": "ambient-shadow-dark", "value": "0 18px 55px rgba(0, 0, 0, 0.42)", "purpose": "Dark mode dialog popover shadow" }
+    ],
+    "motion": [
+      { "name": "fade-in", "value": "transition: opacity 0.15s ease-out", "purpose": "Default state changes and page fade-in transitions" }
+    ],
+    "breakpoints": []
+  },
+  "components": [
+    {
+      "name": "Default App Button",
+      "kind": "button",
+      "refersTo": "button-default",
+      "description": "Standard div-based clickable action button.",
+      "html": "<div class=\"ds-app-button is-default\" role=\"button\">Default Action</div>",
+      "css": ".ds-app-button { display: inline-flex; align-items: center; justify-content: center; min-height: 36px; padding: 0 14px; border: 1px solid #e5eaf0; border-radius: 8px; color: #36465b; background: #fff; font-size: 13px; font-weight: 600; cursor: pointer; transition: 0.15s; white-space: nowrap; gap: 6px; } .ds-app-button:hover { border-color: #b8c5d6; background: #f8fafc; } .ds-app-button:active { transform: scale(0.97); }"
+    },
+    {
+      "name": "Primary App Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Div-based primary highlighted action button.",
+      "html": "<div class=\"ds-app-button is-primary\" role=\"button\">Confirm Action</div>",
+      "css": ".ds-app-button { display: inline-flex; align-items: center; justify-content: center; min-height: 36px; padding: 0 14px; border: 1px solid #1677ff; border-radius: 8px; color: #fff; background: #1677ff; font-size: 13px; font-weight: 600; cursor: pointer; transition: 0.15s; white-space: nowrap; gap: 6px; } .ds-app-button:hover { background: #0869e8; border-color: #0869e8; } .ds-app-button:active { transform: scale(0.97); }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Precision Vault",
+    "overview": "OSS Browser 作为一个专业且安全的云存储客户端，其设计语言秉持“精密金库”的理念。这代表着工具感、坚固性、高安全度与精细 the 工业化质感。界面风格极致纯净、无任何多余装饰，避免渐变文本或过大圆角等花哨设计，让用户的注意力聚焦于数据管理与安全传输上。\n\n整个系统的视觉呈现精致而克制。背景主要以淡雅低饱和度的灰色（浅色模式）或深邃纯正的暗灰蓝（深色模式）为主，交互容器通过细微的边框与柔和的色彩断层（Tonal Layering）区分层级，营造出专业、可靠、井然有序的生产力工具环境。",
+    "keyCharacteristics": [
+      "极端克制 (Restrained)：除了主蓝色（Aliyun Blue）作为操作强调外，界面其余区域由灰度及中性冷色调主导。",
+      "高密度 (High Density)：提供直观紧凑的信息布局，方便开发与运维人员在大列表、多文件时获得高信息通量。",
+      "状态高保真 (High Fidelity States)：所有组件都具有精准的悬停、聚焦、激活及禁用状态反馈。"
+    ],
+    "rules": [
+      { "name": "The One Accent Rule", "body": "主蓝色调（Primary）在单个界面中的占比不得超过 10%。其稀缺性正是为了引导用户的核心视线。", "section": "colors" },
+      { "name": "The Rested Flat Rule", "body": "所有卡片、容器、输入框在静止状态（Rest）下必须平贴于背景上，不得带有装饰性阴影。阴影仅在悬停（Hover）或处于浮空层（Modal/Dialog）时以状态反馈形式出现。", "section": "elevation" }
+    ],
+    "dos": [
+      "Do 仅通过 ProfileStore 和 Electron safeStorage 存储密钥，并在前端凭证展示区域进行脱敏处理。",
+      "Do 强制实现按钮的 div 容器封装，并通过 @keydown.enter 处理键盘事件支持。",
+      "Do 给所有仅含图标的动作按钮加上 Icon Tooltips。"
+    ],
+    "donts": [
+      "Don't 使用超过 1px 宽度的侧边单栏彩色高亮线（如 card 的 border-left 装饰线）。",
+      "Don't 使用渐变文字（background-clip: text），所有标题和文字均应使用纯色。",
+      "Don't 在卡片、输入框上同时使用 border 和大于 16px 模糊半径的 box-shadow 作为默认装饰（鬼影卡片模式）。",
+      "Don't 对卡片、弹窗使用大于 12px (0.75rem) 的圆角，大圆角破坏“精密金库”的工具质感。"
+    ]
+  }
+}
