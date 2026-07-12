@@ -223,6 +223,35 @@ function clearAsyncErrors(): void {
   cloudTask.clearError()
   settingsTask.clearError()
 }
+const OSS_REGIONS = [
+  { id: 'oss-cn-hangzhou', label: '华东 1 (杭州)' },
+  { id: 'oss-cn-shanghai', label: '华东 2 (上海)' },
+  { id: 'oss-cn-nanjing', label: '华东 5 (南京)' },
+  { id: 'oss-cn-fuzhou', label: '华东 6 (福州)' },
+  { id: 'oss-cn-qingdao', label: '华北 1 (青岛)' },
+  { id: 'oss-cn-beijing', label: '华北 2 (北京)' },
+  { id: 'oss-cn-zhangjiakou', label: '华北 3 (张家口)' },
+  { id: 'oss-cn-huhehaote', label: '华北 5 (呼和浩特)' },
+  { id: 'oss-cn-wulanchabu', label: '华北 6 (乌兰察布)' },
+  { id: 'oss-cn-shenzhen', label: '华南 1 (深圳)' },
+  { id: 'oss-cn-heyuan', label: '华南 2 (河源)' },
+  { id: 'oss-cn-guangzhou', label: '华南 3 (广州)' },
+  { id: 'oss-cn-chengdu', label: '西南 1 (成都)' },
+  { id: 'oss-cn-hongkong', label: '中国 (香港)' },
+  { id: 'oss-us-west-1', label: '美国西部 1 (硅谷)' },
+  { id: 'oss-us-east-1', label: '美国东部 1 (弗吉尼亚)' },
+  { id: 'oss-ap-northeast-1', label: '日本 (东京)' },
+  { id: 'oss-ap-northeast-2', label: '韩国 (首尔)' },
+  { id: 'oss-ap-southeast-1', label: '亚太东南 1 (新加坡)' },
+  { id: 'oss-ap-southeast-2', label: '亚太东南 2 (悉尼)' },
+  { id: 'oss-ap-southeast-3', label: '亚太东南 3 (吉隆坡)' },
+  { id: 'oss-ap-southeast-5', label: '亚太东南 5 (雅加达)' },
+  { id: 'oss-ap-southeast-6', label: '菲律宾 (马尼拉)' },
+  { id: 'oss-ap-southeast-7', label: '泰国 (曼谷)' },
+  { id: 'oss-ap-south-1', label: '印度 (孟买)' },
+  { id: 'oss-eu-central-1', label: '德国 (法兰克福)' },
+  { id: 'oss-eu-west-1', label: '英国 (伦敦)' }
+]
 const form = reactive({
   name: '',
   region: 'oss-cn-hangzhou',
@@ -335,6 +364,7 @@ const {
   updateState,
   updateDescription,
   updateButtonLabel,
+  isMac,
   initializeUpdates,
   disposeUpdates,
   handleUpdateAction
@@ -1954,7 +1984,13 @@ async function checkPermissions(): Promise<void> {
         <input v-model.trim="form.name" :placeholder="t('全局唯一名称')" />
       </div>
       <label class="field-label">{{ t('地域') }}</label>
-      <div class="input-wrap"><input v-model.trim="form.region" /></div>
+      <div class="select-wrap">
+        <select v-model="form.region">
+          <option v-for="item in OSS_REGIONS" :key="item.id" :value="item.id">
+            {{ t(item.label) }} ({{ item.id }})
+          </option>
+        </select>
+      </div>
       <label class="field-label">{{ t('读写权限') }}</label>
       <div class="select-wrap">
         <select v-model="form.acl">
@@ -2392,7 +2428,9 @@ async function checkPermissions(): Promise<void> {
         <AppButton
           :label="updateButtonLabel"
           :icon="RefreshCw"
-          :disabled="updateState.status === 'checking' || updateState.status === 'downloading'"
+          :disabled="
+            isMac || updateState.status === 'checking' || updateState.status === 'downloading'
+          "
           @click="handleUpdateAction"
         />
       </div>
