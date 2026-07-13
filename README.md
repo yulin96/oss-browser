@@ -78,25 +78,6 @@ The workflow in [`.github/workflows/release.yml`](.github/workflows/release.yml)
 
 After every platform finishes successfully, the workflow creates a GitHub Release and uploads all packages to it.
 
-### Publish a release
-
-1. Update the `version` field in `package.json`, for example to `0.2.0`.
-2. Commit and push the release changes to the default branch.
-3. Create a tag with the same version prefixed by `v`.
-4. Push the tag to GitHub.
-
-```bash
-git add package.json pnpm-lock.yaml
-git commit -m "chore: prepare v0.2.0"
-git push origin main
-git tag v0.2.0
-git push origin v0.2.0
-```
-
-The tag must match the package version exactly. For example, package version `0.2.0` requires tag `v0.2.0`. Progress is available on the repository's **Actions** page. When all jobs pass, downloadable files appear under **Releases**.
-
-No personal access token is required for the standard workflow. GitHub provides a temporary token, and the workflow requests only `contents: write` permission to create the Release.
-
 ### Signing notice
 
 Current packages are unsigned. macOS Gatekeeper and Windows SmartScreen may warn users when opening them.
