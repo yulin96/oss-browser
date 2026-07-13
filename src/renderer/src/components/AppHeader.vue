@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { CloudCog, Globe2, ListTodo, LogOut, Settings, StarCheck, UserRound } from '@lucide/vue'
 
+import type { UpdateStatus } from '../../../shared/types'
 import appIcon from '../assets/icon.png'
 import { t } from '../i18n'
 
@@ -9,6 +10,7 @@ defineProps<{
   locale: string
   accountLabel: string
   transferCount: number
+  updateStatus: UpdateStatus
 }>()
 
 const emit = defineEmits<{
@@ -30,7 +32,24 @@ function changeLocale(event: Event): void {
     <div class="top-brand">
       <div class="small-mark"><img :src="appIcon" alt="" /></div>
       <strong>OSS Browser</strong>
-      <span v-if="appVersion" class="app-version">v{{ appVersion }}</span>
+      <span
+        v-if="appVersion"
+        class="app-version"
+        :class="{
+          'has-update': ['available', 'downloading', 'downloaded'].includes(updateStatus)
+        }"
+        :title="
+          ['available', 'downloading', 'downloaded'].includes(updateStatus)
+            ? t('发现新版本')
+            : undefined
+        "
+      >
+        v{{ appVersion }}
+        <i
+          v-if="['available', 'downloading', 'downloaded'].includes(updateStatus)"
+          aria-hidden="true"
+        />
+      </span>
     </div>
     <div class="top-actions">
       <div class="language-picker top-language">

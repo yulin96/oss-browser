@@ -1771,6 +1771,7 @@ async function checkPermissions(): Promise<void> {
         :locale="locale"
         :account-label="auth.alias?.trim() || auth.accessKeyId"
         :transfer-count="transfers.length"
+        :update-status="updateState.status"
         @locale-change="setLocale($event as AppLocale)"
         @favorites="modal = 'favorites'"
         @cache-refresh="openCacheRefresh()"
@@ -2818,6 +2819,14 @@ async function checkPermissions(): Promise<void> {
           <div>
             <strong>{{ t('软件更新') }}</strong
             ><span>{{ updateDescription }}</span>
+            <div v-if="updateState.status === 'downloading'" class="update-progress-track">
+              <div
+                class="update-progress-value"
+                :style="{
+                  width: `${Math.min(100, Math.max(0, updateState.percent || 0))}%`
+                }"
+              />
+            </div>
           </div>
           <AppButton
             :label="updateButtonLabel"
