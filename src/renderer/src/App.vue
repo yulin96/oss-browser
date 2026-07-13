@@ -1831,7 +1831,12 @@ async function checkPermissions(): Promise<void> {
               <div class="nav-icon" @click="goHome"><Home :size="18" /></div>
             </AppTooltip>
             <div class="address-wrap">
-              <input v-model="addressInput" class="flex-1 min-w-0" @keydown.enter="goToAddress()" />
+              <input
+                v-model="addressInput"
+                class="flex-1 min-w-0"
+                spellcheck="false"
+                @keydown.enter="goToAddress()"
+              />
               <div
                 v-if="currentBucket?.region"
                 class="ml-1 flex select-none items-center border-l border-solid border-(--border) px-2.5 font-mono text-[11px] text-muted-foreground"
