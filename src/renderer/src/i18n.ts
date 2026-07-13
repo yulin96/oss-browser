@@ -279,9 +279,12 @@ const translations: Record<Exclude<AppLocale, 'zh-CN'>, Record<string, string>> 
     '正在检查新版本…': 'Checking for updates…',
     '当前版本：{version}': 'Current version: {version}',
     '发现新版本 {version}': 'Version {version} is available',
+    '发现新版本 {version}，请前往 GitHub 下载':
+      'Version {version} is available. Go to GitHub to download it',
     发现新版本: 'Update available',
     '新版本 {version} 已发布，是否现在下载？': 'Version {version} is available. Download it now?',
     下载更新: 'Download update',
+    '前往 GitHub': 'Open GitHub',
     '正在下载新版本：{percent}%': 'Downloading update: {percent}%',
     '新版本 {version} 已下载，重启后安装':
       'Version {version} is ready and will be installed after restart',
@@ -292,7 +295,6 @@ const translations: Record<Exclude<AppLocale, 'zh-CN'>, Record<string, string>> 
     当前已是最新版本: 'You are using the latest version',
     '检查更新失败，请稍后重试': 'Could not check for updates. Try again later.',
     开发模式下不检查更新: 'Updates are disabled in development mode',
-    'macOS 暂不支持自动更新': 'Automatic updates are not supported on macOS',
     '华东 1 (杭州)': 'China East 1 (Hangzhou)',
     '华东 2 (上海)': 'China East 2 (Shanghai)',
     '华东 5 (南京)': 'China East 5 (Nanjing)',
@@ -600,10 +602,13 @@ const translations: Record<Exclude<AppLocale, 'zh-CN'>, Record<string, string>> 
     '正在检查新版本…': '新しいバージョンを確認しています…',
     '当前版本：{version}': '現在のバージョン：{version}',
     '发现新版本 {version}': '新しいバージョン {version} があります',
+    '发现新版本 {version}，请前往 GitHub 下载':
+      '新しいバージョン {version} があります。GitHub からダウンロードしてください',
     发现新版本: '新しいバージョンがあります',
     '新版本 {version} 已发布，是否现在下载？':
       '新しいバージョン {version} を今すぐダウンロードしますか？',
     下载更新: '更新をダウンロード',
+    '前往 GitHub': 'GitHub を開く',
     '正在下载新版本：{percent}%': '更新をダウンロード中：{percent}%',
     '新版本 {version} 已下载，重启后安装':
       'バージョン {version} の準備ができました。再起動後にインストールされます',
@@ -614,7 +619,6 @@ const translations: Record<Exclude<AppLocale, 'zh-CN'>, Record<string, string>> 
     当前已是最新版本: '現在のバージョンは最新です',
     '检查更新失败，请稍后重试': '更新を確認できませんでした。後でもう一度お試しください。',
     开发模式下不检查更新: '開発モードでは更新を確認しません',
-    'macOS 暂不支持自动更新': 'macOS では自動更新はサポートされていません',
     '华东 1 (杭州)': '中国東部 1 (杭州)',
     '华东 2 (上海)': '中国東部 2 (上海)',
     '华东 5 (南京)': '中国東部 5 (南京)',

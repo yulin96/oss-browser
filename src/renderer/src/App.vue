@@ -422,7 +422,6 @@ const {
   updateState,
   updateDescription,
   updateButtonLabel,
-  isMac,
   initializeUpdates,
   disposeUpdates,
   handleUpdateAction
@@ -2837,9 +2836,7 @@ async function checkPermissions(): Promise<void> {
           <AppButton
             :label="updateButtonLabel"
             :icon="RefreshCw"
-            :disabled="
-              isMac || updateState.status === 'checking' || updateState.status === 'downloading'
-            "
+            :disabled="updateState.status === 'checking' || updateState.status === 'downloading'"
             @click="handleUpdateAction"
           />
         </div>

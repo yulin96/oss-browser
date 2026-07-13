@@ -42,6 +42,7 @@ Repository: <https://github.com/yulin96/oss-browser>
 - GitHub releases are triggered by semantic version tags such as `v0.2.0`.
 - The Git tag must match the `package.json` version with a leading `v`.
 - Keep `.github/workflows/release.yml` capable of producing macOS ARM64/x64, Windows x64, and Linux x64 packages.
+- On macOS, check for updates in the app but direct users to GitHub Releases for downloads. Do not download or install updates in the app.
 - Do not commit generated `dist` packages to the repository.
 - Treat Apple signing, notarization, and Windows signing credentials as GitHub secrets. Never commit signing credentials.
 

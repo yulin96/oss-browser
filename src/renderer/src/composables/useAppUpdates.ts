@@ -11,7 +11,6 @@ export function useAppUpdates(
   updateState: Ref<UpdateState>
   updateDescription: ComputedRef<string>
   updateButtonLabel: ComputedRef<string>
-  isMac: boolean
   initializeUpdates: () => Promise<void>
   disposeUpdates: () => void
   handleUpdateAction: () => Promise<void>
@@ -25,10 +24,11 @@ export function useAppUpdates(
   let removeUpdateListener: (() => void) | undefined
 
   const updateDescription = computed(() => {
-    if (isMac) return t('macOS 暂不支持自动更新')
     if (updateState.value.status === 'checking') return t('正在检查新版本…')
     if (updateState.value.status === 'available')
-      return t('发现新版本 {version}', { version: updateState.value.version || '' })
+      return t(isMac ? '发现新版本 {version}，请前往 GitHub 下载' : '发现新版本 {version}', {
+        version: updateState.value.version || ''
+      })
     if (updateState.value.status === 'downloading')
       return t('正在下载新版本：{percent}%', { percent: updateState.value.percent || 0 })
     if (updateState.value.status === 'downloaded')
@@ -42,14 +42,19 @@ export function useAppUpdates(
 
   const updateButtonLabel = computed(() => {
     if (updateState.value.status === 'checking') return t('检查中')
-    if (updateState.value.status === 'available') return t('下载更新')
+    if (updateState.value.status === 'available') return t(isMac ? '前往 GitHub' : '下载更新')
     if (updateState.value.status === 'downloading') return `${updateState.value.percent || 0}%`
     if (updateState.value.status === 'downloaded') return t('重启安装')
     return t('检查更新')
   })
 
-  function requestUpdateDownload(): void {
-    if (isMac) return
+  function requestAvailableUpdate(): void {
+    if (isMac) {
+      void window.ossBrowser.system.openExternal(
+        'https://github.com/yulin96/oss-browser/releases/latest'
+      )
+      return
+    }
     requestConfirmation({
       title: t('发现新版本'),
       description: t('新版本 {version} 已发布，是否现在下载？', {
@@ -71,11 +76,10 @@ export function useAppUpdates(
   }
 
   function handleUpdateState(state: UpdateState): void {
-    if (isMac) return
     updateState.value = state
     if (state.status === 'available' && state.version !== promptedAvailableVersion) {
       promptedAvailableVersion = state.version || 'latest'
-      requestUpdateDownload()
+      if (!isMac) requestAvailableUpdate()
     }
     if (state.status === 'downloaded' && state.version !== promptedDownloadedVersion) {
       promptedDownloadedVersion = state.version || 'latest'
@@ -93,18 +97,13 @@ export function useAppUpdates(
 
   async function initializeUpdates(): Promise<void> {
     appVersion.value = await window.ossBrowser.system.getVersion()
-    if (isMac) {
-      updateState.value = { status: 'unsupported' }
-      return
-    }
     removeUpdateListener = window.ossBrowser.onUpdate(handleUpdateState)
     updateState.value = await window.ossBrowser.updates.getState()
     handleUpdateState(updateState.value)
   }
 
   async function handleUpdateAction(): Promise<void> {
-    if (isMac) return
-    if (updateState.value.status === 'available') return requestUpdateDownload()
+    if (updateState.value.status === 'available') return requestAvailableUpdate()
     if (updateState.value.status === 'downloaded') return requestUpdateInstall()
     if (updateState.value.status === 'checking' || updateState.value.status === 'downloading')
       return
@@ -122,7 +121,6 @@ export function useAppUpdates(
     updateState,
     updateDescription,
     updateButtonLabel,
-    isMac,
     initializeUpdates,
     disposeUpdates: () => removeUpdateListener?.(),
     handleUpdateAction

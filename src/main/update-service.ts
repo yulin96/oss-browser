@@ -11,10 +11,6 @@ export class UpdateService {
   constructor(private readonly getWindow: () => BrowserWindow | null) {}
 
   initialize(): void {
-    if (process.platform === 'darwin') {
-      this.state = { status: 'unsupported' }
-      return
-    }
     if (this.initialized || !app.isPackaged) return
     this.initialized = true
     autoUpdater.autoDownload = false
@@ -43,12 +39,10 @@ export class UpdateService {
   }
 
   getState(): UpdateState {
-    if (process.platform === 'darwin') return { status: 'unsupported' }
     return this.state
   }
 
   async check(): Promise<UpdateState> {
-    if (process.platform === 'darwin') return { status: 'unsupported' }
     if (!app.isPackaged) return { status: 'unsupported' }
     if (this.state.status === 'checking' || this.state.status === 'downloading') return this.state
     await autoUpdater.checkForUpdates()
