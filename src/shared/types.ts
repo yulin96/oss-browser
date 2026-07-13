@@ -108,6 +108,9 @@ export interface ObjectListResult {
 
 export interface TransferItem {
   id: string
+  batchId: string
+  batchTotal: number
+  batchDone: number
   direction: 'upload' | 'download'
   name: string
   progress: number

@@ -31,7 +31,6 @@ import {
   List,
   Monitor,
   Moon,
-  MoreHorizontal,
   Presentation,
   RefreshCw,
   Search,
@@ -153,9 +152,9 @@ const toastMessage = ref('')
 const modal = ref<ModalName>(null)
 const showProfilesModal = ref(false)
 const transfers = ref<TransferItem[]>([])
+const transferBatches = reactive(new Map<string, { done: number; total: number }>())
 const showTransfers = ref(false)
 const showUploadActions = ref(false)
-const showMoreActions = ref(false)
 const contextMenu = reactive({ visible: false, x: 0, y: 0 })
 const emptyContextMenu = reactive({ visible: false, x: 0, y: 0 })
 const bucketMenu = reactive({ visible: false, x: 0, y: 0 })
@@ -210,6 +209,18 @@ const anyPending = computed(
     cloudTask.pending.value ||
     settingsTask.pending.value ||
     fileBrowser.loading.value
+)
+const transferSummary = computed(() => {
+  let done = 0
+  let total = 0
+  for (const batch of transferBatches.values()) {
+    done += batch.done
+    total += batch.total
+  }
+  return { done, total, progress: total ? done / total : 0 }
+})
+const hasTransferRecords = computed(() =>
+  transfers.value.some((transfer) => transfer.status !== 'running')
 )
 const errorMessage = computed({
   get: () =>
@@ -426,6 +437,11 @@ onMounted(async () => {
       const index = transfers.value.findIndex((transfer) => transfer.id === item.id)
       if (index === -1) transfers.value.unshift(item)
       else transfers.value[index] = item
+      const batch = transferBatches.get(item.batchId)
+      transferBatches.set(item.batchId, {
+        done: Math.max(batch?.done || 0, item.batchDone),
+        total: item.batchTotal
+      })
       showTransfers.value = true
     })
     await restoreSession()
@@ -456,6 +472,15 @@ function showToast(message: string): void {
   }, 3000)
 }
 
+function clearTransferRecords(): void {
+  const runningTransfers = transfers.value.filter((transfer) => transfer.status === 'running')
+  const activeBatchIds = new Set(runningTransfers.map((transfer) => transfer.batchId))
+  transfers.value = runningTransfers
+  for (const batchId of transferBatches.keys()) {
+    if (!activeBatchIds.has(batchId)) transferBatches.delete(batchId)
+  }
+}
+
 function handleDragEnter(event: DragEvent): void {
   if (!event.dataTransfer?.types.includes('Files')) return
   dragDepth += 1
@@ -481,9 +506,9 @@ function resetAccountRuntimeState(): void {
   errorMessage.value = ''
   toastMessage.value = ''
   transfers.value = []
+  transferBatches.clear()
   showTransfers.value = false
   showUploadActions.value = false
-  showMoreActions.value = false
   contextMenu.visible = false
   emptyContextMenu.visible = false
   bucketMenu.visible = false
@@ -538,7 +563,6 @@ function closeFloatingMenus(event: PointerEvent): void {
   const target = event.target as HTMLElement
   if (!target.closest('.more-actions') && !target.closest('.context-menu')) {
     showUploadActions.value = false
-    showMoreActions.value = false
     contextMenu.visible = false
     emptyContextMenu.visible = false
     bucketMenu.visible = false
@@ -548,7 +572,6 @@ function closeFloatingMenus(event: PointerEvent): void {
 function handleGlobalKeydown(event: KeyboardEvent): void {
   if (event.key === 'Escape') {
     showUploadActions.value = false
-    showMoreActions.value = false
     contextMenu.visible = false
     emptyContextMenu.visible = false
     bucketMenu.visible = false
@@ -559,7 +582,6 @@ function openContextMenu(event: MouseEvent, item: ObjectInfo): void {
   event.preventDefault()
   if (!selectedNames.value.has(item.name)) selectedNames.value = new Set([item.name])
   showUploadActions.value = false
-  showMoreActions.value = false
   contextMenu.x = Math.min(event.clientX, window.innerWidth - 220)
   contextMenu.y = Math.max(8, Math.min(event.clientY, window.innerHeight - 440))
   contextMenu.visible = true
@@ -571,7 +593,6 @@ function openEmptyContextMenu(event: MouseEvent): void {
   if (target.closest('.object-card, .table-row, .toolbar, .quick-nav, .context-menu')) return
   event.preventDefault()
   showUploadActions.value = false
-  showMoreActions.value = false
   contextMenu.visible = false
   selectedNames.value = new Set()
   emptyContextMenu.x = Math.min(event.clientX, window.innerWidth - 200)
@@ -593,7 +614,6 @@ function handleBlankClick(event: MouseEvent): void {
 
 function closeActions(): void {
   showUploadActions.value = false
-  showMoreActions.value = false
   contextMenu.visible = false
   emptyContextMenu.visible = false
   bucketMenu.visible = false
@@ -601,12 +621,6 @@ function closeActions(): void {
 
 function toggleUploadActions(): void {
   showUploadActions.value = !showUploadActions.value
-  showMoreActions.value = false
-}
-
-function toggleMoreActions(): void {
-  showMoreActions.value = !showMoreActions.value
-  showUploadActions.value = false
 }
 
 function selectUpload(kind: 'files' | 'folder'): void {
@@ -755,7 +769,6 @@ async function openItem(item: ObjectInfo): Promise<void> {
 }
 
 function openModal(name: ModalName): void {
-  showMoreActions.value = false
   form.name = ''
   form.target =
     name === 'move'
@@ -1756,11 +1769,7 @@ async function checkPermissions(): Promise<void> {
           </div>
 
           <div class="toolbar">
-            <div
-              class="more-actions upload-actions group"
-              :class="{ open: showUploadActions }"
-              @mouseenter="showMoreActions = false"
-            >
+            <div class="more-actions upload-actions group" :class="{ open: showUploadActions }">
               <AppButton
                 :label="t('上传')"
                 :icon="Upload"
@@ -1792,6 +1801,7 @@ async function checkPermissions(): Promise<void> {
               "
               @click="toggleAll"
             />
+            <div class="toolbar-divider" />
             <AppButton
               :label="t('下载')"
               :icon="Download"
@@ -1817,19 +1827,6 @@ async function checkPermissions(): Promise<void> {
                   <X :size="16" />
                 </div>
               </AppTooltip>
-            </div>
-            <div class="more-actions">
-              <AppButton
-                :label="t('更多')"
-                :icon="MoreHorizontal"
-                tone="ghost"
-                @click="toggleMoreActions"
-              />
-              <ObjectActionMenu
-                v-if="showMoreActions"
-                :selected="selectedObjects"
-                @select="handleObjectAction"
-              />
             </div>
             <div class="toolbar-spacer" />
             <div class="page-counts">
@@ -2068,15 +2065,43 @@ async function checkPermissions(): Promise<void> {
       <div v-if="showTransfers" class="transfer-mask" @mousedown.self="showTransfers = false">
         <aside class="transfer-panel">
           <div class="transfer-head">
-            <strong>{{ t('传输任务') }}</strong>
-            <AppTooltip :label="t('关闭')">
-              <div class="icon-button" role="button" tabindex="0" @click="showTransfers = false">
-                <X :size="18" />
+            <div class="transfer-head-row">
+              <div class="transfer-title">
+                <strong>{{ t('传输任务') }}</strong>
+                <span
+                  >{{ t('完成') }} {{ transferSummary.done }} / {{ transferSummary.total }}</span
+                >
               </div>
-            </AppTooltip>
+              <div class="transfer-head-actions">
+                <AppButton
+                  :label="t('清空记录')"
+                  tone="ghost"
+                  :disabled="!hasTransferRecords"
+                  @click="clearTransferRecords"
+                />
+                <AppTooltip :label="t('关闭')">
+                  <div
+                    class="icon-button"
+                    role="button"
+                    tabindex="0"
+                    @click="showTransfers = false"
+                  >
+                    <X :size="18" />
+                  </div>
+                </AppTooltip>
+              </div>
+            </div>
+            <div class="progress transfer-summary-progress">
+              <i :style="{ width: `${transferSummary.progress * 100}%` }" />
+            </div>
           </div>
           <div v-if="!transfers.length" class="transfer-empty">{{ t('暂无传输任务') }}</div>
-          <div v-for="transfer in transfers" :key="transfer.id" class="transfer-item">
+          <div
+            v-for="transfer in transfers"
+            :key="transfer.id"
+            class="transfer-item"
+            :class="`is-${transfer.status}`"
+          >
             <div class="transfer-line">
               <span
                 ><Upload v-if="transfer.direction === 'upload'" :size="14" /><Download

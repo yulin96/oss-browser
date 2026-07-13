@@ -1018,10 +1018,12 @@ input[type='checkbox']:checked::after {
   height: 100%;
   max-width: 100%;
   max-height: 100%;
+  aspect-ratio: 1 / 1;
   padding: clamp(3px, 8%, 8px);
   box-sizing: border-box;
-  object-fit: contain;
+  object-fit: cover;
   object-position: center;
+  border-radius: inherit;
 }
 .object-info {
   display: flex;
@@ -1107,7 +1109,8 @@ input[type='checkbox']:checked::after {
 .file-icon img {
   width: 100%;
   height: 100%;
-  object-fit: contain;
+  aspect-ratio: 1 / 1;
+  object-fit: cover;
   object-position: center;
 }
 .file-icon.folder,
@@ -1238,7 +1241,7 @@ input[type='checkbox']:checked::after {
   top: 68px;
   right: 10px;
   bottom: 10px;
-  width: 390px;
+  width: min(430px, calc(100vw - 20px));
   overflow: auto;
   border: 1px solid var(--border);
   border-radius: 10px;
@@ -1248,34 +1251,86 @@ input[type='checkbox']:checked::after {
 }
 .transfer-head {
   position: sticky;
+  z-index: 2;
   top: 0;
+  display: flex;
+  min-height: 82px;
+  padding: 13px 16px 12px;
+  flex-direction: column;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+.transfer-head-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  height: 55px;
-  padding: 0 16px;
-  border-bottom: 1px solid var(--border);
-  background: #fff;
+}
+.transfer-title {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  gap: 10px;
+}
+.transfer-title span {
+  color: var(--muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.transfer-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.transfer-head-actions .app-button {
+  min-height: 28px;
+  padding: 0 9px;
+  font-size: 12px;
+}
+.transfer-summary-progress {
+  height: 5px;
+  margin-top: 11px;
 }
 .transfer-item {
-  padding: 15px 16px;
+  padding: 14px 16px;
   border-bottom: 1px solid var(--border);
+  transition: background 0.15s ease;
+}
+.transfer-item:hover {
+  background: var(--surface-hover);
 }
 .transfer-line {
   display: flex;
+  align-items: center;
   gap: 10px;
   justify-content: space-between;
   font-size: 12px;
 }
 .transfer-line span {
+  display: flex;
   min-width: 0;
+  align-items: center;
+  gap: 7px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.transfer-line span svg {
+  flex: none;
+}
 .transfer-line b {
+  flex: none;
   color: #66809b;
   font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.transfer-item.is-done .transfer-line b {
+  color: #26805b;
+}
+.transfer-item.is-error .transfer-line b {
+  color: var(--danger);
+}
+.transfer-item.is-cancelled .transfer-line b {
+  color: var(--muted);
 }
 .progress {
   height: 4px;

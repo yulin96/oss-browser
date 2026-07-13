@@ -41,7 +41,11 @@ import type {
 
 type TransferReporter = (item: TransferItem) => void
 type OssClient = InstanceType<typeof OSS>
-type ActiveTransfer = TransferItem & { generation: number }
+type TransferBatch = { id: string; total: number; done: number }
+type ActiveTransfer = Omit<TransferItem, 'batchId' | 'batchTotal' | 'batchDone'> & {
+  generation: number
+  batch: TransferBatch
+}
 
 export class OssService {
   private auth: AuthConfig | null = null
@@ -570,13 +574,14 @@ export class OssService {
 
   async upload(bucket: string, prefix: string, paths: string[]): Promise<void> {
     const files = await this.expandLocalPaths(paths)
+    const batch: TransferBatch = { id: randomUUID(), total: files.length, done: 0 }
 
     await this.runPool(
       files,
       this.settings.maxUploadJobs,
       async ({ localPath, relativePath, isDirectory }) => {
         const name = `${prefix}${relativePath.split(sep).join('/')}${isDirectory ? '/' : ''}`
-        const transfer = this.newTransfer('upload', name)
+        const transfer = this.newTransfer('upload', name, batch)
         const client = this.bucketClient(bucket)
         if (isDirectory) {
           this.activeTransfers.set(transfer.id, client)
@@ -640,6 +645,7 @@ export class OssService {
         objects.push({ name: item.name, relativePath: item.displayName })
       }
     }
+    const batch: TransferBatch = { id: randomUUID(), total: objects.length, done: 0 }
 
     await this.runPool(objects, this.settings.maxDownloadJobs, async (object) => {
       const localPath = join(destination, ...object.relativePath.split('/'))
@@ -653,7 +659,7 @@ export class OssService {
       }
       const partialPath = `${localPath}.ossbrowser.part`
       await mkdir(join(localPath, '..'), { recursive: true })
-      const transfer = this.newTransfer('download', object.name)
+      const transfer = this.newTransfer('download', object.name, batch)
       const client = this.bucketClient(bucket)
       this.activeTransfers.set(transfer.id, client)
       try {
@@ -856,16 +862,21 @@ export class OssService {
     )
   }
 
-  private newTransfer(direction: TransferItem['direction'], name: string): ActiveTransfer {
+  private newTransfer(
+    direction: TransferItem['direction'],
+    name: string,
+    batch: TransferBatch
+  ): ActiveTransfer {
     const transfer: ActiveTransfer = {
       id: randomUUID(),
       direction,
       name,
       progress: 0,
       status: 'running',
-      generation: this.transferGeneration
+      generation: this.transferGeneration,
+      batch
     }
-    this.reportTransfer(transfer)
+    this.reportActiveTransfer(transfer)
     return transfer
   }
 
@@ -874,14 +885,30 @@ export class OssService {
     progress: number,
     status: TransferItem['status']
   ): void {
+    if (status === 'done' && transfer.status !== 'done') transfer.batch.done += 1
     transfer.progress = progress
     transfer.status = status
-    if (transfer.generation === this.transferGeneration) this.reportTransfer({ ...transfer })
+    this.reportActiveTransfer(transfer)
   }
 
   private failTransfer(transfer: ActiveTransfer, error: unknown): void {
     transfer.status = 'error'
     transfer.error = error instanceof Error ? error.message : String(error)
-    if (transfer.generation === this.transferGeneration) this.reportTransfer({ ...transfer })
+    this.reportActiveTransfer(transfer)
+  }
+
+  private reportActiveTransfer(transfer: ActiveTransfer): void {
+    if (transfer.generation !== this.transferGeneration) return
+    this.reportTransfer({
+      id: transfer.id,
+      batchId: transfer.batch.id,
+      batchTotal: transfer.batch.total,
+      batchDone: transfer.batch.done,
+      direction: transfer.direction,
+      name: transfer.name,
+      progress: transfer.progress,
+      status: transfer.status,
+      error: transfer.error
+    })
   }
 }
