@@ -1222,15 +1222,6 @@ input[type='checkbox']:checked::after {
   font-size: 19px;
 }
 
-@keyframes transfer-mask-fade-in {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
-}
-
 @keyframes transfer-slide-in {
   from {
     transform: translateX(100%);
@@ -1240,18 +1231,16 @@ input[type='checkbox']:checked::after {
   }
 }
 
-.transfer-mask {
+.transfer-layer {
   position: fixed;
   z-index: 95;
-  top: 58px;
-  inset: 58px 0 0 0;
-  background: rgba(13, 24, 39, 0.2);
-  animation: transfer-mask-fade-in 0.2s ease-out forwards;
+  inset: 58px 0 0;
+  pointer-events: none;
 }
 
 .transfer-panel {
   position: fixed;
-  z-index: 100; /* 调高以便在 mask 之上 */
+  z-index: 100;
   top: 68px;
   right: 10px;
   bottom: 10px;
@@ -1262,6 +1251,7 @@ input[type='checkbox']:checked::after {
   background: var(--surface);
   box-shadow: var(--shadow);
   animation: transfer-slide-in 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  pointer-events: auto;
 }
 .transfer-head {
   position: sticky;

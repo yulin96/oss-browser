@@ -2155,8 +2155,14 @@ async function checkPermissions(): Promise<void> {
         </div>
       </div>
 
-      <div v-if="showTransfers" class="transfer-mask" @mousedown.self="showTransfers = false">
-        <aside class="transfer-panel">
+      <div v-if="showTransfers" class="transfer-layer">
+        <aside
+          class="transfer-panel"
+          @dragenter.prevent.stop="handleDragEnter"
+          @dragover.prevent.stop
+          @dragleave.prevent.stop="handleDragLeave"
+          @drop.prevent.stop="handleDrop"
+        >
           <div class="transfer-head">
             <div class="transfer-head-row">
               <div class="transfer-tabs">
