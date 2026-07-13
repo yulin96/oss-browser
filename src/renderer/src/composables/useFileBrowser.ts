@@ -168,7 +168,7 @@ export function useFileBrowser(options: {
     if (!bucket) return
     let homePrefix = home.prefix || ''
     if (homePrefix && !homePrefix.endsWith('/')) homePrefix += '/'
-    await visit(bucket, homePrefix, false)
+    await visit(bucket, homePrefix)
   }
 
   async function refreshBuckets(): Promise<void> {
