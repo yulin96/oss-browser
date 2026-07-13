@@ -1290,7 +1290,7 @@ async function handleDrop(event: DragEvent): Promise<void> {
   )
   if (!done) return
   await loadObjects()
-  showToast(t('上传任务已完成'))
+  // showToast(t('上传任务已完成'))
 }
 
 async function downloadSelected(): Promise<void> {
@@ -1305,7 +1305,7 @@ async function downloadSelected(): Promise<void> {
     )
   )
   if (!done) return
-  showToast(t('下载任务已完成'))
+  // showToast(t('下载任务已完成'))
 }
 
 async function applyAcl(): Promise<void> {
