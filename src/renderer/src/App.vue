@@ -713,12 +713,21 @@ function confirmLogout(): void {
   })
 }
 
+let isOpeningItem = false
+
 async function openItem(item: ObjectInfo): Promise<void> {
-  if (item.isDirectory) {
-    await enterDirectory(item)
-  } else {
-    selectedNames.value = new Set([item.name])
-    await openPreview()
+  if (isOpeningItem) return
+  isOpeningItem = true
+
+  try {
+    if (item.isDirectory) {
+      await enterDirectory(item)
+    } else {
+      selectedNames.value = new Set([item.name])
+      await openPreview()
+    }
+  } finally {
+    isOpeningItem = false
   }
 }
 
@@ -1808,10 +1817,10 @@ async function checkPermissions(): Promise<void> {
               :key="item.name"
               class="table-row"
               :class="{ selected: selectedNames.has(item.name) }"
-              @dblclick="openItem(item)"
+              @click="toggleSelection(item)"
               @contextmenu="openContextMenu($event, item)"
             >
-              <div>
+              <div @click.stop>
                 <input
                   type="checkbox"
                   :checked="selectedNames.has(item.name)"
@@ -1826,7 +1835,14 @@ async function checkPermissions(): Promise<void> {
                     @error="markThumbnailFailed(item.name)"
                   />
                   <component :is="getObjectVisual(item).icon" v-else :size="18" /> </span
-                >{{ item.displayName }}
+                ><span
+                  class="file-name-label"
+                  role="button"
+                  tabindex="0"
+                  @click.stop="openItem(item)"
+                  @keydown.enter.stop="openItem(item)"
+                  >{{ item.displayName }}</span
+                >
               </div>
               <div>{{ item.isDirectory ? '—' : formatSize(item.size) }}</div>
               <div>{{ item.storageClass || t('标准') }}</div>

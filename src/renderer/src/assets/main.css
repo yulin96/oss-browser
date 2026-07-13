@@ -1037,6 +1037,13 @@ input[type='checkbox']:checked::after {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.file-name-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.file-name-label:hover {
+  text-decoration: underline;
+}
 .file-icon {
   color: #5f9fe9;
   font-size: 17px;
