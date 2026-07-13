@@ -1517,7 +1517,22 @@ async function checkPermissions(): Promise<void> {
               <div class="textarea-wrap">
                 <textarea v-model.trim="authToken" :placeholder="t('粘贴 Base64 授权码')" />
               </div>
-              <div v-if="errorMessage" class="error-box">{{ errorMessage }}</div>
+              <div v-if="errorMessage" class="error-box">
+                <span>{{ errorMessage }}</span>
+                <AppTooltip :label="t('关闭')">
+                  <div
+                    class="error-dismiss"
+                    role="button"
+                    tabindex="0"
+                    :aria-label="t('关闭')"
+                    @click="errorMessage = ''"
+                    @keydown.enter="errorMessage = ''"
+                    @keydown.space.prevent="errorMessage = ''"
+                  >
+                    <X :size="16" />
+                  </div>
+                </AppTooltip>
+              </div>
             </div>
             <AppButton
               class="token-connect-button"
@@ -1585,7 +1600,22 @@ async function checkPermissions(): Promise<void> {
                   ><input v-model="auth.remember" type="checkbox" /> {{ t('记住登录信息') }}</label
                 >
               </div>
-              <div v-if="errorMessage" class="error-box">{{ errorMessage }}</div>
+              <div v-if="errorMessage" class="error-box">
+                <span>{{ errorMessage }}</span>
+                <AppTooltip :label="t('关闭')">
+                  <div
+                    class="error-dismiss"
+                    role="button"
+                    tabindex="0"
+                    :aria-label="t('关闭')"
+                    @click="errorMessage = ''"
+                    @keydown.enter="errorMessage = ''"
+                    @keydown.space.prevent="errorMessage = ''"
+                  >
+                    <X :size="16" />
+                  </div>
+                </AppTooltip>
+              </div>
             </div>
             <AppButton
               :label="t('连接')"
@@ -1795,7 +1825,22 @@ async function checkPermissions(): Promise<void> {
             </div>
           </div>
 
-          <div v-if="errorMessage" class="error-strip">{{ errorMessage }}</div>
+          <div v-if="errorMessage" class="error-strip">
+            <span>{{ errorMessage }}</span>
+            <AppTooltip :label="t('关闭')">
+              <div
+                class="error-dismiss"
+                role="button"
+                tabindex="0"
+                :aria-label="t('关闭')"
+                @click="errorMessage = ''"
+                @keydown.enter="errorMessage = ''"
+                @keydown.space.prevent="errorMessage = ''"
+              >
+                <X :size="16" />
+              </div>
+            </AppTooltip>
+          </div>
           <div v-if="viewMode === 'list'" class="file-table" @click="handleBlankClick">
             <div class="table-row table-head">
               <div>
