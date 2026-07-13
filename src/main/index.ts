@@ -15,7 +15,7 @@ import { OssService } from './oss-service'
 import { ProfileStore } from './profile-store'
 import { UpdateService } from './update-service'
 
-app.setPath('userData', join(app.getPath('appData'), 'oss-browser'))
+app.setPath('userData', join(app.getPath('appData'), is.dev ? 'oss-browser-dev' : 'oss-browser'))
 app.setName('OSS Browser')
 
 let mainWindow: BrowserWindow | null = null
@@ -193,7 +193,7 @@ function registerIpc(): void {
   ipcMain.handle('updates:install', () => updates.install())
 }
 
-const hasSingleInstanceLock = app.requestSingleInstanceLock()
+const hasSingleInstanceLock = is.dev || app.requestSingleInstanceLock()
 if (!hasSingleInstanceLock) app.quit()
 
 app.on('second-instance', () => {

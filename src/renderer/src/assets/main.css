@@ -650,7 +650,7 @@ input[type='checkbox']:checked::after {
 }
 .bucket-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
   gap: 14px;
 }
 .bucket-card {
@@ -851,6 +851,28 @@ input[type='checkbox']:checked::after {
 }
 .more-actions {
   position: relative;
+}
+.upload-menu {
+  right: auto;
+  left: 0;
+  width: 140px;
+  transition:
+    visibility 0s linear 80ms,
+    opacity 80ms ease;
+}
+.upload-menu::before {
+  position: absolute;
+  right: 0;
+  bottom: 100%;
+  left: 0;
+  height: 8px;
+  content: '';
+}
+.upload-actions.open .upload-menu {
+  visibility: visible;
+  pointer-events: auto;
+  opacity: 1;
+  transition-delay: 0s;
 }
 .view-switch {
   display: flex;

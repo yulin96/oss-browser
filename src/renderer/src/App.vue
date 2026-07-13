@@ -3,6 +3,7 @@ import {
   ArrowLeft,
   ArrowRight,
   ArrowUp,
+  ChevronDown,
   CircleCheck,
   ClipboardPaste,
   Copy,
@@ -153,6 +154,7 @@ const modal = ref<ModalName>(null)
 const showProfilesModal = ref(false)
 const transfers = ref<TransferItem[]>([])
 const showTransfers = ref(false)
+const showUploadActions = ref(false)
 const showMoreActions = ref(false)
 const contextMenu = reactive({ visible: false, x: 0, y: 0 })
 const emptyContextMenu = reactive({ visible: false, x: 0, y: 0 })
@@ -192,7 +194,7 @@ const auth = reactive<AuthConfig>({
   accessKeySecret: '',
   stsToken: '',
   secure: true,
-  remember: false,
+  remember: true,
   presetPath: ''
 })
 const authTask = useAsyncTask(clearAsyncErrors)
@@ -480,6 +482,7 @@ function resetAccountRuntimeState(): void {
   toastMessage.value = ''
   transfers.value = []
   showTransfers.value = false
+  showUploadActions.value = false
   showMoreActions.value = false
   contextMenu.visible = false
   emptyContextMenu.visible = false
@@ -534,6 +537,7 @@ function resetAccountRuntimeState(): void {
 function closeFloatingMenus(event: PointerEvent): void {
   const target = event.target as HTMLElement
   if (!target.closest('.more-actions') && !target.closest('.context-menu')) {
+    showUploadActions.value = false
     showMoreActions.value = false
     contextMenu.visible = false
     emptyContextMenu.visible = false
@@ -543,6 +547,7 @@ function closeFloatingMenus(event: PointerEvent): void {
 
 function handleGlobalKeydown(event: KeyboardEvent): void {
   if (event.key === 'Escape') {
+    showUploadActions.value = false
     showMoreActions.value = false
     contextMenu.visible = false
     emptyContextMenu.visible = false
@@ -553,6 +558,7 @@ function handleGlobalKeydown(event: KeyboardEvent): void {
 function openContextMenu(event: MouseEvent, item: ObjectInfo): void {
   event.preventDefault()
   if (!selectedNames.value.has(item.name)) selectedNames.value = new Set([item.name])
+  showUploadActions.value = false
   showMoreActions.value = false
   contextMenu.x = Math.min(event.clientX, window.innerWidth - 220)
   contextMenu.y = Math.max(8, Math.min(event.clientY, window.innerHeight - 440))
@@ -564,11 +570,12 @@ function openEmptyContextMenu(event: MouseEvent): void {
   const target = event.target as HTMLElement
   if (target.closest('.object-card, .table-row, .toolbar, .quick-nav, .context-menu')) return
   event.preventDefault()
+  showUploadActions.value = false
   showMoreActions.value = false
   contextMenu.visible = false
   selectedNames.value = new Set()
   emptyContextMenu.x = Math.min(event.clientX, window.innerWidth - 200)
-  emptyContextMenu.y = Math.min(event.clientY, window.innerHeight - 150)
+  emptyContextMenu.y = Math.min(event.clientY, window.innerHeight - 190)
   emptyContextMenu.visible = true
 }
 
@@ -585,10 +592,26 @@ function handleBlankClick(event: MouseEvent): void {
 }
 
 function closeActions(): void {
+  showUploadActions.value = false
   showMoreActions.value = false
   contextMenu.visible = false
   emptyContextMenu.visible = false
   bucketMenu.visible = false
+}
+
+function toggleUploadActions(): void {
+  showUploadActions.value = !showUploadActions.value
+  showMoreActions.value = false
+}
+
+function toggleMoreActions(): void {
+  showMoreActions.value = !showMoreActions.value
+  showUploadActions.value = false
+}
+
+function selectUpload(kind: 'files' | 'folder'): void {
+  showUploadActions.value = false
+  void upload(kind)
 }
 
 function openBucketMenu(event: MouseEvent, bucket: BucketInfo): void {
@@ -1733,13 +1756,27 @@ async function checkPermissions(): Promise<void> {
           </div>
 
           <div class="toolbar">
-            <AppButton
-              :label="t('上传文件')"
-              :icon="Upload"
-              tone="primary"
-              @click="upload('files')"
-            />
-            <AppButton :label="t('上传文件夹')" :icon="FolderUp" @click="upload('folder')" />
+            <div
+              class="more-actions upload-actions group"
+              :class="{ open: showUploadActions }"
+              @mouseenter="showMoreActions = false"
+            >
+              <AppButton
+                :label="t('上传')"
+                :icon="Upload"
+                :end-icon="ChevronDown"
+                tone="primary"
+                @click="toggleUploadActions"
+              />
+              <div
+                class="more-menu upload-menu invisible pointer-events-none opacity-0 group-hover:visible group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:visible group-focus-within:pointer-events-auto group-focus-within:opacity-100"
+              >
+                <div @click="selectUpload('files')"><Upload :size="15" />{{ t('上传文件') }}</div>
+                <div @click="selectUpload('folder')">
+                  <FolderUp :size="15" />{{ t('上传文件夹') }}
+                </div>
+              </div>
+            </div>
             <AppButton
               :label="t('新建文件夹')"
               :icon="FolderPlus"
@@ -1786,7 +1823,7 @@ async function checkPermissions(): Promise<void> {
                 :label="t('更多')"
                 :icon="MoreHorizontal"
                 tone="ghost"
-                @click="showMoreActions = !showMoreActions"
+                @click="toggleMoreActions"
               />
               <ObjectActionMenu
                 v-if="showMoreActions"
@@ -2019,6 +2056,7 @@ async function checkPermissions(): Promise<void> {
         @click="closeActions"
       >
         <div @click="upload('files')"><Upload :size="15" />{{ t('上传文件') }}</div>
+        <div @click="upload('folder')"><FolderUp :size="15" />{{ t('上传文件夹') }}</div>
         <div @click="openModal('create-folder')">
           <FolderPlus :size="15" />{{ t('新建文件夹') }}
         </div>

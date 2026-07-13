@@ -4,6 +4,7 @@ import type { Component } from 'vue'
 defineProps<{
   label: string
   icon?: Component
+  endIcon?: Component
   tone?: 'primary' | 'default' | 'danger' | 'ghost'
   disabled?: boolean
 }>()
@@ -22,5 +23,6 @@ const emit = defineEmits<{ click: [] }>()
   >
     <component :is="icon" v-if="icon" :size="15" />
     {{ label }}
+    <component :is="endIcon" v-if="endIcon" :size="14" />
   </div>
 </template>
