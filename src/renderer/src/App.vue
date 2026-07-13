@@ -2026,691 +2026,721 @@ async function checkPermissions(): Promise<void> {
 
     <Transition name="modal" appear>
       <ModalShell
-      v-if="modal === 'favorites'"
-      :title="t('收藏管理')"
-      size="large"
-      @close="modal = null"
-    >
-      <div v-if="!favorites.length" class="modal-empty">{{ t('暂无收藏目录') }}</div>
-      <div
-        v-for="favorite in favorites"
-        :key="`${favorite.bucket}/${favorite.prefix}`"
-        class="favorite-row"
+        v-if="modal === 'favorites'"
+        :title="t('收藏管理')"
+        size="large"
+        @close="modal = null"
       >
-        <div role="button" tabindex="0" @click="openFavorite(favorite)">
-          <Star :size="17" /><span>oss://{{ favorite.bucket }}/{{ favorite.prefix }}</span>
-        </div>
-        <AppTooltip :label="t('删除收藏')">
-          <div class="icon-button danger" @click="removeFavorite(favorite)">
-            <Trash2 :size="16" />
+        <div v-if="!favorites.length" class="modal-empty">{{ t('暂无收藏目录') }}</div>
+        <div
+          v-for="favorite in favorites"
+          :key="`${favorite.bucket}/${favorite.prefix}`"
+          class="favorite-row"
+        >
+          <div role="button" tabindex="0" @click="openFavorite(favorite)">
+            <Star :size="17" /><span>oss://{{ favorite.bucket }}/{{ favorite.prefix }}</span>
           </div>
-        </AppTooltip>
-      </div>
-    </ModalShell>
+          <AppTooltip :label="t('删除收藏')">
+            <div class="icon-button danger" @click="removeFavorite(favorite)">
+              <Trash2 :size="16" />
+            </div>
+          </AppTooltip>
+        </div>
+      </ModalShell>
     </Transition>
 
     <Transition name="modal" appear>
       <ModalShell v-if="modal === 'cache'" :title="t('刷新 CDN 缓存')" @close="modal = null">
-      <label class="field-label">{{ t('CDN 加速域名') }}</label>
-      <div class="select-wrap">
-        <select v-model="selectedCdnDomain" @change="updateCacheDomain">
-          <option v-for="domain in cdnDomains" :key="domain" :value="domain">{{ domain }}</option>
-        </select>
-      </div>
-      <label class="field-label">{{ t('刷新类型') }}</label>
-      <div class="select-wrap">
-        <select v-model="cacheForm.objectType">
-          <option value="File">{{ t('文件') }}</option>
-          <option value="Directory">{{ t('目录') }}</option>
-          <option value="Regex">{{ t('正则') }}</option>
-        </select>
-      </div>
-      <label class="field-label">URL</label>
-      <div class="textarea-wrap">
-        <textarea
-          v-model.trim="cacheForm.objectPath"
-          rows="5"
-          placeholder="https://static.example.com/path/"
-        />
-      </div>
-      <label class="check-row"
-        ><input v-model="cacheForm.force" type="checkbox" /> {{ t('强制刷新') }}</label
-      >
-      <template #footer>
-        <AppButton :label="t('取消')" @click="modal = null" />
-        <AppButton
-          :label="t('提交刷新')"
-          tone="primary"
-          :disabled="!cacheForm.objectPath"
-          @click="confirmCacheRefresh"
-        />
-      </template>
-    </ModalShell>
+        <label class="field-label">{{ t('CDN 加速域名') }}</label>
+        <div class="select-wrap">
+          <select v-model="selectedCdnDomain" @change="updateCacheDomain">
+            <option v-for="domain in cdnDomains" :key="domain" :value="domain">{{ domain }}</option>
+          </select>
+        </div>
+        <label class="field-label">{{ t('刷新类型') }}</label>
+        <div class="select-wrap">
+          <select v-model="cacheForm.objectType">
+            <option value="File">{{ t('文件') }}</option>
+            <option value="Directory">{{ t('目录') }}</option>
+            <option value="Regex">{{ t('正则') }}</option>
+          </select>
+        </div>
+        <label class="field-label">URL</label>
+        <div class="textarea-wrap">
+          <textarea
+            v-model.trim="cacheForm.objectPath"
+            rows="5"
+            placeholder="https://static.example.com/path/"
+          />
+        </div>
+        <label class="check-row"
+          ><input v-model="cacheForm.force" type="checkbox" /> {{ t('强制刷新') }}</label
+        >
+        <template #footer>
+          <AppButton :label="t('取消')" @click="modal = null" />
+          <AppButton
+            :label="t('提交刷新')"
+            tone="primary"
+            :disabled="!cacheForm.objectPath"
+            @click="confirmCacheRefresh"
+          />
+        </template>
+      </ModalShell>
     </Transition>
 
     <Transition name="modal" appear>
       <ModalShell v-if="modal === 'create-bucket'" :title="t('新建 Bucket')" @close="modal = null">
-      <label class="field-label">{{ t('Bucket 名称') }}</label>
-      <div class="input-wrap">
-        <input v-model.trim="form.name" :placeholder="t('全局唯一名称')" />
-      </div>
-      <label class="field-label">{{ t('地域') }}</label>
-      <div class="select-wrap">
-        <select v-model="form.region">
-          <option v-for="item in OSS_REGIONS" :key="item.id" :value="item.id">
-            {{ t(item.label) }} ({{ item.id }})
-          </option>
-        </select>
-      </div>
-      <label class="field-label">{{ t('读写权限') }}</label>
-      <div class="select-wrap">
-        <select v-model="form.acl">
-          <option value="private">{{ t('私有') }}</option>
-          <option value="public-read">{{ t('公共读') }}</option>
-          <option value="public-read-write">{{ t('公共读写') }}</option>
-        </select>
-      </div>
-      <template #footer
-        ><AppButton :label="t('取消')" @click="modal = null" /><AppButton
-          :label="t('创建')"
-          tone="primary"
-          :disabled="!form.name"
-          @click="createBucket"
-      /></template>
-    </ModalShell>
+        <label class="field-label">{{ t('Bucket 名称') }}</label>
+        <div class="input-wrap">
+          <input v-model.trim="form.name" :placeholder="t('全局唯一名称')" />
+        </div>
+        <label class="field-label">{{ t('地域') }}</label>
+        <div class="select-wrap">
+          <select v-model="form.region">
+            <option v-for="item in OSS_REGIONS" :key="item.id" :value="item.id">
+              {{ t(item.label) }} ({{ item.id }})
+            </option>
+          </select>
+        </div>
+        <label class="field-label">{{ t('读写权限') }}</label>
+        <div class="select-wrap">
+          <select v-model="form.acl">
+            <option value="private">{{ t('私有') }}</option>
+            <option value="public-read">{{ t('公共读') }}</option>
+            <option value="public-read-write">{{ t('公共读写') }}</option>
+          </select>
+        </div>
+        <template #footer
+          ><AppButton :label="t('取消')" @click="modal = null" /><AppButton
+            :label="t('创建')"
+            tone="primary"
+            :disabled="!form.name"
+            @click="createBucket"
+        /></template>
+      </ModalShell>
     </Transition>
 
     <Transition name="modal" appear>
       <ModalShell v-if="modal === 'create-folder'" :title="t('新建文件夹')" @close="modal = null">
-      <label class="field-label">{{ t('文件夹名称') }}</label>
-      <div class="input-wrap"><input v-model.trim="form.name" @keydown.enter="createFolder" /></div>
-      <template #footer
-        ><AppButton :label="t('取消')" @click="modal = null" /><AppButton
-          :label="t('创建')"
-          tone="primary"
-          :disabled="!form.name"
-          @click="createFolder"
-      /></template>
-    </ModalShell>
+        <label class="field-label">{{ t('文件夹名称') }}</label>
+        <div class="input-wrap">
+          <input v-model.trim="form.name" @keydown.enter="createFolder" />
+        </div>
+        <template #footer
+          ><AppButton :label="t('取消')" @click="modal = null" /><AppButton
+            :label="t('创建')"
+            tone="primary"
+            :disabled="!form.name"
+            @click="createFolder"
+        /></template>
+      </ModalShell>
     </Transition>
 
     <Transition name="modal" appear>
-      <ModalShell v-if="modal === 'bucket-acl'" :title="t('设置 Bucket 权限')" @close="modal = null">
-      <div class="select-wrap">
-        <select v-model="form.acl">
-          <option value="private">{{ t('私有') }}</option>
-          <option value="public-read">{{ t('公共读') }}</option>
-          <option value="public-read-write">{{ t('公共读写') }}</option>
-        </select>
-      </div>
-      <template #footer
-        ><AppButton :label="t('取消')" @click="modal = null" /><AppButton
-          :label="t('保存')"
-          tone="primary"
-          @click="applyBucketAcl"
-      /></template>
-    </ModalShell>
+      <ModalShell
+        v-if="modal === 'bucket-acl'"
+        :title="t('设置 Bucket 权限')"
+        @close="modal = null"
+      >
+        <div class="select-wrap">
+          <select v-model="form.acl">
+            <option value="private">{{ t('私有') }}</option>
+            <option value="public-read">{{ t('公共读') }}</option>
+            <option value="public-read-write">{{ t('公共读写') }}</option>
+          </select>
+        </div>
+        <template #footer
+          ><AppButton :label="t('取消')" @click="modal = null" /><AppButton
+            :label="t('保存')"
+            tone="primary"
+            @click="applyBucketAcl"
+        /></template>
+      </ModalShell>
     </Transition>
 
     <Transition name="modal" appear>
       <ModalShell v-if="modal === 'rename'" :title="t('重命名')" @close="modal = null">
-      <label class="field-label">{{ t('目标名称') }}</label>
-      <div class="input-wrap"><input v-model.trim="form.target" /></div>
-      <template #footer
-        ><AppButton :label="t('取消')" @click="modal = null" /><AppButton
-          :label="t('确定')"
-          tone="primary"
-          :disabled="!form.target"
-          @click="renameSelected"
-      /></template>
-    </ModalShell>
+        <label class="field-label">{{ t('目标名称') }}</label>
+        <div class="input-wrap"><input v-model.trim="form.target" /></div>
+        <template #footer
+          ><AppButton :label="t('取消')" @click="modal = null" /><AppButton
+            :label="t('确定')"
+            tone="primary"
+            :disabled="!form.target"
+            @click="renameSelected"
+        /></template>
+      </ModalShell>
     </Transition>
 
     <Transition name="modal" appear>
       <ModalShell v-if="modal === 'paste-copy'" :title="t('粘贴副本')" @close="modal = null">
-      <label class="field-label">{{ t('新名称') }}</label>
-      <div class="input-wrap"><input v-model.trim="form.target" /></div>
-      <p class="modal-hint">
-        {{
-          pasteTargetExists
-            ? t('该名称已存在，请输入一个新名称。')
-            : t('修改名称后，将在当前目录创建一个副本。')
-        }}
-      </p>
-      <template #footer
-        ><AppButton :label="t('取消')" @click="modal = null" /><AppButton
-          :label="t('创建副本')"
-          tone="primary"
-          :disabled="!form.target || pasteTargetExists"
-          @click="pasteWithNewName"
-      /></template>
-    </ModalShell>
+        <label class="field-label">{{ t('新名称') }}</label>
+        <div class="input-wrap"><input v-model.trim="form.target" /></div>
+        <p class="modal-hint">
+          {{
+            pasteTargetExists
+              ? t('该名称已存在，请输入一个新名称。')
+              : t('修改名称后，将在当前目录创建一个副本。')
+          }}
+        </p>
+        <template #footer
+          ><AppButton :label="t('取消')" @click="modal = null" /><AppButton
+            :label="t('创建副本')"
+            tone="primary"
+            :disabled="!form.target || pasteTargetExists"
+            @click="pasteWithNewName"
+        /></template>
+      </ModalShell>
     </Transition>
 
     <Transition name="modal" appear>
       <ModalShell v-if="modal === 'move'" :title="t('移动对象')" @close="modal = null">
-      <label class="field-label">{{ t('目标 OSS 路径') }}</label>
-      <div class="input-wrap">
-        <input v-model.trim="form.target" placeholder="oss://bucket/path/" />
-      </div>
-      <p class="modal-hint">{{ t('支持其他目录和其他 Bucket。') }}</p>
-      <template #footer
-        ><AppButton :label="t('取消')" @click="modal = null" /><AppButton
-          :label="t('确定')"
-          tone="primary"
-          :disabled="!form.target.startsWith('oss://')"
-          @click="transferSelected(true)"
-      /></template>
-    </ModalShell>
+        <label class="field-label">{{ t('目标 OSS 路径') }}</label>
+        <div class="input-wrap">
+          <input v-model.trim="form.target" placeholder="oss://bucket/path/" />
+        </div>
+        <p class="modal-hint">{{ t('支持其他目录和其他 Bucket。') }}</p>
+        <template #footer
+          ><AppButton :label="t('取消')" @click="modal = null" /><AppButton
+            :label="t('确定')"
+            tone="primary"
+            :disabled="!form.target.startsWith('oss://')"
+            @click="transferSelected(true)"
+        /></template>
+      </ModalShell>
     </Transition>
 
     <Transition name="modal" appear>
       <ModalShell v-if="modal === 'acl'" :title="t('设置对象权限')" @close="modal = null">
-      <div class="select-wrap">
-        <select v-model="form.acl">
-          <option value="default">{{ t('继承 Bucket') }}</option>
-          <option value="private">{{ t('私有') }}</option>
-          <option value="public-read">{{ t('公共读') }}</option>
-          <option value="public-read-write">{{ t('公共读写') }}</option>
-        </select>
-      </div>
-      <template #footer
-        ><AppButton :label="t('取消')" @click="modal = null" /><AppButton
-          :label="t('保存')"
-          tone="primary"
-          @click="applyAcl"
-      /></template>
-    </ModalShell>
+        <div class="select-wrap">
+          <select v-model="form.acl">
+            <option value="default">{{ t('继承 Bucket') }}</option>
+            <option value="private">{{ t('私有') }}</option>
+            <option value="public-read">{{ t('公共读') }}</option>
+            <option value="public-read-write">{{ t('公共读写') }}</option>
+          </select>
+        </div>
+        <template #footer
+          ><AppButton :label="t('取消')" @click="modal = null" /><AppButton
+            :label="t('保存')"
+            tone="primary"
+            @click="applyAcl"
+        /></template>
+      </ModalShell>
     </Transition>
 
     <Transition name="modal" appear>
       <ModalShell v-if="modal === 'headers'" :title="t('设置 HTTP 头')" @close="modal = null">
-      <label class="field-label">Cache-Control</label>
-      <div class="input-wrap">
-        <input v-model.trim="form.cacheControl" placeholder="例如 max-age=3600" />
-      </div>
-      <label class="field-label">Content-Type</label>
-      <div class="input-wrap">
-        <input v-model.trim="form.contentType" placeholder="例如 image/png" />
-      </div>
-      <label class="field-label">Content-Disposition</label>
-      <div class="input-wrap">
-        <input v-model.trim="form.contentDisposition" placeholder="例如 attachment" />
-      </div>
-      <template #footer
-        ><AppButton :label="t('取消')" @click="modal = null" /><AppButton
-          :label="t('保存')"
-          tone="primary"
-          @click="applyHeaders"
-      /></template>
-    </ModalShell>
+        <label class="field-label">Cache-Control</label>
+        <div class="input-wrap">
+          <input v-model.trim="form.cacheControl" placeholder="例如 max-age=3600" />
+        </div>
+        <label class="field-label">Content-Type</label>
+        <div class="input-wrap">
+          <input v-model.trim="form.contentType" placeholder="例如 image/png" />
+        </div>
+        <label class="field-label">Content-Disposition</label>
+        <div class="input-wrap">
+          <input v-model.trim="form.contentDisposition" placeholder="例如 attachment" />
+        </div>
+        <template #footer
+          ><AppButton :label="t('取消')" @click="modal = null" /><AppButton
+            :label="t('保存')"
+            tone="primary"
+            @click="applyHeaders"
+        /></template>
+      </ModalShell>
     </Transition>
 
     <Transition name="modal" appear>
-      <ModalShell v-if="modal === 'share'" :title="t('获取地址')" width="680px" @close="modal = null">
-      <div v-if="sharePreparing" class="share-loading">{{ t('正在检查地址访问权限…') }}</div>
-      <template v-else>
-        <label class="field-label">{{ t('访问域名') }}</label>
-        <div class="select-wrap">
-          <select v-model="selectedDomain" @change="previewUrl && createShareLink()">
-            <option v-for="domain in domainOptions" :key="domain" :value="domain">
-              {{ domain }}
-            </option>
-          </select>
-        </div>
-        <div v-if="shareNeedsExpiry && !previewUrl" class="share-expiry-step">
-          <div>
-            <label class="field-label">{{ t('有效期（秒）') }}</label>
-            <div class="input-wrap">
-              <input
-                v-model.number="form.expires"
-                type="number"
-                min="1"
-                @keydown.enter="createShareLink"
+      <ModalShell
+        v-if="modal === 'share'"
+        :title="t('获取地址')"
+        width="680px"
+        @close="modal = null"
+      >
+        <div v-if="sharePreparing" class="share-loading">{{ t('正在检查地址访问权限…') }}</div>
+        <template v-else>
+          <label class="field-label">{{ t('访问域名') }}</label>
+          <div class="select-wrap">
+            <select v-model="selectedDomain" @change="previewUrl && createShareLink()">
+              <option v-for="domain in domainOptions" :key="domain" :value="domain">
+                {{ domain }}
+              </option>
+            </select>
+          </div>
+          <div v-if="shareNeedsExpiry && !previewUrl" class="share-expiry-step">
+            <div>
+              <label class="field-label">{{ t('有效期（秒）') }}</label>
+              <div class="input-wrap">
+                <input
+                  v-model.number="form.expires"
+                  type="number"
+                  min="1"
+                  @keydown.enter="createShareLink"
+                />
+              </div>
+            </div>
+            <AppButton :label="t('生成')" tone="primary" @click="createShareLink" />
+          </div>
+
+          <template v-if="previewUrl">
+            <label class="field-label">{{ t('地址') }}</label>
+            <div class="textarea-wrap share-address-input">
+              <textarea :value="previewUrl" rows="3" readonly />
+              <AppButton
+                class="share-copy-button"
+                :class="{ 'is-copied': shareCopied }"
+                :label="shareCopied ? t('已复制') : t('复制')"
+                :icon="shareCopied ? CircleCheck : Copy"
+                tone="default"
+                @click="copyShareUrl"
               />
             </div>
-          </div>
-          <AppButton :label="t('生成')" tone="primary" @click="createShareLink" />
-        </div>
+            <div v-if="previewType === 'image' || previewType === 'video'" class="share-media-row">
+              <span>{{ t('媒体处理') }}</span>
+              <div
+                v-for="option in mediaProcessOptions"
+                :key="option.id"
+                class="media-process-tag"
+                :class="{ active: selectedMediaProcesses.includes(option.id) }"
+                role="button"
+                tabindex="0"
+                @click="toggleMediaProcess(option.id)"
+                @keydown.enter="toggleMediaProcess(option.id)"
+              >
+                {{ t(option.label) }}
+              </div>
+            </div>
+          </template>
+        </template>
+      </ModalShell>
+    </Transition>
 
-        <template v-if="previewUrl">
-          <label class="field-label">{{ t('地址') }}</label>
-          <div class="textarea-wrap share-address-input">
-            <textarea :value="previewUrl" rows="3" readonly />
-            <AppButton
-              class="share-copy-button"
-              :class="{ 'is-copied': shareCopied }"
-              :label="shareCopied ? t('已复制') : t('复制')"
-              :icon="shareCopied ? CircleCheck : Copy"
-              tone="default"
-              @click="copyShareUrl"
-            />
-          </div>
-          <div v-if="previewType === 'image' || previewType === 'video'" class="share-media-row">
-            <span>{{ t('媒体处理') }}</span>
-            <div
-              v-for="option in mediaProcessOptions"
-              :key="option.id"
-              class="media-process-tag"
-              :class="{ active: selectedMediaProcesses.includes(option.id) }"
-              role="button"
-              tabindex="0"
-              @click="toggleMediaProcess(option.id)"
-              @keydown.enter="toggleMediaProcess(option.id)"
-            >
-              {{ t(option.label) }}
+    <Transition name="modal" appear>
+      <ModalShell
+        v-if="modal === 'preview'"
+        :title="t('预览：{name}', { name: selectedObjects[0]?.displayName || '' })"
+        width="800px"
+        @close="modal = null"
+      >
+        <div class="preview-area">
+          <img v-if="previewType === 'image'" :src="previewUrl" />
+          <video v-else-if="previewType === 'video'" :src="previewUrl" controls autoplay />
+          <audio v-else-if="previewType === 'audio'" :src="previewUrl" controls autoplay />
+          <iframe
+            v-else-if="previewType === 'pdf' || previewType === 'document'"
+            :src="previewUrl"
+          />
+          <div v-else-if="previewType === 'text'" class="text-preview">
+            <textarea v-model="previewText" spellcheck="false" />
+            <div class="text-preview-actions">
+              <AppButton :label="t('保存修改')" tone="primary" @click="savePreviewText" />
             </div>
           </div>
-        </template>
-      </template>
-    </ModalShell>
-    </Transition>
-
-    <Transition name="modal" appear>
-      <ModalShell
-      v-if="modal === 'preview'"
-      :title="t('预览：{name}', { name: selectedObjects[0]?.displayName || '' })"
-      width="800px"
-      @close="modal = null"
-    >
-      <div class="preview-area">
-        <img v-if="previewType === 'image'" :src="previewUrl" />
-        <video v-else-if="previewType === 'video'" :src="previewUrl" controls autoplay />
-        <audio v-else-if="previewType === 'audio'" :src="previewUrl" controls autoplay />
-        <iframe v-else-if="previewType === 'pdf' || previewType === 'document'" :src="previewUrl" />
-        <div v-else-if="previewType === 'text'" class="text-preview">
-          <textarea v-model="previewText" spellcheck="false" />
-          <div class="text-preview-actions">
-            <AppButton :label="t('保存修改')" tone="primary" @click="savePreviewText" />
+          <div v-else class="preview-unknown">
+            <span>{{ t('该格式暂不支持直接预览') }}</span
+            ><AppButton
+              :label="t('在浏览器中打开')"
+              tone="primary"
+              @click="openPreviewExternally"
+            />
           </div>
         </div>
-        <div v-else class="preview-unknown">
-          <span>{{ t('该格式暂不支持直接预览') }}</span
-          ><AppButton :label="t('在浏览器中打开')" tone="primary" @click="openPreviewExternally" />
-        </div>
-      </div>
-    </ModalShell>
+      </ModalShell>
     </Transition>
 
     <Transition name="modal" appear>
       <ModalShell
-      v-if="modal === 'multipart'"
-      :title="t('未完成的分片上传')"
-      width="720px"
-      @close="modal = null"
-    >
-      <div v-if="!multipartUploads.length" class="modal-empty">
-        {{ t('没有未完成的分片上传') }}
-      </div>
-      <div v-for="part in multipartUploads" :key="part.uploadId" class="multipart-row">
-        <div>
-          <strong>{{ part.name }}</strong
-          ><span>{{ part.initiated || part.uploadId }}</span>
+        v-if="modal === 'multipart'"
+        :title="t('未完成的分片上传')"
+        width="720px"
+        @close="modal = null"
+      >
+        <div v-if="!multipartUploads.length" class="modal-empty">
+          {{ t('没有未完成的分片上传') }}
         </div>
-        <AppButton :label="t('终止')" tone="danger" @click="abortMultipart(part)" />
-      </div>
-    </ModalShell>
+        <div v-for="part in multipartUploads" :key="part.uploadId" class="multipart-row">
+          <div>
+            <strong>{{ part.name }}</strong
+            ><span>{{ part.initiated || part.uploadId }}</span>
+          </div>
+          <AppButton :label="t('终止')" tone="danger" @click="abortMultipart(part)" />
+        </div>
+      </ModalShell>
     </Transition>
 
     <Transition name="modal" appear>
       <ModalShell v-if="modal === 'symlink'" :title="t('创建软链接')" @close="modal = null">
-      <label class="field-label">{{ t('软链接名称') }}</label>
-      <div class="input-wrap"><input v-model.trim="form.name" /></div>
-      <p class="modal-hint">
-        {{ t('目标对象：{name}', { name: selectedObjects[0]?.name || '' }) }}
-      </p>
-      <template #footer
-        ><AppButton :label="t('取消')" @click="modal = null" /><AppButton
-          :label="t('创建')"
-          tone="primary"
-          :disabled="!form.name"
-          @click="createSymlink"
-      /></template>
-    </ModalShell>
+        <label class="field-label">{{ t('软链接名称') }}</label>
+        <div class="input-wrap"><input v-model.trim="form.name" /></div>
+        <p class="modal-hint">
+          {{ t('目标对象：{name}', { name: selectedObjects[0]?.name || '' }) }}
+        </p>
+        <template #footer
+          ><AppButton :label="t('取消')" @click="modal = null" /><AppButton
+            :label="t('创建')"
+            tone="primary"
+            :disabled="!form.name"
+            @click="createSymlink"
+        /></template>
+      </ModalShell>
     </Transition>
 
     <Transition name="modal" appear>
       <ModalShell v-if="modal === 'restore'" :title="t('恢复归档对象')" @close="modal = null">
-      <label class="field-label">{{ t('保持可读天数') }}</label>
-      <div class="input-wrap">
-        <input v-model.number="form.days" type="number" min="1" max="7" />
-      </div>
-      <p class="modal-hint">{{ t('适用于归档、冷归档和深度冷归档对象。') }}</p>
-      <template #footer
-        ><AppButton :label="t('取消')" @click="modal = null" /><AppButton
-          :label="t('提交恢复')"
-          tone="primary"
-          @click="restoreSelected"
-      /></template>
-    </ModalShell>
+        <label class="field-label">{{ t('保持可读天数') }}</label>
+        <div class="input-wrap">
+          <input v-model.number="form.days" type="number" min="1" max="7" />
+        </div>
+        <p class="modal-hint">{{ t('适用于归档、冷归档和深度冷归档对象。') }}</p>
+        <template #footer
+          ><AppButton :label="t('取消')" @click="modal = null" /><AppButton
+            :label="t('提交恢复')"
+            tone="primary"
+            @click="restoreSelected"
+        /></template>
+      </ModalShell>
     </Transition>
 
     <Transition name="modal" appear>
       <ModalShell
-      v-if="modal === 'details'"
-      :title="t('对象详情')"
-      width="680px"
-      @close="modal = null"
-    >
-      <div class="details-list">
-        <div v-for="(value, key) in objectDetails?.headers" :key="key">
-          <strong>{{ key }}</strong
-          ><span>{{ value }}</span>
+        v-if="modal === 'details'"
+        :title="t('对象详情')"
+        width="680px"
+        @close="modal = null"
+      >
+        <div class="details-list">
+          <div v-for="(value, key) in objectDetails?.headers" :key="key">
+            <strong>{{ key }}</strong
+            ><span>{{ value }}</span>
+          </div>
+          <div v-for="(value, key) in objectDetails?.metadata" :key="`meta-${key}`">
+            <strong>x-oss-meta-{{ key }}</strong
+            ><span>{{ value }}</span>
+          </div>
         </div>
-        <div v-for="(value, key) in objectDetails?.metadata" :key="`meta-${key}`">
-          <strong>x-oss-meta-{{ key }}</strong
-          ><span>{{ value }}</span>
-        </div>
-      </div>
-    </ModalShell>
+      </ModalShell>
     </Transition>
 
     <Transition name="modal" appear>
       <ModalShell
-      v-if="modal === 'grant'"
-      :title="t('生成临时授权码')"
-      width="620px"
-      @close="modal = null"
-    >
-      <label class="field-label">RAM 角色 ARN</label>
-      <div class="input-wrap">
-        <input v-model.trim="form.roleArn" placeholder="acs:ram::123456789:role/example" />
-      </div>
-      <label class="field-label">{{ t('权限') }}</label>
-      <div class="select-wrap">
-        <select v-model="form.privilege">
-          <option value="readOnly">{{ t('只读') }}</option>
-          <option value="readWrite">{{ t('读写') }}</option>
-          <option value="all">{{ t('全部权限') }}</option>
-        </select>
-      </div>
-      <label class="field-label">{{ t('有效期（秒）') }}</label>
-      <div class="input-wrap">
-        <input v-model.number="form.durationSeconds" type="number" min="900" max="43200" />
-      </div>
-      <div v-if="grantToken" class="grant-result">
-        <span>{{
-          t('有效期至 {date}', { date: new Date(grantExpiration).toLocaleString() })
-        }}</span>
-        <textarea :value="grantToken" readonly />
-      </div>
-      <p class="modal-hint">{{ t('需要当前账号具备 AssumeRole 权限。生成后自动复制。') }}</p>
-      <template #footer
-        ><AppButton :label="t('关闭')" @click="modal = null" /><AppButton
-          :label="t('生成并复制')"
-          tone="primary"
-          :disabled="!form.roleArn"
-          @click="createGrantToken"
-      /></template>
-    </ModalShell>
+        v-if="modal === 'grant'"
+        :title="t('生成临时授权码')"
+        width="620px"
+        @close="modal = null"
+      >
+        <label class="field-label">RAM 角色 ARN</label>
+        <div class="input-wrap">
+          <input v-model.trim="form.roleArn" placeholder="acs:ram::123456789:role/example" />
+        </div>
+        <label class="field-label">{{ t('权限') }}</label>
+        <div class="select-wrap">
+          <select v-model="form.privilege">
+            <option value="readOnly">{{ t('只读') }}</option>
+            <option value="readWrite">{{ t('读写') }}</option>
+            <option value="all">{{ t('全部权限') }}</option>
+          </select>
+        </div>
+        <label class="field-label">{{ t('有效期（秒）') }}</label>
+        <div class="input-wrap">
+          <input v-model.number="form.durationSeconds" type="number" min="900" max="43200" />
+        </div>
+        <div v-if="grantToken" class="grant-result">
+          <span>{{
+            t('有效期至 {date}', { date: new Date(grantExpiration).toLocaleString() })
+          }}</span>
+          <textarea :value="grantToken" readonly />
+        </div>
+        <p class="modal-hint">{{ t('需要当前账号具备 AssumeRole 权限。生成后自动复制。') }}</p>
+        <template #footer
+          ><AppButton :label="t('关闭')" @click="modal = null" /><AppButton
+            :label="t('生成并复制')"
+            tone="primary"
+            :disabled="!form.roleArn"
+            @click="createGrantToken"
+        /></template>
+      </ModalShell>
     </Transition>
 
     <Transition name="modal" appear>
       <ModalShell
-      v-if="modal === 'ram-users'"
-      :title="t('RAM 用户')"
-      width="760px"
-      @close="modal = null"
-    >
-      <div class="modal-toolbar">
-        <AppButton :label="t('新建用户')" tone="primary" @click="editRamUser()" />
-      </div>
-      <div v-if="!ramUsers.length" class="modal-empty">{{ t('暂无 RAM 用户') }}</div>
-      <div v-for="user in ramUsers" :key="user.userName" class="ram-row">
-        <div>
-          <strong>{{ user.userName }}</strong
-          ><span>{{ user.displayName || user.comments || '—' }}</span>
+        v-if="modal === 'ram-users'"
+        :title="t('RAM 用户')"
+        width="760px"
+        @close="modal = null"
+      >
+        <div class="modal-toolbar">
+          <AppButton :label="t('新建用户')" tone="primary" @click="editRamUser()" />
         </div>
-        <div class="ram-actions">
-          <AppButton :label="t('编辑')" @click="editRamUser(user)" />
-          <AppButton label="AccessKey" @click="openRamKeys(user)" />
-          <AppButton :label="t('删除')" tone="danger" @click="removeRamUser(user)" />
+        <div v-if="!ramUsers.length" class="modal-empty">{{ t('暂无 RAM 用户') }}</div>
+        <div v-for="user in ramUsers" :key="user.userName" class="ram-row">
+          <div>
+            <strong>{{ user.userName }}</strong
+            ><span>{{ user.displayName || user.comments || '—' }}</span>
+          </div>
+          <div class="ram-actions">
+            <AppButton :label="t('编辑')" @click="editRamUser(user)" />
+            <AppButton label="AccessKey" @click="openRamKeys(user)" />
+            <AppButton :label="t('删除')" tone="danger" @click="removeRamUser(user)" />
+          </div>
         </div>
-      </div>
-    </ModalShell>
+      </ModalShell>
     </Transition>
 
     <Transition name="modal" appear>
       <ModalShell
-      v-if="modal === 'ram-user'"
-      :title="activeRamUser ? t('编辑 RAM 用户') : t('新建 RAM 用户')"
-      @close="modal = null"
-    >
-      <label class="field-label">{{ t('用户名') }}</label>
-      <div class="input-wrap"><input v-model.trim="form.ramUserName" /></div>
-      <label class="field-label">{{ t('显示名称') }}</label>
-      <div class="input-wrap"><input v-model.trim="form.ramDisplayName" /></div>
-      <label class="field-label">{{ t('备注') }}</label>
-      <div class="input-wrap"><input v-model.trim="form.ramComments" /></div>
-      <template #footer
-        ><AppButton :label="t('取消')" @click="openRamUsers" /><AppButton
-          :label="t('保存')"
-          tone="primary"
-          :disabled="!form.ramUserName"
-          @click="saveRamUser"
-      /></template>
-    </ModalShell>
+        v-if="modal === 'ram-user'"
+        :title="activeRamUser ? t('编辑 RAM 用户') : t('新建 RAM 用户')"
+        @close="modal = null"
+      >
+        <label class="field-label">{{ t('用户名') }}</label>
+        <div class="input-wrap"><input v-model.trim="form.ramUserName" /></div>
+        <label class="field-label">{{ t('显示名称') }}</label>
+        <div class="input-wrap"><input v-model.trim="form.ramDisplayName" /></div>
+        <label class="field-label">{{ t('备注') }}</label>
+        <div class="input-wrap"><input v-model.trim="form.ramComments" /></div>
+        <template #footer
+          ><AppButton :label="t('取消')" @click="openRamUsers" /><AppButton
+            :label="t('保存')"
+            tone="primary"
+            :disabled="!form.ramUserName"
+            @click="saveRamUser"
+        /></template>
+      </ModalShell>
     </Transition>
 
     <Transition name="modal" appear>
       <ModalShell
-      v-if="modal === 'ram-keys'"
-      :title="`AccessKey：${activeRamUser?.userName || ''}`"
-      width="700px"
-      @close="modal = null"
-    >
-      <div class="modal-toolbar">
-        <AppButton :label="t('新建 AccessKey')" tone="primary" @click="createRamAccessKey" />
-      </div>
-      <div v-if="createdAccessKey" class="new-access-key">
-        <strong>{{ t('请立即保存，Secret 仅显示一次') }}</strong>
-        <span>AccessKey ID：{{ createdAccessKey.accessKeyId }}</span>
-        <span>AccessKey Secret：{{ createdAccessKey.accessKeySecret }}</span>
-      </div>
-      <div v-for="key in ramAccessKeys" :key="key.accessKeyId" class="ram-row">
-        <div>
-          <strong>{{ key.accessKeyId }}</strong
-          ><span>{{ key.status }} · {{ key.createDate }}</span>
+        v-if="modal === 'ram-keys'"
+        :title="`AccessKey：${activeRamUser?.userName || ''}`"
+        width="700px"
+        @close="modal = null"
+      >
+        <div class="modal-toolbar">
+          <AppButton :label="t('新建 AccessKey')" tone="primary" @click="createRamAccessKey" />
         </div>
-        <AppButton :label="t('删除')" tone="danger" @click="removeRamAccessKey(key)" />
-      </div>
-      <template #footer><AppButton :label="t('返回用户列表')" @click="openRamUsers" /></template>
-    </ModalShell>
+        <div v-if="createdAccessKey" class="new-access-key">
+          <strong>{{ t('请立即保存，Secret 仅显示一次') }}</strong>
+          <span>AccessKey ID：{{ createdAccessKey.accessKeyId }}</span>
+          <span>AccessKey Secret：{{ createdAccessKey.accessKeySecret }}</span>
+        </div>
+        <div v-for="key in ramAccessKeys" :key="key.accessKeyId" class="ram-row">
+          <div>
+            <strong>{{ key.accessKeyId }}</strong
+            ><span>{{ key.status }} · {{ key.createDate }}</span>
+          </div>
+          <AppButton :label="t('删除')" tone="danger" @click="removeRamAccessKey(key)" />
+        </div>
+        <template #footer><AppButton :label="t('返回用户列表')" @click="openRamUsers" /></template>
+      </ModalShell>
     </Transition>
 
     <Transition name="modal" appear>
       <ModalShell v-if="modal === 'settings'" :title="t('设置')" size="large" @close="modal = null">
-      <div class="setting-row project-setting-row">
-        <div>
-          <strong>{{ t('项目主页') }}</strong
-          ><span>github.com/yulin96/oss-browser</span>
-        </div>
-        <AppButton label="GitHub" :icon="GitFork" @click="openProjectPage" />
-      </div>
-
-      <div class="settings-section-title">{{ t('通用设置') }}</div>
-      <div class="setting-row">
-        <div>
-          <strong>{{ t('软件更新') }}</strong
-          ><span>{{ updateDescription }}</span>
-        </div>
-        <AppButton
-          :label="updateButtonLabel"
-          :icon="RefreshCw"
-          :disabled="
-            isMac || updateState.status === 'checking' || updateState.status === 'downloading'
-          "
-          @click="handleUpdateAction"
-        />
-      </div>
-      <div class="setting-row">
-        <div>
-          <strong>{{ t('外观主题') }}</strong
-          ><span>{{ t('选择浅色、深色或跟随系统') }}</span>
-        </div>
-        <div class="theme-select-buttons">
-          <div
-            :class="{ active: themeMode === 'system' }"
-            role="button"
-            tabindex="0"
-            @click="themeMode = 'system'"
-          >
-            <Monitor :size="14" />
-            <span>{{ t('跟随系统') }}</span>
-          </div>
-          <div
-            :class="{ active: themeMode === 'light' }"
-            role="button"
-            tabindex="0"
-            @click="themeMode = 'light'"
-          >
-            <Sun :size="14" />
-            <span>{{ t('浅色') }}</span>
-          </div>
-          <div
-            :class="{ active: themeMode === 'dark' }"
-            role="button"
-            tabindex="0"
-            @click="themeMode = 'dark'"
-          >
-            <Moon :size="14" />
-            <span>{{ t('深色') }}</span>
-          </div>
-        </div>
-      </div>
-      <div class="setting-row">
-        <div>
-          <strong>{{ t('连接安全') }}</strong
-          ><span>{{ t('OSS 请求默认使用 HTTPS') }}</span>
-        </div>
-        <label><input v-model="auth.secure" type="checkbox" /> HTTPS</label>
-      </div>
-      <div class="setting-row">
-        <div>
-          <strong>{{ t('图片缩略图') }}</strong
-          ><span>{{ t('在文件列表中显示图片预览') }}</span>
-        </div>
-        <label><input v-model="settings.showImagePreview" type="checkbox" /> {{ t('显示') }}</label>
-      </div>
-
-      <div class="settings-section-title">{{ t('账号与权限') }}</div>
-      <div class="setting-row">
-        <div>
-          <strong>{{ t('本地登录信息') }}</strong
-          ><span>{{ t('仅保存在当前电脑') }}</span>
-        </div>
-        <AppButton :label="t('管理账号')" @click="showProfilesModal = true" />
-      </div>
-      <div class="setting-row">
-        <div>
-          <strong>{{ t('账号权限检测') }}</strong
-          ><span>{{ t('使用只读请求检测当前凭证可访问的云服务') }}</span>
-        </div>
-        <AppButton
-          :label="permissionChecking ? t('检测中') : t('开始检测')"
-          :icon="ShieldCheck"
-          :disabled="permissionChecking"
-          @click="checkPermissions"
-        />
-      </div>
-      <div v-if="permissionResults.length" class="permission-results">
-        <div v-for="item in permissionResults" :key="item.service">
+        <div class="setting-row project-setting-row">
           <div>
-            <strong>{{ item.service }}</strong
-            ><span>{{ item.permission }}</span>
+            <strong>{{ t('项目主页') }}</strong
+            ><span>github.com/yulin96/oss-browser</span>
           </div>
-          <span class="permission-status" :class="item.status">
-            {{
-              item.status === 'accessible'
-                ? t('可访问')
-                : item.status === 'denied'
-                  ? t('无权限')
-                  : t('检测失败')
-            }}
-          </span>
+          <AppButton label="GitHub" :icon="GitFork" @click="openProjectPage" />
         </div>
-        <p>{{ t('检测结果仅代表所列只读接口，不等同于完整的 RAM 权限清单。') }}</p>
-      </div>
 
-      <div class="settings-section-title">{{ t('上传下载设置') }}</div>
-      <div class="settings-grid">
-        <label
-          >{{ t('同时上传任务') }}
-          <div class="input-wrap">
-            <input v-model.number="settings.maxUploadJobs" type="number" min="1" max="10" /></div
-        ></label>
-        <label
-          >{{ t('同时下载任务') }}
-          <div class="input-wrap">
-            <input v-model.number="settings.maxDownloadJobs" type="number" min="1" max="10" /></div
-        ></label>
-        <label
-          >{{ t('单任务并发分片') }}
-          <div class="input-wrap">
-            <input
-              v-model.number="settings.multipartParallel"
-              type="number"
-              min="1"
-              max="10"
-            /></div
-        ></label>
-        <label
-          >{{ t('上传分片大小（MB）') }}
-          <div class="input-wrap">
-            <input v-model.number="settings.partSizeMb" type="number" min="1" max="1024" /></div
-        ></label>
-        <label
-          >{{ t('连接超时（秒）') }}
-          <div class="input-wrap">
-            <input v-model.number="settings.timeoutSeconds" type="number" min="10" /></div
-        ></label>
-        <label
-          >{{ t('失败重试次数') }}
-          <div class="input-wrap">
-            <input v-model.number="settings.retryTimes" type="number" min="0" max="10" /></div
-        ></label>
-        <label
-          >{{ t('每页对象数量') }}
-          <div class="input-wrap">
-            <input v-model.number="settings.listPageSize" type="number" min="10" max="1000" /></div
-        ></label>
-      </div>
-    </ModalShell>
+        <div class="settings-section-title">{{ t('通用设置') }}</div>
+        <div class="setting-row">
+          <div>
+            <strong>{{ t('软件更新') }}</strong
+            ><span>{{ updateDescription }}</span>
+          </div>
+          <AppButton
+            :label="updateButtonLabel"
+            :icon="RefreshCw"
+            :disabled="
+              isMac || updateState.status === 'checking' || updateState.status === 'downloading'
+            "
+            @click="handleUpdateAction"
+          />
+        </div>
+        <div class="setting-row">
+          <div>
+            <strong>{{ t('外观主题') }}</strong
+            ><span>{{ t('选择浅色、深色或跟随系统') }}</span>
+          </div>
+          <div class="theme-select-buttons">
+            <div
+              :class="{ active: themeMode === 'system' }"
+              role="button"
+              tabindex="0"
+              @click="themeMode = 'system'"
+            >
+              <Monitor :size="14" />
+              <span>{{ t('跟随系统') }}</span>
+            </div>
+            <div
+              :class="{ active: themeMode === 'light' }"
+              role="button"
+              tabindex="0"
+              @click="themeMode = 'light'"
+            >
+              <Sun :size="14" />
+              <span>{{ t('浅色') }}</span>
+            </div>
+            <div
+              :class="{ active: themeMode === 'dark' }"
+              role="button"
+              tabindex="0"
+              @click="themeMode = 'dark'"
+            >
+              <Moon :size="14" />
+              <span>{{ t('深色') }}</span>
+            </div>
+          </div>
+        </div>
+        <div class="setting-row">
+          <div>
+            <strong>{{ t('连接安全') }}</strong
+            ><span>{{ t('OSS 请求默认使用 HTTPS') }}</span>
+          </div>
+          <label><input v-model="auth.secure" type="checkbox" /> HTTPS</label>
+        </div>
+        <div class="setting-row">
+          <div>
+            <strong>{{ t('图片缩略图') }}</strong
+            ><span>{{ t('在文件列表中显示图片预览') }}</span>
+          </div>
+          <label
+            ><input v-model="settings.showImagePreview" type="checkbox" /> {{ t('显示') }}</label
+          >
+        </div>
+
+        <div class="settings-section-title">{{ t('账号与权限') }}</div>
+        <div class="setting-row">
+          <div>
+            <strong>{{ t('本地登录信息') }}</strong
+            ><span>{{ t('仅保存在当前电脑') }}</span>
+          </div>
+          <AppButton :label="t('管理账号')" @click="showProfilesModal = true" />
+        </div>
+        <div class="setting-row">
+          <div>
+            <strong>{{ t('账号权限检测') }}</strong
+            ><span>{{ t('使用只读请求检测当前凭证可访问的云服务') }}</span>
+          </div>
+          <AppButton
+            :label="permissionChecking ? t('检测中') : t('开始检测')"
+            :icon="ShieldCheck"
+            :disabled="permissionChecking"
+            @click="checkPermissions"
+          />
+        </div>
+        <div v-if="permissionResults.length" class="permission-results">
+          <div v-for="item in permissionResults" :key="item.service">
+            <div>
+              <strong>{{ item.service }}</strong
+              ><span>{{ item.permission }}</span>
+            </div>
+            <span class="permission-status" :class="item.status">
+              {{
+                item.status === 'accessible'
+                  ? t('可访问')
+                  : item.status === 'denied'
+                    ? t('无权限')
+                    : t('检测失败')
+              }}
+            </span>
+          </div>
+          <p>{{ t('检测结果仅代表所列只读接口，不等同于完整的 RAM 权限清单。') }}</p>
+        </div>
+
+        <div class="settings-section-title">{{ t('上传下载设置') }}</div>
+        <div class="settings-grid">
+          <label
+            >{{ t('同时上传任务') }}
+            <div class="input-wrap">
+              <input v-model.number="settings.maxUploadJobs" type="number" min="1" max="10" /></div
+          ></label>
+          <label
+            >{{ t('同时下载任务') }}
+            <div class="input-wrap">
+              <input
+                v-model.number="settings.maxDownloadJobs"
+                type="number"
+                min="1"
+                max="10"
+              /></div
+          ></label>
+          <label
+            >{{ t('单任务并发分片') }}
+            <div class="input-wrap">
+              <input
+                v-model.number="settings.multipartParallel"
+                type="number"
+                min="1"
+                max="10"
+              /></div
+          ></label>
+          <label
+            >{{ t('上传分片大小（MB）') }}
+            <div class="input-wrap">
+              <input v-model.number="settings.partSizeMb" type="number" min="1" max="1024" /></div
+          ></label>
+          <label
+            >{{ t('连接超时（秒）') }}
+            <div class="input-wrap">
+              <input v-model.number="settings.timeoutSeconds" type="number" min="10" /></div
+          ></label>
+          <label
+            >{{ t('失败重试次数') }}
+            <div class="input-wrap">
+              <input v-model.number="settings.retryTimes" type="number" min="0" max="10" /></div
+          ></label>
+          <label
+            >{{ t('每页对象数量') }}
+            <div class="input-wrap">
+              <input
+                v-model.number="settings.listPageSize"
+                type="number"
+                min="10"
+                max="1000"
+              /></div
+          ></label>
+        </div>
+      </ModalShell>
     </Transition>
 
     <Transition name="modal" appear>
       <ModalShell
-      v-if="showProfilesModal"
-      :title="t('已保存账号')"
-      width="540px"
-      @close="showProfilesModal = false"
-    >
-      <div v-if="!savedProfiles.length" class="modal-empty">{{ t('暂无已保存账号') }}</div>
-      <div v-for="profile in savedProfiles" :key="profile.id" class="profile-row">
-        <div>
-          <strong>
-            {{ profile.label }}
-            <span
-              v-if="profile.label !== profile.config.accessKeyId"
-              class="text-xs font-normal text-muted-foreground ml-1"
-            >
-              ({{ profile.config.accessKeyId }})
-            </span>
-          </strong>
-          <span>{{
-            profile.config.endpointMode === 'public' ? t('公共云') : profile.config.endpoint
-          }}</span>
+        v-if="showProfilesModal"
+        :title="t('已保存账号')"
+        width="540px"
+        @close="showProfilesModal = false"
+      >
+        <div v-if="!savedProfiles.length" class="modal-empty">{{ t('暂无已保存账号') }}</div>
+        <div v-for="profile in savedProfiles" :key="profile.id" class="profile-row">
+          <div>
+            <strong>
+              {{ profile.label }}
+              <span
+                v-if="profile.label !== profile.config.accessKeyId"
+                class="text-xs font-normal text-muted-foreground ml-1"
+              >
+                ({{ profile.config.accessKeyId }})
+              </span>
+            </strong>
+            <span>{{
+              profile.config.endpointMode === 'public' ? t('公共云') : profile.config.endpoint
+            }}</span>
+          </div>
+          <div class="row-actions">
+            <AppButton :label="t('使用')" tone="primary" @click="useProfile(profile)" />
+            <AppButton :label="t('删除')" tone="danger" @click="removeProfile(profile)" />
+          </div>
         </div>
-        <div class="row-actions">
-          <AppButton :label="t('使用')" tone="primary" @click="useProfile(profile)" />
-          <AppButton :label="t('删除')" tone="danger" @click="removeProfile(profile)" />
-        </div>
-      </div>
-      <template #footer>
-        <AppButton :label="t('清空全部')" tone="danger" @click="clearSavedProfile" />
-        <AppButton :label="t('关闭')" @click="showProfilesModal = false" />
-      </template>
-    </ModalShell>
+        <template #footer>
+          <AppButton :label="t('清空全部')" tone="danger" @click="clearSavedProfile" />
+          <AppButton :label="t('关闭')" @click="showProfilesModal = false" />
+        </template>
+      </ModalShell>
     </Transition>
 
     <ConfirmDialog
