@@ -31,6 +31,8 @@ import {
   List,
   Monitor,
   Moon,
+  Pause,
+  Play,
   Presentation,
   RefreshCw,
   Search,
@@ -39,6 +41,7 @@ import {
   SquareCheck,
   Star,
   Sun,
+  Trash2,
   Upload,
   X
 } from '@lucide/vue'
@@ -152,8 +155,19 @@ const toastMessage = ref('')
 const modal = ref<ModalName>(null)
 const showProfilesModal = ref(false)
 const transfers = ref<TransferItem[]>([])
-const transferBatches = reactive(new Map<string, { done: number; total: number }>())
+const transferBatches = reactive(
+  new Map<
+    string,
+    {
+      direction: TransferItem['direction']
+      rawDone: number
+      rawTotal: number
+      removedDone: number
+    }
+  >()
+)
 const showTransfers = ref(false)
+const activeTransferTab = ref<TransferItem['direction']>('upload')
 const showUploadActions = ref(false)
 const contextMenu = reactive({ visible: false, x: 0, y: 0 })
 const emptyContextMenu = reactive({ visible: false, x: 0, y: 0 })
@@ -210,17 +224,42 @@ const anyPending = computed(
     settingsTask.pending.value ||
     fileBrowser.loading.value
 )
-const transferSummary = computed(() => {
-  let done = 0
-  let total = 0
-  for (const batch of transferBatches.values()) {
-    done += batch.done
-    total += batch.total
+const transferSummaries = computed(() => {
+  const summaries = {
+    upload: { done: 0, total: 0, progress: 0 },
+    download: { done: 0, total: 0, progress: 0 }
   }
-  return { done, total, progress: total ? done / total : 0 }
+  for (const batch of transferBatches.values()) {
+    if (!Number.isFinite(batch.rawDone) || !Number.isFinite(batch.rawTotal)) continue
+    summaries[batch.direction].done += Math.max(0, batch.rawDone - batch.removedDone)
+    summaries[batch.direction].total += Math.max(0, batch.rawTotal - batch.removedDone)
+  }
+  for (const transfer of transfers.value) {
+    const batch = transferBatches.get(transfer.batchId)
+    if (batch && Number.isFinite(batch.rawDone) && Number.isFinite(batch.rawTotal)) continue
+    summaries[transfer.direction].total += 1
+    if (transfer.status === 'done') summaries[transfer.direction].done += 1
+  }
+  for (const summary of Object.values(summaries)) {
+    summary.progress = summary.total ? summary.done / summary.total : 0
+  }
+  return summaries
 })
-const hasTransferRecords = computed(() =>
-  transfers.value.some((transfer) => transfer.status !== 'running')
+const activeTransferSummary = computed(() => transferSummaries.value[activeTransferTab.value])
+const visibleTransfers = computed(() =>
+  transfers.value.filter((transfer) => transfer.direction === activeTransferTab.value)
+)
+const hasCompletedTransfers = computed(() =>
+  visibleTransfers.value.some((transfer) => transfer.status === 'done')
+)
+const hasVisibleTransfers = computed(() => visibleTransfers.value.length > 0)
+const canResumeTransfers = computed(() =>
+  visibleTransfers.value.some(
+    (transfer) => transfer.status === 'paused' || transfer.status === 'error'
+  )
+)
+const canPauseTransfers = computed(() =>
+  visibleTransfers.value.some((transfer) => transfer.status === 'running')
 )
 const errorMessage = computed({
   get: () =>
@@ -437,11 +476,23 @@ onMounted(async () => {
       const index = transfers.value.findIndex((transfer) => transfer.id === item.id)
       if (index === -1) transfers.value.unshift(item)
       else transfers.value[index] = item
-      const batch = transferBatches.get(item.batchId)
-      transferBatches.set(item.batchId, {
-        done: Math.max(batch?.done || 0, item.batchDone),
-        total: item.batchTotal
-      })
+      if (item.batchId && Number.isFinite(item.batchDone) && Number.isFinite(item.batchTotal)) {
+        const batch = transferBatches.get(item.batchId)
+        transferBatches.set(item.batchId, {
+          direction: item.direction,
+          rawDone: Math.max(batch?.rawDone || 0, item.batchDone),
+          rawTotal: item.batchTotal,
+          removedDone: batch?.removedDone || 0
+        })
+      } else {
+        console.error('[transfers] Invalid batch progress', {
+          id: item.id,
+          batchId: item.batchId,
+          batchDone: item.batchDone,
+          batchTotal: item.batchTotal
+        })
+      }
+      activeTransferTab.value = item.direction
       showTransfers.value = true
     })
     await restoreSession()
@@ -472,12 +523,48 @@ function showToast(message: string): void {
   }, 3000)
 }
 
-function clearTransferRecords(): void {
-  const runningTransfers = transfers.value.filter((transfer) => transfer.status === 'running')
-  const activeBatchIds = new Set(runningTransfers.map((transfer) => transfer.batchId))
-  transfers.value = runningTransfers
-  for (const batchId of transferBatches.keys()) {
-    if (!activeBatchIds.has(batchId)) transferBatches.delete(batchId)
+function clearCompletedTransferRecords(): void {
+  const removedByBatch = new Map<string, number>()
+  transfers.value = transfers.value.filter((transfer) => {
+    const remove = transfer.direction === activeTransferTab.value && transfer.status === 'done'
+    if (remove)
+      removedByBatch.set(transfer.batchId, (removedByBatch.get(transfer.batchId) || 0) + 1)
+    return !remove
+  })
+  for (const [batchId, count] of removedByBatch) {
+    const batch = transferBatches.get(batchId)
+    if (!batch) continue
+    batch.removedDone += count
+    if (batch.removedDone >= batch.rawTotal) transferBatches.delete(batchId)
+  }
+}
+
+async function pauseAllTransfers(): Promise<void> {
+  await window.ossBrowser.transfers.pauseAll(activeTransferTab.value)
+}
+
+async function resumeAllTransfers(): Promise<void> {
+  await window.ossBrowser.transfers.resumeAll(activeTransferTab.value)
+}
+
+function confirmDeleteAllTransfers(): void {
+  const direction = activeTransferTab.value
+  requestConfirmation({
+    title: t('删除全部传输任务'),
+    description: t('确定删除全部{name}任务吗？正在传输的任务将被取消。', {
+      name: t(direction === 'upload' ? '上传' : '下载')
+    }),
+    confirmLabel: t('删除全部'),
+    destructive: true,
+    action: () => deleteAllTransfers(direction)
+  })
+}
+
+async function deleteAllTransfers(direction: TransferItem['direction']): Promise<void> {
+  await window.ossBrowser.transfers.cancelAll(direction)
+  transfers.value = transfers.value.filter((transfer) => transfer.direction !== direction)
+  for (const [batchId, batch] of transferBatches) {
+    if (batch.direction === direction) transferBatches.delete(batchId)
   }
 }
 
@@ -1186,7 +1273,7 @@ async function upload(kind: 'files' | 'folder'): Promise<void> {
   const done = await run(() =>
     window.ossBrowser.files.upload(currentBucket.value!.name, prefix.value, paths)
   )
-  if (done === undefined && errorMessage.value) return
+  if (!done) return
   await loadObjects()
   showToast(t('上传任务已完成'))
 }
@@ -1201,7 +1288,7 @@ async function handleDrop(event: DragEvent): Promise<void> {
   const done = await run(() =>
     window.ossBrowser.files.upload(currentBucket.value!.name, prefix.value, paths)
   )
-  if (done === undefined && errorMessage.value) return
+  if (!done) return
   await loadObjects()
   showToast(t('上传任务已完成'))
 }
@@ -1217,7 +1304,7 @@ async function downloadSelected(): Promise<void> {
       destination
     )
   )
-  if (done === undefined && errorMessage.value) return
+  if (!done) return
   showToast(t('下载任务已完成'))
 }
 
@@ -2066,38 +2153,103 @@ async function checkPermissions(): Promise<void> {
         <aside class="transfer-panel">
           <div class="transfer-head">
             <div class="transfer-head-row">
-              <div class="transfer-title">
-                <strong>{{ t('传输任务') }}</strong>
-                <span
-                  >{{ t('完成') }} {{ transferSummary.done }} / {{ transferSummary.total }}</span
+              <div class="transfer-tabs">
+                <div
+                  :class="{ active: activeTransferTab === 'upload' }"
+                  role="button"
+                  tabindex="0"
+                  @click="activeTransferTab = 'upload'"
                 >
+                  {{ t('上传') }}
+                  <span
+                    >{{ transferSummaries.upload.done }} /
+                    {{ transferSummaries.upload.total }}</span
+                  >
+                </div>
+                <div
+                  :class="{ active: activeTransferTab === 'download' }"
+                  role="button"
+                  tabindex="0"
+                  @click="activeTransferTab = 'download'"
+                >
+                  {{ t('下载') }}
+                  <span
+                    >{{ transferSummaries.download.done }} /
+                    {{ transferSummaries.download.total }}</span
+                  >
+                </div>
               </div>
+              <AppTooltip :label="t('关闭')">
+                <div class="icon-button" role="button" tabindex="0" @click="showTransfers = false">
+                  <X :size="18" />
+                </div>
+              </AppTooltip>
+            </div>
+            <div class="transfer-toolbar">
+              <span
+                >{{ t('完成') }} {{ activeTransferSummary.done }} /
+                {{ activeTransferSummary.total }}</span
+              >
               <div class="transfer-head-actions">
-                <AppButton
-                  :label="t('清空记录')"
-                  tone="ghost"
-                  :disabled="!hasTransferRecords"
-                  @click="clearTransferRecords"
-                />
-                <AppTooltip :label="t('关闭')">
+                <AppTooltip :label="t('开始全部')">
                   <div
-                    class="icon-button"
+                    class="transfer-action"
+                    :class="{ disabled: !canResumeTransfers }"
+                    :aria-disabled="!canResumeTransfers"
                     role="button"
                     tabindex="0"
-                    @click="showTransfers = false"
+                    @click="canResumeTransfers && resumeAllTransfers()"
                   >
-                    <X :size="18" />
+                    <Play :size="16" />
+                  </div>
+                </AppTooltip>
+                <AppTooltip :label="t('暂停全部')">
+                  <div
+                    class="transfer-action"
+                    :class="{ disabled: !canPauseTransfers }"
+                    :aria-disabled="!canPauseTransfers"
+                    role="button"
+                    tabindex="0"
+                    @click="canPauseTransfers && pauseAllTransfers()"
+                  >
+                    <Pause :size="16" />
+                  </div>
+                </AppTooltip>
+                <AppTooltip :label="t('删除已完成')">
+                  <div
+                    class="transfer-action"
+                    :class="{ disabled: !hasCompletedTransfers }"
+                    :aria-disabled="!hasCompletedTransfers"
+                    role="button"
+                    tabindex="0"
+                    @click="hasCompletedTransfers && clearCompletedTransferRecords()"
+                  >
+                    <Trash2 :size="16" />
+                  </div>
+                </AppTooltip>
+                <AppTooltip :label="t('删除全部')">
+                  <div
+                    class="transfer-action danger"
+                    :class="{ disabled: !hasVisibleTransfers }"
+                    :aria-disabled="!hasVisibleTransfers"
+                    role="button"
+                    tabindex="0"
+                    @click="hasVisibleTransfers && confirmDeleteAllTransfers()"
+                  >
+                    <Trash2 :size="16" />
                   </div>
                 </AppTooltip>
               </div>
             </div>
             <div class="progress transfer-summary-progress">
-              <i :style="{ width: `${transferSummary.progress * 100}%` }" />
+              <i :style="{ width: `${activeTransferSummary.progress * 100}%` }" />
             </div>
           </div>
-          <div v-if="!transfers.length" class="transfer-empty">{{ t('暂无传输任务') }}</div>
+          <div v-if="!visibleTransfers.length" class="transfer-empty">
+            {{ t('暂无传输任务') }}
+          </div>
           <div
-            v-for="transfer in transfers"
+            v-for="transfer in visibleTransfers"
             :key="transfer.id"
             class="transfer-item"
             :class="`is-${transfer.status}`"
@@ -2114,9 +2266,11 @@ async function checkPermissions(): Promise<void> {
                   ? t('完成')
                   : transfer.status === 'error'
                     ? t('失败')
-                    : transfer.status === 'cancelled'
-                      ? t('已取消')
-                      : `${Math.round(transfer.progress * 100)}%`
+                    : transfer.status === 'paused'
+                      ? t('已暂停')
+                      : transfer.status === 'cancelled'
+                        ? t('已取消')
+                        : `${Math.round(transfer.progress * 100)}%`
               }}</b>
               <AppButton
                 v-if="transfer.status === 'running'"

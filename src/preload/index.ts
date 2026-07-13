@@ -75,7 +75,10 @@ const api: OssBrowserApi = {
       ipcRenderer.invoke('files:download', bucket, items, destination)
   },
   transfers: {
-    cancel: (id) => ipcRenderer.invoke('transfers:cancel', id)
+    cancel: (id) => ipcRenderer.invoke('transfers:cancel', id),
+    pauseAll: (direction) => ipcRenderer.invoke('transfers:pauseAll', direction),
+    resumeAll: (direction) => ipcRenderer.invoke('transfers:resumeAll', direction),
+    cancelAll: (direction) => ipcRenderer.invoke('transfers:cancelAll', direction)
   },
   system: {
     getVersion: () => ipcRenderer.invoke('system:getVersion'),

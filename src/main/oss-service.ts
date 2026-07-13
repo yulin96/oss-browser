@@ -41,10 +41,21 @@ import type {
 
 type TransferReporter = (item: TransferItem) => void
 type OssClient = InstanceType<typeof OSS>
-type TransferBatch = { id: string; total: number; done: number }
+type TransferDirection = TransferItem['direction']
+type TransferBatch = {
+  id: string
+  direction: TransferDirection
+  total: number
+  done: number
+  failed: Set<string>
+  cancelled: boolean
+  hidden: boolean
+}
 type ActiveTransfer = Omit<TransferItem, 'batchId' | 'batchTotal' | 'batchDone'> & {
   generation: number
   batch: TransferBatch
+  cancelRequested: boolean
+  cancelOperation: () => void
 }
 
 export class OssService {
@@ -59,7 +70,17 @@ export class OssService {
     listPageSize: 1000,
     showImagePreview: true
   }
-  private readonly activeTransfers = new Map<string, OssClient>()
+  private readonly activeTransfers = new Map<string, ActiveTransfer>()
+  private readonly transferBatches = new Map<string, TransferBatch>()
+  private readonly retryTransfers = new Map<
+    string,
+    { direction: TransferDirection; run: () => Promise<void> }
+  >()
+  private readonly pausedDirections = new Set<TransferDirection>()
+  private readonly pauseWaiters: Record<TransferDirection, Array<() => void>> = {
+    upload: [],
+    download: []
+  }
   private transferGeneration = 0
   private readonly bucketRegions = new Map<string, string>()
 
@@ -572,9 +593,9 @@ export class OssService {
     await this.bucketClient(bucket).abortMultipartUpload(name, uploadId)
   }
 
-  async upload(bucket: string, prefix: string, paths: string[]): Promise<void> {
+  async upload(bucket: string, prefix: string, paths: string[]): Promise<boolean> {
     const files = await this.expandLocalPaths(paths)
-    const batch: TransferBatch = { id: randomUUID(), total: files.length, done: 0 }
+    const batch = this.newTransferBatch('upload', files.length)
 
     await this.runPool(
       files,
@@ -584,26 +605,14 @@ export class OssService {
         const transfer = this.newTransfer('upload', name, batch)
         const client = this.bucketClient(bucket)
         if (isDirectory) {
-          this.activeTransfers.set(transfer.id, client)
-          try {
+          await this.runControlledTransfer(transfer, client, async () => {
             await client.put(name, Buffer.alloc(0))
-            this.updateTransfer(transfer, 1, 'done')
-          } catch (error) {
-            if (this.isCancelError(error)) {
-              this.updateTransfer(transfer, transfer.progress, 'cancelled')
-              return
-            }
-            this.failTransfer(transfer, error)
-            throw error
-          } finally {
-            this.activeTransfers.delete(transfer.id)
-          }
+          })
           return
         }
         const checkpointPath = this.checkpointPath(bucket, name, localPath)
-        const checkpoint = await this.readCheckpoint(checkpointPath)
-        this.activeTransfers.set(transfer.id, client)
-        try {
+        await this.runControlledTransfer(transfer, client, async () => {
+          const checkpoint = await this.readCheckpoint(checkpointPath)
           await client.multipartUpload(name, localPath, {
             checkpoint,
             parallel: this.settings.multipartParallel,
@@ -614,22 +623,15 @@ export class OssService {
             }
           })
           await rm(checkpointPath, { force: true })
-          this.updateTransfer(transfer, 1, 'done')
-        } catch (error) {
-          if (this.isCancelError(error)) {
-            this.updateTransfer(transfer, transfer.progress, 'cancelled')
-            return
-          }
-          this.failTransfer(transfer, error)
-          throw error
-        } finally {
-          this.activeTransfers.delete(transfer.id)
-        }
+        })
       }
     )
+    if (batch.cancelled) return false
+    if (batch.failed.size) return false
+    return true
   }
 
-  async download(bucket: string, items: ObjectInfo[], destination: string): Promise<void> {
+  async download(bucket: string, items: ObjectInfo[], destination: string): Promise<boolean> {
     const listClient = this.bucketClient(bucket)
     const objects: Array<{ name: string; relativePath: string }> = []
     for (const item of items) {
@@ -645,7 +647,7 @@ export class OssService {
         objects.push({ name: item.name, relativePath: item.displayName })
       }
     }
-    const batch: TransferBatch = { id: randomUUID(), total: objects.length, done: 0 }
+    const batch = this.newTransferBatch('download', objects.length)
 
     await this.runPool(objects, this.settings.maxDownloadJobs, async (object) => {
       const localPath = join(destination, ...object.relativePath.split('/'))
@@ -658,11 +660,10 @@ export class OssService {
         throw new Error('下载文件路径无效，检测到越界穿越风险')
       }
       const partialPath = `${localPath}.ossbrowser.part`
-      await mkdir(join(localPath, '..'), { recursive: true })
       const transfer = this.newTransfer('download', object.name, batch)
       const client = this.bucketClient(bucket)
-      this.activeTransfers.set(transfer.id, client)
-      try {
+      await this.runControlledTransfer(transfer, client, async () => {
+        await mkdir(join(localPath, '..'), { recursive: true })
         const metadata = await client.getObjectMeta(object.name)
         const total = Number(metadata.res.headers['content-length'] || 0)
         let downloaded = 0
@@ -678,6 +679,11 @@ export class OssService {
           const result = await client.getStream(object.name, {
             headers: downloaded ? { Range: `bytes=${downloaded}-` } : undefined
           })
+          transfer.cancelOperation = () => {
+            const error = new Error('cancel')
+            error.name = 'CancelError'
+            result.stream.destroy(error)
+          }
           result.stream.on('data', (chunk: Buffer) => {
             downloaded += chunk.length
             this.updateTransfer(transfer, total ? downloaded / total : 0, 'running')
@@ -689,18 +695,11 @@ export class OssService {
         }
         await rm(localPath, { force: true })
         await rename(partialPath, localPath)
-        this.updateTransfer(transfer, 1, 'done')
-      } catch (error) {
-        if (this.isCancelError(error)) {
-          this.updateTransfer(transfer, transfer.progress, 'cancelled')
-          return
-        }
-        this.failTransfer(transfer, error)
-        throw error
-      } finally {
-        this.activeTransfers.delete(transfer.id)
-      }
+      })
     })
+    if (batch.cancelled) return false
+    if (batch.failed.size) return false
+    return true
   }
 
   private client(bucket?: string): OssClient {
@@ -833,13 +832,62 @@ export class OssService {
   }
 
   cancelTransfer(id: string): void {
-    this.activeTransfers.get(id)?.cancel()
+    const transfer = this.activeTransfers.get(id)
+    if (!transfer) return
+    transfer.cancelRequested = true
+    transfer.cancelOperation()
+  }
+
+  pauseAllTransfers(direction: TransferDirection): void {
+    this.pausedDirections.add(direction)
+    for (const transfer of this.activeTransfers.values()) {
+      if (transfer.direction === direction) transfer.cancelOperation()
+    }
+  }
+
+  resumeAllTransfers(direction: TransferDirection): void {
+    this.pausedDirections.delete(direction)
+    this.wakeDirection(direction)
+    const retries = [...this.retryTransfers.entries()].filter(
+      ([, retry]) => retry.direction === direction
+    )
+    for (const [id] of retries) this.retryTransfers.delete(id)
+    const concurrency =
+      direction === 'upload' ? this.settings.maxUploadJobs : this.settings.maxDownloadJobs
+    void this.runPool(retries, concurrency, async ([, retry]) => retry.run()).catch((error) => {
+      console.error(`[transfers] Failed to resume ${direction} tasks`, error)
+    })
+  }
+
+  cancelAllTransfers(direction: TransferDirection): void {
+    for (const batch of this.transferBatches.values()) {
+      if (batch.direction !== direction) continue
+      batch.cancelled = true
+      batch.hidden = true
+    }
+    for (const [id, retry] of this.retryTransfers) {
+      if (retry.direction === direction) this.retryTransfers.delete(id)
+    }
+    this.pausedDirections.delete(direction)
+    this.wakeDirection(direction)
+    for (const transfer of this.activeTransfers.values()) {
+      if (transfer.direction === direction) transfer.cancelOperation()
+    }
   }
 
   private resetActiveTransfers(): void {
     this.transferGeneration += 1
-    for (const client of this.activeTransfers.values()) client.cancel()
+    for (const batch of this.transferBatches.values()) {
+      batch.cancelled = true
+      batch.hidden = true
+    }
+    this.pausedDirections.clear()
+    this.wakeDirection('upload')
+    this.wakeDirection('download')
+    for (const transfer of this.activeTransfers.values()) transfer.cancelOperation()
     this.activeTransfers.clear()
+    this.retryTransfers.clear()
+    this.transferBatches.clear()
   }
 
   private checkpointPath(bucket: string, name: string, localPath: string): string {
@@ -858,8 +906,80 @@ export class OssService {
 
   private isCancelError(error: unknown): boolean {
     return Boolean(
-      error && typeof error === 'object' && 'name' in error && error.name === 'CancelError'
+      error &&
+      typeof error === 'object' &&
+      'name' in error &&
+      (error.name === 'CancelError' || error.name === 'cancel')
     )
+  }
+
+  private newTransferBatch(direction: TransferDirection, total: number): TransferBatch {
+    const batch: TransferBatch = {
+      id: randomUUID(),
+      direction,
+      total,
+      done: 0,
+      failed: new Set(),
+      cancelled: false,
+      hidden: false
+    }
+    this.transferBatches.set(batch.id, batch)
+    return batch
+  }
+
+  private async runControlledTransfer(
+    transfer: ActiveTransfer,
+    client: OssClient,
+    operation: () => Promise<void>
+  ): Promise<void> {
+    while (!transfer.batch.cancelled) {
+      await this.waitWhilePaused(transfer.direction)
+      if (transfer.batch.cancelled) return
+      transfer.cancelRequested = false
+      transfer.error = undefined
+      if (transfer.status !== 'running') {
+        this.updateTransfer(transfer, transfer.progress, 'running')
+      }
+      transfer.cancelOperation = () => client.cancel()
+      this.activeTransfers.set(transfer.id, transfer)
+      try {
+        await operation()
+        transfer.batch.failed.delete(transfer.id)
+        this.retryTransfers.delete(transfer.id)
+        this.updateTransfer(transfer, 1, 'done')
+        return
+      } catch (error) {
+        if (this.isCancelError(error)) {
+          if (transfer.batch.cancelled) return
+          if (transfer.cancelRequested) {
+            this.updateTransfer(transfer, transfer.progress, 'cancelled')
+            return
+          }
+          if (this.pausedDirections.has(transfer.direction)) {
+            this.updateTransfer(transfer, transfer.progress, 'paused')
+            continue
+          }
+        }
+        this.failTransfer(transfer, error)
+        this.retryTransfers.set(transfer.id, {
+          direction: transfer.direction,
+          run: () => this.runControlledTransfer(transfer, client, operation)
+        })
+        return
+      } finally {
+        this.activeTransfers.delete(transfer.id)
+      }
+    }
+  }
+
+  private async waitWhilePaused(direction: TransferDirection): Promise<void> {
+    if (!this.pausedDirections.has(direction)) return
+    await new Promise<void>((resolve) => this.pauseWaiters[direction].push(resolve))
+  }
+
+  private wakeDirection(direction: TransferDirection): void {
+    const waiters = this.pauseWaiters[direction].splice(0)
+    for (const resolve of waiters) resolve()
   }
 
   private newTransfer(
@@ -874,7 +994,9 @@ export class OssService {
       progress: 0,
       status: 'running',
       generation: this.transferGeneration,
-      batch
+      batch,
+      cancelRequested: false,
+      cancelOperation: () => undefined
     }
     this.reportActiveTransfer(transfer)
     return transfer
@@ -892,13 +1014,14 @@ export class OssService {
   }
 
   private failTransfer(transfer: ActiveTransfer, error: unknown): void {
+    transfer.batch.failed.add(transfer.id)
     transfer.status = 'error'
     transfer.error = error instanceof Error ? error.message : String(error)
     this.reportActiveTransfer(transfer)
   }
 
   private reportActiveTransfer(transfer: ActiveTransfer): void {
-    if (transfer.generation !== this.transferGeneration) return
+    if (transfer.generation !== this.transferGeneration || transfer.batch.hidden) return
     this.reportTransfer({
       id: transfer.id,
       batchId: transfer.batch.id,

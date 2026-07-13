@@ -1254,8 +1254,8 @@ input[type='checkbox']:checked::after {
   z-index: 2;
   top: 0;
   display: flex;
-  min-height: 82px;
-  padding: 13px 16px 12px;
+  min-height: 112px;
+  padding: 8px 14px 12px;
   flex-direction: column;
   border-bottom: 1px solid var(--border);
   background: var(--surface);
@@ -1265,13 +1265,53 @@ input[type='checkbox']:checked::after {
   align-items: center;
   justify-content: space-between;
 }
-.transfer-title {
+.transfer-tabs {
   display: flex;
   min-width: 0;
-  align-items: baseline;
-  gap: 10px;
+  align-items: center;
+  gap: 4px;
 }
-.transfer-title span {
+.transfer-tabs > div {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 10px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 650;
+  cursor: pointer;
+}
+.transfer-tabs > div:hover {
+  background: var(--surface-hover);
+}
+.transfer-tabs > div.active {
+  color: var(--text);
+  border-color: var(--border-hover);
+  background: var(--surface-hover);
+  box-shadow: 0 1px 3px rgb(31 47 70 / 10%);
+}
+.transfer-tabs span {
+  padding: 1px 6px;
+  border-radius: 10px;
+  color: var(--muted);
+  background: var(--background);
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.transfer-tabs > div.active span {
+  color: var(--text);
+  background: var(--surface);
+}
+.transfer-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 8px;
+}
+.transfer-toolbar > span {
   color: var(--muted);
   font-size: 12px;
   font-variant-numeric: tabular-nums;
@@ -1279,16 +1319,34 @@ input[type='checkbox']:checked::after {
 .transfer-head-actions {
   display: flex;
   align-items: center;
-  gap: 5px;
+  gap: 6px;
 }
-.transfer-head-actions .app-button {
-  min-height: 28px;
-  padding: 0 9px;
-  font-size: 12px;
+.transfer-action {
+  display: grid;
+  width: 30px;
+  height: 28px;
+  place-items: center;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--muted);
+  background: var(--surface);
+  cursor: pointer;
+}
+.transfer-action:hover {
+  color: var(--primary);
+  border-color: var(--border-hover);
+  background: var(--surface-hover);
+}
+.transfer-action.danger {
+  color: var(--danger);
+}
+.transfer-action.disabled {
+  opacity: 0.35;
+  cursor: default;
 }
 .transfer-summary-progress {
   height: 5px;
-  margin-top: 11px;
+  margin-top: 9px;
 }
 .transfer-item {
   padding: 14px 16px;
@@ -1329,6 +1387,9 @@ input[type='checkbox']:checked::after {
 .transfer-item.is-error .transfer-line b {
   color: var(--danger);
 }
+.transfer-item.is-paused .transfer-line b {
+  color: #b7791f;
+}
 .transfer-item.is-cancelled .transfer-line b {
   color: var(--muted);
 }
@@ -1344,6 +1405,16 @@ input[type='checkbox']:checked::after {
   height: 100%;
   background: var(--primary);
   transition: width 0.2s;
+}
+.transfer-item.is-done .progress i {
+  background: #35a36f;
+}
+.transfer-item.is-paused .progress i {
+  background: #d49a36;
+}
+.transfer-item.is-error .progress i,
+.transfer-item.is-cancelled .progress i {
+  background: var(--danger);
 }
 .transfer-error {
   margin-top: 7px;

@@ -114,7 +114,7 @@ export interface TransferItem {
   direction: 'upload' | 'download'
   name: string
   progress: number
-  status: 'running' | 'done' | 'error' | 'cancelled'
+  status: 'running' | 'paused' | 'done' | 'error' | 'cancelled'
   error?: string
 }
 
@@ -212,11 +212,14 @@ export interface OssBrowserApi {
     getPathForFile: (file: File) => string
     pickUpload: (kind: 'files' | 'folder') => Promise<string[]>
     pickDownloadFolder: () => Promise<string | null>
-    upload: (bucket: string, prefix: string, paths: string[]) => Promise<void>
-    download: (bucket: string, items: ObjectInfo[], destination: string) => Promise<void>
+    upload: (bucket: string, prefix: string, paths: string[]) => Promise<boolean>
+    download: (bucket: string, items: ObjectInfo[], destination: string) => Promise<boolean>
   }
   transfers: {
     cancel: (id: string) => Promise<void>
+    pauseAll: (direction: TransferItem['direction']) => Promise<void>
+    resumeAll: (direction: TransferItem['direction']) => Promise<void>
+    cancelAll: (direction: TransferItem['direction']) => Promise<void>
   }
   system: {
     getVersion: () => Promise<string>

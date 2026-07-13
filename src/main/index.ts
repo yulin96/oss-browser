@@ -182,6 +182,15 @@ function registerIpc(): void {
       oss.download(bucket, items, destination)
   )
   ipcMain.handle('transfers:cancel', (_event, id: string) => oss.cancelTransfer(id))
+  ipcMain.handle('transfers:pauseAll', (_event, direction: TransferItem['direction']) =>
+    oss.pauseAllTransfers(direction)
+  )
+  ipcMain.handle('transfers:resumeAll', (_event, direction: TransferItem['direction']) =>
+    oss.resumeAllTransfers(direction)
+  )
+  ipcMain.handle('transfers:cancelAll', (_event, direction: TransferItem['direction']) =>
+    oss.cancelAllTransfers(direction)
+  )
 
   ipcMain.handle('system:getVersion', () => app.getVersion())
   ipcMain.handle('system:openExternal', (_event, url: string) => shell.openExternal(url))
