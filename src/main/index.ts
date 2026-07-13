@@ -214,7 +214,6 @@ app.on('second-instance', () => {
 
 app.whenReady().then(() => {
   electronApp.setAppUserModelId('com.yulin96.ossbrowser')
-  if (process.platform === 'darwin') app.dock?.setIcon(icon)
   Menu.setApplicationMenu(null)
   app.on('browser-window-created', (_, window) => optimizer.watchWindowShortcuts(window))
   registerIpc()
