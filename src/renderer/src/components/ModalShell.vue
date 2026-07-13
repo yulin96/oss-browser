@@ -2,15 +2,22 @@
 import { X } from '@lucide/vue'
 import { onMounted, ref } from 'vue'
 
-defineProps<{ title: string; width?: string; size?: 'default' | 'large' }>()
+const props = defineProps<{ title: string; width?: string; size?: 'default' | 'large' }>()
 const emit = defineEmits<{ close: [] }>()
 
 const isOpen = ref(false)
 const isClosing = ref(false)
+const modalCard = ref<HTMLElement | null>(null)
 
 onMounted(() => {
   requestAnimationFrame(() => {
     isOpen.value = true
+    if (props.size === 'large') return
+    modalCard.value
+      ?.querySelector<HTMLInputElement | HTMLTextAreaElement>(
+        'input:not([type="checkbox"]):not([type="radio"]):not([disabled]):not([readonly]), textarea:not([disabled]):not([readonly])'
+      )
+      ?.focus({ preventScroll: true })
   })
 })
 
@@ -34,6 +41,7 @@ function handleClose(): void {
     @mousedown.self="handleClose"
   >
     <div
+      ref="modalCard"
       class="modal-card"
       :class="{ 'is-large': size === 'large', 'is-active': isOpen, 'is-closing': isClosing }"
       :style="size === 'large' ? undefined : { width: width || '480px' }"
