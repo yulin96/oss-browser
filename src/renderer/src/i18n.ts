@@ -734,4 +734,16 @@ export function t(source: string, params: Record<string, string | number> = {}):
   )
 }
 
+export function storageClassLabel(storageClass?: string): string {
+  const labels: Record<string, string> = {
+    Standard: '标准',
+    IA: '低频',
+    InfrequentAccess: '低频',
+    Archive: '归档',
+    ColdArchive: '冷归档',
+    DeepColdArchive: '深度冷归档'
+  }
+  return t(labels[storageClass || 'Standard'] || storageClass || '标准')
+}
+
 document.documentElement.lang = locale.value

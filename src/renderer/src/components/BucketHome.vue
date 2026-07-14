@@ -12,7 +12,7 @@ import {
 } from '@lucide/vue'
 
 import type { BucketInfo } from '../../../shared/types'
-import { t } from '../i18n'
+import { storageClassLabel, t } from '../i18n'
 import AppButton from './AppButton.vue'
 import AppTooltip from './AppTooltip.vue'
 
@@ -73,7 +73,7 @@ const emit = defineEmits<{
           <strong>{{ bucket.name }}</strong>
           <span
             >{{ bucket.region || t('自定义 Endpoint') }} ·
-            {{ bucket.storageClass || t('标准存储') }}</span
+            {{ storageClassLabel(bucket.storageClass) }}</span
           >
         </div>
         <div class="bucket-card-actions">

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { Folder, FolderPlus, Home, LoaderCircle, Star, Upload, X } from '@lucide/vue'
 import type { AppController } from '../composables/useAppController'
-import { t } from '../i18n'
+import { storageClassLabel, t } from '../i18n'
 import AppButton from './AppButton.vue'
 import AppTooltip from './AppTooltip.vue'
 
@@ -121,7 +121,7 @@ const {
           </span>
         </div>
         <div>{{ item.isDirectory ? '—' : formatSize(item.size) }}</div>
-        <div>{{ item.storageClass || t('标准') }}</div>
+        <div>{{ storageClassLabel(item.storageClass) }}</div>
         <div>
           {{ item.lastModified ? new Date(item.lastModified).toLocaleString() : '—' }}
         </div>

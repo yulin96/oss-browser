@@ -60,6 +60,7 @@ export function useFileBrowser(options: {
   goBack: () => Promise<void>
   goForward: () => Promise<void>
   goUp: () => Promise<void>
+  goBucketHome: () => void
   goHome: () => Promise<void>
   toggleFavorite: () => void
   isCurrentFavorite: () => boolean
@@ -333,7 +334,7 @@ export function useFileBrowser(options: {
     await goToAddress(false)
   }
 
-  function leaveBucket(): void {
+  function goBucketHome(): void {
     loadGeneration += 1
     bucketStorageStatGeneration += 1
     loading.value = false
@@ -350,7 +351,7 @@ export function useFileBrowser(options: {
   async function goUp(): Promise<void> {
     if (!currentBucket.value) return
     const parts = prefix.value.split('/').filter(Boolean)
-    if (!parts.length) return leaveBucket()
+    if (!parts.length) return goBucketHome()
     parts.pop()
     await visit(currentBucket.value, parts.length ? `${parts.join('/')}/` : '')
   }
@@ -361,7 +362,7 @@ export function useFileBrowser(options: {
       ? buckets.value.find((item) => item.name === home.bucket)
       : undefined
     if (bucket) return visit(bucket, home?.prefix || '')
-    leaveBucket()
+    goBucketHome()
   }
 
   function toggleFavorite(): void {
@@ -565,6 +566,7 @@ export function useFileBrowser(options: {
     goBack,
     goForward,
     goUp,
+    goBucketHome,
     goHome,
     toggleFavorite,
     isCurrentFavorite,

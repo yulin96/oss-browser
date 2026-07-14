@@ -1,5 +1,15 @@
 <script setup lang="ts">
-import { ArrowLeft, ArrowRight, ArrowUp, Home, HousePlus, RefreshCw, Star } from '@lucide/vue'
+import { bucket as bucketIcon } from '@lucide/lab'
+import {
+  ArrowLeft,
+  ArrowRight,
+  ArrowUp,
+  Home,
+  HousePlus,
+  Icon as LucideIcon,
+  RefreshCw,
+  Star
+} from '@lucide/vue'
 import type { AppController } from '../composables/useAppController'
 import { t } from '../i18n'
 import AppTooltip from './AppTooltip.vue'
@@ -15,6 +25,7 @@ const {
   goBack,
   goForward,
   goUp,
+  goBucketHome,
   goHome,
   toggleFavorite,
   isCurrentFavorite,
@@ -47,6 +58,11 @@ const {
       <div class="nav-icon" @click="loadObjects()"><RefreshCw :size="18" /></div>
     </AppTooltip>
     <AppTooltip :label="t('Bucket 首页')">
+      <div class="nav-icon" @click="goBucketHome">
+        <LucideIcon name="bucket" :icon-node="bucketIcon" :size="18" />
+      </div>
+    </AppTooltip>
+    <AppTooltip :label="t('首页')">
       <div class="nav-icon" @click="goHome"><Home :size="18" /></div>
     </AppTooltip>
     <div class="address-wrap">
