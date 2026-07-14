@@ -1,7 +1,7 @@
 {
   "name": "oss-browser",
   "productName": "OSS Browser",
-  "version": "0.0.10",
+  "version": "0.0.11",
   "description": "An independent third-party desktop client for Alibaba Cloud OSS",
   "license": "MIT",
   "main": "./out/main/index.js",
