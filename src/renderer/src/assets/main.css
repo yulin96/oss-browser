@@ -601,6 +601,10 @@ input[type='checkbox']:checked::after {
   border-color: #ffd7d8;
   background: #fff8f8;
 }
+.app-button.is-danger:hover {
+  border-color: #ffb3b5;
+  background: #fff0f0;
+}
 .app-button.is-ghost {
   border-color: transparent;
   background: transparent;
@@ -2379,7 +2383,6 @@ html[data-theme='dark'] .input-wrap,
 html[data-theme='dark'] .select-wrap,
 html[data-theme='dark'] .textarea-wrap,
 html[data-theme='dark'] .address-wrap,
-html[data-theme='dark'] .app-button,
 html[data-theme='dark'] .more-menu,
 html[data-theme='dark'] .text-preview {
   background: var(--surface);
@@ -2405,10 +2408,17 @@ html[data-theme='dark'] .app-button.is-primary {
   border-color: var(--primary);
   background: #287edc;
 }
+html[data-theme='dark'] .app-button.is-primary:hover {
+  background: #388eed;
+}
 html[data-theme='dark'] .app-button.is-danger {
   color: var(--danger);
   border-color: #63363e;
   background: #2a1d24;
+}
+html[data-theme='dark'] .app-button.is-danger:hover {
+  border-color: #8c4e5a;
+  background: #3a252d;
 }
 html[data-theme='dark'] .field-label,
 html[data-theme='dark'] .object-info > strong,

@@ -269,7 +269,7 @@ const {
         </div>
         <template #footer>
           <AppButton :label="t('清空全部')" tone="danger" @click="clearSavedProfile" />
-          <AppButton :label="t('关闭')" @click="showProfilesModal = false" />
+          <!-- <AppButton :label="t('关闭')" @click="showProfilesModal = false" /> -->
         </template>
       </ModalShell>
     </Transition>
