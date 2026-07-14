@@ -26,6 +26,7 @@ import type {
   AppSettings,
   AuthConfig,
   BucketInfo,
+  BucketStorageStat,
   CacheRefreshRequest,
   GrantOptions,
   GrantResult,
@@ -325,6 +326,39 @@ export class OssService {
       if (bucket.region) this.bucketRegions.set(bucket.name, bucket.region)
     }
     return buckets
+  }
+
+  async getBucketStorageStat(name: string): Promise<BucketStorageStat> {
+    const client = this.bucketClient(name) as unknown as {
+      getBucketStat: (
+        bucket: string,
+        options: Record<string, never>
+      ) => Promise<{ stat: Record<string, string | number | undefined> }>
+    }
+    const { stat: bucketStat } = await client.getBucketStat(name, {})
+    const numberValue = (...keys: string[]): number => {
+      const value = keys.map((key) => bucketStat[key]).find((item) => item !== undefined)
+      return Number(value || 0)
+    }
+
+    return {
+      storage: numberValue('Storage'),
+      objectCount: numberValue('ObjectCount'),
+      standardStorage: numberValue('StandardStorage'),
+      standardObjectCount: numberValue('StandardObjectCount'),
+      infrequentAccessStorage: numberValue(
+        'InfrequentAccessRealStorage',
+        'InfrequentAccessStorage'
+      ),
+      infrequentAccessObjectCount: numberValue('InfrequentAccessObjectCount'),
+      archiveStorage: numberValue('ArchiveRealStorage', 'ArchiveStorage'),
+      archiveObjectCount: numberValue('ArchiveObjectCount'),
+      coldArchiveStorage: numberValue('ColdArchiveRealStorage', 'ColdArchiveStorage'),
+      coldArchiveObjectCount: numberValue('ColdArchiveObjectCount'),
+      deepColdArchiveStorage: numberValue('DeepColdArchiveRealStorage', 'DeepColdArchiveStorage'),
+      deepColdArchiveObjectCount: numberValue('DeepColdArchiveObjectCount'),
+      lastModifiedTime: numberValue('LastModifiedTime')
+    }
   }
 
   async createBucket(name: string, region: string, acl: string): Promise<void> {

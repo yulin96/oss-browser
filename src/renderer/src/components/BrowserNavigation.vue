@@ -3,6 +3,7 @@ import { ArrowLeft, ArrowRight, ArrowUp, Home, HousePlus, RefreshCw, Star } from
 import type { AppController } from '../composables/useAppController'
 import { t } from '../i18n'
 import AppTooltip from './AppTooltip.vue'
+import BucketStorageStat from './BucketStorageStat.vue'
 
 const props = defineProps<{ controller: AppController }>()
 const {
@@ -61,9 +62,14 @@ const {
       >
         {{ currentBucket.region }}
       </div>
+      <BucketStorageStat :controller="controller" />
     </div>
     <AppTooltip :label="t('收藏当前目录')">
-      <div class="nav-icon favorite-nav" :class="{ active: isCurrentFavorite() }" @click="toggleFavorite">
+      <div
+        class="nav-icon favorite-nav"
+        :class="{ active: isCurrentFavorite() }"
+        @click="toggleFavorite"
+      >
         <Star :size="18" />
       </div>
     </AppTooltip>

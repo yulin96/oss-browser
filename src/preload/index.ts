@@ -32,6 +32,7 @@ const api: OssBrowserApi = {
   },
   buckets: {
     list: () => ipcRenderer.invoke('buckets:list'),
+    getStorageStat: (name) => ipcRenderer.invoke('buckets:getStorageStat', name),
     getAcl: (name) => ipcRenderer.invoke('buckets:getAcl', name),
     create: (name, region, acl) => ipcRenderer.invoke('buckets:create', name, region, acl),
     remove: (name) => ipcRenderer.invoke('buckets:remove', name),

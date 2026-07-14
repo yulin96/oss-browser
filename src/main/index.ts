@@ -91,6 +91,7 @@ function registerIpc(): void {
   )
 
   ipcMain.handle('buckets:list', () => oss.listBuckets())
+  ipcMain.handle('buckets:getStorageStat', (_event, name: string) => oss.getBucketStorageStat(name))
   ipcMain.handle('buckets:getAcl', (_event, name: string) => oss.getBucketAcl(name))
   ipcMain.handle('buckets:create', (_event, name: string, region: string, acl: string) =>
     oss.createBucket(name, region, acl)

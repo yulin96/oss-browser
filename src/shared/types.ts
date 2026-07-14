@@ -20,6 +20,22 @@ export interface BucketInfo {
   acl?: string
 }
 
+export interface BucketStorageStat {
+  storage: number
+  objectCount: number
+  standardStorage: number
+  standardObjectCount: number
+  infrequentAccessStorage: number
+  infrequentAccessObjectCount: number
+  archiveStorage: number
+  archiveObjectCount: number
+  coldArchiveStorage: number
+  coldArchiveObjectCount: number
+  deepColdArchiveStorage: number
+  deepColdArchiveObjectCount: number
+  lastModifiedTime: number
+}
+
 export interface SavedProfile {
   id: string
   label: string
@@ -175,6 +191,7 @@ export interface OssBrowserApi {
   }
   buckets: {
     list: () => Promise<BucketInfo[]>
+    getStorageStat: (name: string) => Promise<BucketStorageStat>
     getAcl: (name: string) => Promise<string>
     create: (name: string, region: string, acl: string) => Promise<void>
     remove: (name: string) => Promise<void>

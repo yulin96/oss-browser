@@ -1,5 +1,5 @@
 import { computed, reactive, ref, type ComputedRef, type Ref } from 'vue'
-import type { AppSettings, BucketInfo, ObjectInfo } from '../../../shared/types'
+import type { AppSettings, BucketInfo, BucketStorageStat, ObjectInfo } from '../../../shared/types'
 import { t } from '../i18n'
 
 interface Favorite {
@@ -24,6 +24,9 @@ export function useFileBrowser(options: {
 }): {
   buckets: Ref<BucketInfo[]>
   currentBucket: Ref<BucketInfo | null>
+  bucketStorageStat: Ref<BucketStorageStat | null>
+  bucketStorageStatLoading: Ref<boolean>
+  bucketStorageStatError: Ref<string>
   prefix: Ref<string>
   objects: Ref<ObjectInfo[]>
   hasMoreObjects: Ref<boolean>
@@ -50,6 +53,7 @@ export function useFileBrowser(options: {
   loadAccountPreferences: () => void
   openInitialLocation: (availableBuckets: BucketInfo[], presetPath: string) => Promise<void>
   refreshBuckets: () => Promise<void>
+  loadBucketStorageStat: () => Promise<void>
   openBucket: (bucket: BucketInfo) => Promise<void>
   visit: (bucket: BucketInfo, path: string, record?: boolean) => Promise<void>
   goToAddress: (record?: boolean) => Promise<void>
@@ -75,6 +79,9 @@ export function useFileBrowser(options: {
 } {
   const buckets = ref<BucketInfo[]>([])
   const currentBucket = ref<BucketInfo | null>(null)
+  const bucketStorageStat = ref<BucketStorageStat | null>(null)
+  const bucketStorageStatLoading = ref(false)
+  const bucketStorageStatError = ref('')
   const prefix = ref('')
   const objects = ref<ObjectInfo[]>([])
   const nextMarker = ref<string>()
@@ -106,6 +113,7 @@ export function useFileBrowser(options: {
   let loadGeneration = 0
   let thumbnailGeneration = 0
   let bucketGeneration = 0
+  let bucketStorageStatGeneration = 0
 
   const selectedObjects = computed(() =>
     objects.value.filter((item) => selectedNames.value.has(item.name))
@@ -203,10 +211,14 @@ export function useFileBrowser(options: {
     loadGeneration += 1
     thumbnailGeneration += 1
     bucketGeneration += 1
+    bucketStorageStatGeneration += 1
     loading.value = false
     error.value = ''
     buckets.value = []
     currentBucket.value = null
+    bucketStorageStat.value = null
+    bucketStorageStatLoading.value = false
+    bucketStorageStatError.value = ''
     prefix.value = ''
     objects.value = []
     nextMarker.value = undefined
@@ -249,8 +261,38 @@ export function useFileBrowser(options: {
     if (result && generation === bucketGeneration) buckets.value = result
   }
 
+  async function loadBucketStorageStat(): Promise<void> {
+    if (!currentBucket.value) return
+    const generation = ++bucketStorageStatGeneration
+    const bucketName = currentBucket.value.name
+    bucketStorageStatLoading.value = true
+    bucketStorageStatError.value = ''
+    try {
+      const result = await window.ossBrowser.buckets.getStorageStat(bucketName)
+      if (generation !== bucketStorageStatGeneration || currentBucket.value?.name !== bucketName)
+        return
+      bucketStorageStat.value = result
+    } catch (reason) {
+      if (generation !== bucketStorageStatGeneration || currentBucket.value?.name !== bucketName)
+        return
+      console.error('[bucket-stat] Failed to load bucket storage statistics', {
+        bucket: bucketName,
+        reason
+      })
+      bucketStorageStat.value = null
+      bucketStorageStatError.value = reason instanceof Error ? reason.message : String(reason)
+    } finally {
+      if (generation === bucketStorageStatGeneration) bucketStorageStatLoading.value = false
+    }
+  }
+
   async function visit(bucket: BucketInfo, path: string, record = true): Promise<void> {
+    const bucketChanged = currentBucket.value?.name !== bucket.name
     currentBucket.value = bucket
+    if (bucketChanged) {
+      bucketStorageStat.value = null
+      void loadBucketStorageStat()
+    }
     prefix.value = path
     addressInput.value = `oss://${bucket.name}/${path}`
     if (record) {
@@ -293,8 +335,12 @@ export function useFileBrowser(options: {
 
   function leaveBucket(): void {
     loadGeneration += 1
+    bucketStorageStatGeneration += 1
     loading.value = false
     currentBucket.value = null
+    bucketStorageStat.value = null
+    bucketStorageStatLoading.value = false
+    bucketStorageStatError.value = ''
     prefix.value = ''
     objects.value = []
     selectedNames.value = new Set()
@@ -483,6 +529,9 @@ export function useFileBrowser(options: {
   return {
     buckets,
     currentBucket,
+    bucketStorageStat,
+    bucketStorageStatLoading,
+    bucketStorageStatError,
     prefix,
     objects,
     hasMoreObjects,
@@ -509,6 +558,7 @@ export function useFileBrowser(options: {
     loadAccountPreferences,
     openInitialLocation,
     refreshBuckets,
+    loadBucketStorageStat,
     openBucket: (bucket) => visit(bucket, ''),
     visit,
     goToAddress,
