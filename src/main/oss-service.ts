@@ -67,7 +67,7 @@ export class OssService {
     partSizeMb: 10,
     timeoutSeconds: 60,
     retryTimes: 5,
-    listPageSize: 1000,
+    listPageSize: 500,
     showImagePreview: true
   }
   private readonly activeTransfers = new Map<string, ActiveTransfer>()

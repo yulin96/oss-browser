@@ -10,8 +10,21 @@ const defaultSettings: AppSettings = {
   partSizeMb: 10,
   timeoutSeconds: 60,
   retryTimes: 5,
-  listPageSize: 1000,
+  listPageSize: 500,
   showImagePreview: true
+}
+
+const legacyDefaultSettings: AppSettings = {
+  ...defaultSettings,
+  listPageSize: 1000
+}
+const settingsStorageKey = 'oss-browser-settings'
+const settingsStorageVersion = 2
+const settingKeys = Object.keys(defaultSettings) as Array<keyof AppSettings>
+
+interface StoredSettings {
+  version: number
+  overrides: Partial<AppSettings>
 }
 
 export function useAppSettings(options: {
@@ -36,6 +49,62 @@ export function useAppSettings(options: {
     storedTheme === 'light' || storedTheme === 'dark' ? storedTheme : 'system'
   )
   const darkModeQuery = window.matchMedia('(prefers-color-scheme: dark)')
+  let initializingSettings = true
+
+  function knownSettings(value: unknown): Partial<AppSettings> {
+    if (!value || typeof value !== 'object') return {}
+    const source = value as Record<string, unknown>
+    return Object.fromEntries(
+      settingKeys
+        .filter((key) => typeof source[key] === typeof defaultSettings[key])
+        .map((key) => [key, source[key]])
+    ) as Partial<AppSettings>
+  }
+
+  function loadSettingsOverrides(): Partial<AppSettings> {
+    const storedSettings = localStorage.getItem(settingsStorageKey)
+    if (!storedSettings) return {}
+    try {
+      const parsed = JSON.parse(storedSettings) as unknown
+      if (
+        parsed &&
+        typeof parsed === 'object' &&
+        (parsed as StoredSettings).version === settingsStorageVersion
+      ) {
+        return knownSettings((parsed as StoredSettings).overrides)
+      }
+
+      const legacySettings = knownSettings(parsed)
+      return Object.fromEntries(
+        settingKeys
+          .filter(
+            (key) =>
+              legacySettings[key] !== undefined &&
+              legacySettings[key] !== legacyDefaultSettings[key]
+          )
+          .map((key) => [key, legacySettings[key]])
+      ) as Partial<AppSettings>
+    } catch {
+      localStorage.removeItem(settingsStorageKey)
+      return {}
+    }
+  }
+
+  function storeSettingsOverrides(value: AppSettings): void {
+    const overrides = Object.fromEntries(
+      settingKeys
+        .filter((key) => value[key] !== defaultSettings[key])
+        .map((key) => [key, value[key]])
+    ) as Partial<AppSettings>
+    if (!Object.keys(overrides).length) {
+      localStorage.removeItem(settingsStorageKey)
+      return
+    }
+    localStorage.setItem(
+      settingsStorageKey,
+      JSON.stringify({ version: settingsStorageVersion, overrides } satisfies StoredSettings)
+    )
+  }
 
   function applyTheme(): void {
     const resolvedTheme =
@@ -47,27 +116,26 @@ export function useAppSettings(options: {
 
   async function initializeSettings(): Promise<void> {
     darkModeQuery.addEventListener('change', applyTheme)
-    const storedSettings = localStorage.getItem('oss-browser-settings')
-    if (storedSettings) {
-      try {
-        Object.assign(settings, JSON.parse(storedSettings))
-      } catch {
-        localStorage.removeItem('oss-browser-settings')
-      }
+    Object.assign(settings, loadSettingsOverrides())
+    storeSettingsOverrides(settings)
+    try {
+      await window.ossBrowser.settings.update({ ...settings })
+    } finally {
+      initializingSettings = false
     }
-    await window.ossBrowser.settings.update({ ...settings })
   }
 
   function openSettings(): void {
     options.openModal()
   }
 
-  // 监听 settings 改变，实时同步到主进程和 localStorage
+  // 监听 settings 改变，实时同步到主进程并只保存偏离默认值的覆盖项
   watch(
     settings,
     async (nextVal) => {
+      if (initializingSettings) return
       await window.ossBrowser.settings.update({ ...nextVal })
-      localStorage.setItem('oss-browser-settings', JSON.stringify(nextVal))
+      storeSettingsOverrides(nextVal)
     },
     { deep: true }
   )
