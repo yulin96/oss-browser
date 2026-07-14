@@ -1,6 +1,6 @@
 # OSS Browser
 
-An independent, third-party desktop client for Alibaba Cloud Object Storage Service (OSS), built with Electron, Vue 3, and TypeScript. It is designed for current macOS releases with first-class Apple Silicon support, while also providing Windows and Linux packages.
+An independent, third-party desktop client for Alibaba Cloud Object Storage Service (OSS), built with Electron, Vue 3, and TypeScript.
 
 This project is inspired by [Alibaba OSS Browser](https://github.com/aliyun/oss-browser) and is not an official Alibaba Cloud product.
 
