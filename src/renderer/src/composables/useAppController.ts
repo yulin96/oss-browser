@@ -141,7 +141,15 @@ export function useAppController() {
   const cdnDomains = ref<string[]>([])
   const selectedCdnDomain = ref('')
 
-  const { confirmation, requestConfirmation, confirmPendingAction } = useConfirmation()
+  const {
+    confirmation,
+    confirmationOpen,
+    requestConfirmation,
+    closeConfirmation,
+    confirmPendingAction,
+    finishConfirmationClose,
+    resetConfirmation
+  } = useConfirmation()
   const {
     transfers,
     showTransfers,
@@ -643,7 +651,7 @@ export function useAppController() {
     selectedDomain.value = ''
     cdnDomains.value = []
     selectedCdnDomain.value = ''
-    confirmation.value = null
+    resetConfirmation()
     resetCloudOperations()
     authToken.value = ''
     modal.value = null
@@ -1522,8 +1530,11 @@ export function useAppController() {
     permissionResults,
     permissionChecking,
     confirmation,
+    confirmationOpen,
     requestConfirmation,
+    closeConfirmation,
     confirmPendingAction,
+    finishConfirmationClose,
     auth,
     authTask,
     browserTask,

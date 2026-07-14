@@ -1564,19 +1564,20 @@ input[type='checkbox']:checked::after {
   display: grid;
   place-items: center;
   background: rgba(13, 24, 39, 0.45);
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity var(--modal-open-dur) var(--modal-ease);
-  will-change: opacity;
-}
-.modal-mask.is-active {
   opacity: 1;
   pointer-events: auto;
+  will-change: opacity;
 }
-.modal-mask.is-closing {
-  opacity: 0;
+.modal-enter-active {
+  transition: opacity var(--modal-open-dur) var(--modal-ease);
+}
+.modal-leave-active {
   pointer-events: none;
   transition: opacity var(--modal-close-dur) var(--modal-ease);
+}
+.modal-enter-from,
+.modal-leave-to {
+  opacity: 0;
 }
 .modal-card {
   display: flex;
@@ -1589,24 +1590,27 @@ input[type='checkbox']:checked::after {
   border-radius: 10px;
   background: var(--surface);
   box-shadow: var(--shadow);
-  opacity: 0;
-  transform: scale(var(--modal-scale));
+  opacity: 1;
+  transform: scale(1);
+  will-change: transform, opacity;
+}
+.modal-enter-active .modal-card {
   transition:
     transform var(--modal-open-dur) var(--modal-ease),
     opacity var(--modal-open-dur) var(--modal-ease);
-  will-change: transform, opacity;
 }
-.modal-card.is-active {
-  opacity: 1;
-  transform: scale(1);
-}
-.modal-card.is-closing {
-  opacity: 0;
-  pointer-events: none;
-  transform: scale(var(--modal-scale-close));
+.modal-leave-active .modal-card {
   transition:
     transform var(--modal-close-dur) var(--modal-ease),
     opacity var(--modal-close-dur) var(--modal-ease);
+}
+.modal-enter-from .modal-card {
+  opacity: 0;
+  transform: scale(var(--modal-scale));
+}
+.modal-leave-to .modal-card {
+  opacity: 0;
+  transform: scale(var(--modal-scale-close));
 }
 .modal-card.is-large {
   width: min(820px, calc(100vw - 40px));
@@ -1614,8 +1618,10 @@ input[type='checkbox']:checked::after {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .modal-mask,
-  .modal-card {
+  .modal-enter-active,
+  .modal-leave-active,
+  .modal-enter-active .modal-card,
+  .modal-leave-active .modal-card {
     transition: none !important;
   }
 }

@@ -20,12 +20,16 @@ defineProps<{
 const emit = defineEmits<{
   'update:open': [value: boolean]
   confirm: []
+  'after-leave': []
 }>()
 </script>
 
 <template>
   <AlertDialog :open="open" @update:open="emit('update:open', $event)">
-    <AlertDialogContent class="border-(--border) bg-(--surface) text-foreground">
+    <AlertDialogContent
+      class="border-(--border) bg-(--surface) text-foreground"
+      @after-leave="emit('after-leave')"
+    >
       <AlertDialogHeader>
         <AlertDialogTitle>{{ title }}</AlertDialogTitle>
         <AlertDialogDescription>{{ description }}</AlertDialogDescription>

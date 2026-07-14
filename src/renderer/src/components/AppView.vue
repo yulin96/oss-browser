@@ -10,8 +10,17 @@ import LoginView from './LoginView.vue'
 
 const props = defineProps<{ controller: AppController }>()
 const { controller } = props
-const { anyPending, toastMessage, initializing, loggedIn, confirmation, confirmPendingAction } =
-  controller
+const {
+  anyPending,
+  toastMessage,
+  initializing,
+  loggedIn,
+  confirmation,
+  confirmationOpen,
+  closeConfirmation,
+  confirmPendingAction,
+  finishConfirmationClose
+} = controller
 </script>
 
 <template>
@@ -34,13 +43,14 @@ const { anyPending, toastMessage, initializing, loggedIn, confirmation, confirmP
     <AppDialogs :controller="controller" />
 
     <ConfirmDialog
-      :open="Boolean(confirmation)"
+      :open="confirmationOpen"
       :title="confirmation?.title || ''"
       :description="confirmation?.description || ''"
       :confirm-label="confirmation?.confirmLabel || ''"
       :destructive="confirmation?.destructive"
-      @update:open="!$event && (confirmation = null)"
+      @update:open="!$event && closeConfirmation()"
       @confirm="confirmPendingAction"
+      @after-leave="finishConfirmationClose"
     />
   </main>
 </template>
