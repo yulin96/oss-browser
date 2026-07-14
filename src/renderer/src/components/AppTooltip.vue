@@ -10,11 +10,7 @@ defineProps<{ label: string }>()
       <TooltipTrigger as-child>
         <slot />
       </TooltipTrigger>
-      <TooltipContent
-        side="top"
-        :side-offset="3"
-        class="border border-[var(--border)] bg-[var(--surface)] text-[var(--text)] shadow-md"
-      >
+      <TooltipContent side="top" :side-offset="3">
         {{ label }}
       </TooltipContent>
     </Tooltip>
