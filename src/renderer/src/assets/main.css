@@ -1364,7 +1364,7 @@ input[type='checkbox']:checked::after {
 .transfer-panel {
   position: fixed;
   z-index: 100;
-  top: 68px;
+  top: 160px;
   right: 10px;
   bottom: 10px;
   width: min(430px, calc(100vw - 20px));
