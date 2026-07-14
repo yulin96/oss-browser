@@ -562,6 +562,9 @@ let toastTimer: ReturnType<typeof setTimeout> | undefined
 let shareCopyTimer: ReturnType<typeof setTimeout> | undefined
 let dragDepth = 0
 let permissionProbeGeneration = 0
+const addressAccessCache = new Map<string, Promise<boolean>>()
+let domainOptionsBucket = ''
+let domainOptionsPromise: Promise<void> | undefined
 
 onMounted(async () => {
   document.addEventListener('pointerdown', closeFloatingMenus)
@@ -721,6 +724,9 @@ function resetAccountRuntimeState(): void {
   objectDetails.value = null
   copyBuffer.value = null
   domainOptions.value = []
+  domainOptionsBucket = ''
+  domainOptionsPromise = undefined
+  addressAccessCache.clear()
   selectedDomain.value = ''
   cdnDomains.value = []
   selectedCdnDomain.value = ''
@@ -779,6 +785,7 @@ function handleGlobalKeydown(event: KeyboardEvent): void {
 function openContextMenu(event: MouseEvent, item: ObjectInfo): void {
   event.preventDefault()
   if (!selectedNames.value.has(item.name)) selectedNames.value = new Set([item.name])
+  if (!item.isDirectory) void prefetchAddressData(item)
   showUploadActions.value = false
   contextMenu.x = Math.min(event.clientX, window.innerWidth - 220)
   contextMenu.y = Math.max(8, Math.min(event.clientY, window.innerHeight - 440))
@@ -1004,28 +1011,81 @@ async function prepareAddressModal(): Promise<void> {
     await loadDomainOptions()
     if (!currentBucket.value || selectedObjects.value.length !== 1) return
     const item = selectedObjects.value[0]
-    shareNeedsExpiry.value = !(await window.ossBrowser.objects.isPublic(
-      currentBucket.value.name,
-      item.name
-    ))
+    const needsExpiry = await run(() => getAddressNeedsExpiry(currentBucket.value!.name, item.name))
+    if (needsExpiry === undefined) return
+    shareNeedsExpiry.value = needsExpiry
     if (!shareNeedsExpiry.value) await createShareLink()
   } finally {
     sharePreparing.value = false
   }
 }
 
-async function loadDomainOptions(): Promise<void> {
-  domainOptions.value = []
+function addressAccessKey(bucket: string, name: string): string {
+  return `${bucket}\0${name}`
+}
+
+function getAddressNeedsExpiry(bucket: string, name: string): Promise<boolean> {
+  const key = addressAccessKey(bucket, name)
+  const cached = addressAccessCache.get(key)
+  if (cached) return cached
+
+  const request = window.ossBrowser.objects
+    .isPublic(bucket, name)
+    .then((isPublic) => !isPublic)
+    .catch((error) => {
+      addressAccessCache.delete(key)
+      throw error
+    })
+  addressAccessCache.set(key, request)
+  return request
+}
+
+function invalidateBucketAddressAccess(bucket: string): void {
+  const prefix = `${bucket}\0`
+  for (const key of addressAccessCache.keys()) {
+    if (key.startsWith(prefix)) addressAccessCache.delete(key)
+  }
+}
+
+async function prefetchAddressData(item: ObjectInfo): Promise<void> {
   if (!currentBucket.value) return
+  const bucket = currentBucket.value.name
+  try {
+    await Promise.all([loadDomainOptions(), getAddressNeedsExpiry(bucket, item.name)])
+  } catch (error) {
+    console.error('[share] Failed to prefetch address data', {
+      bucket,
+      object: item.name,
+      reason: error instanceof Error ? error.message : String(error)
+    })
+  }
+}
+
+function loadDomainOptions(): Promise<void> {
+  if (!currentBucket.value) return Promise.resolve()
   const bucket = currentBucket.value
-  const standardDomain = `${bucket.name}.${bucket.region}.aliyuncs.com`
-  const domains = await window.ossBrowser.objects.domains(bucket.name).catch(() => [])
-  domainOptions.value = [standardDomain, ...(domains || [])].filter(
-    (item, index, values) => values.indexOf(item) === index
-  )
-  const remembered = localStorage.getItem(`oss-browser-domain:${profileId()}:${bucket.name}`)
-  selectedDomain.value =
-    remembered && domainOptions.value.includes(remembered) ? remembered : standardDomain
+  if (domainOptionsBucket === bucket.name && domainOptions.value.length) return Promise.resolve()
+  if (domainOptionsBucket === bucket.name && domainOptionsPromise) return domainOptionsPromise
+
+  domainOptionsBucket = bucket.name
+  domainOptions.value = []
+  const request = (async () => {
+    const standardDomain = `${bucket.name}.${bucket.region}.aliyuncs.com`
+    const domains = await window.ossBrowser.objects.domains(bucket.name).catch(() => [])
+    if (domainOptionsBucket !== bucket.name) return
+    domainOptions.value = [standardDomain, ...(domains || [])].filter(
+      (item, index, values) => values.indexOf(item) === index
+    )
+    const remembered = localStorage.getItem(`oss-browser-domain:${profileId()}:${bucket.name}`)
+    selectedDomain.value =
+      remembered && domainOptions.value.includes(remembered) ? remembered : standardDomain
+  })()
+  let promise: Promise<void>
+  promise = request.finally(() => {
+    if (domainOptionsPromise === promise) domainOptionsPromise = undefined
+  })
+  domainOptionsPromise = promise
+  return promise
 }
 
 function prepareCacheRefresh(item?: ObjectInfo): void {
@@ -1119,10 +1179,10 @@ async function createFolder(): Promise<void> {
 
 async function applyBucketAcl(): Promise<void> {
   if (!bucketActionTarget.value) return
-  const done = await run(() =>
-    window.ossBrowser.buckets.setAcl(bucketActionTarget.value!.name, form.acl)
-  )
+  const bucketName = bucketActionTarget.value.name
+  const done = await run(() => window.ossBrowser.buckets.setAcl(bucketName, form.acl))
   if (done === undefined && errorMessage.value) return
+  invalidateBucketAddressAccess(bucketName)
   modal.value = null
   await refreshBuckets()
   showToast(t('Bucket 权限已保存'))
@@ -1421,14 +1481,11 @@ async function downloadSelected(): Promise<void> {
 
 async function applyAcl(): Promise<void> {
   if (!currentBucket.value || selectedObjects.value.length !== 1) return
-  const done = await run(() =>
-    window.ossBrowser.objects.setAcl(
-      currentBucket.value!.name,
-      selectedObjects.value[0].name,
-      form.acl
-    )
-  )
+  const bucketName = currentBucket.value.name
+  const objectName = selectedObjects.value[0].name
+  const done = await run(() => window.ossBrowser.objects.setAcl(bucketName, objectName, form.acl))
   if (done === undefined && errorMessage.value) return
+  addressAccessCache.delete(addressAccessKey(bucketName, objectName))
   modal.value = null
 }
 
