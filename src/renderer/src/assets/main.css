@@ -187,6 +187,10 @@ input[type='checkbox']:checked::after {
   opacity: 0;
   cursor: pointer;
 }
+.language-picker select option {
+  color: #27384e;
+  background: #fff;
+}
 .login-language {
   position: absolute;
   z-index: 2;
