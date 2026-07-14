@@ -860,6 +860,13 @@ input[type='checkbox']:checked::after {
   color: var(--primary);
   background: var(--primary-soft);
 }
+.nav-icon.favorite-nav:hover {
+  color: #e9a520;
+  background: #fff7e5;
+}
+.nav-icon.favorite-nav.active:hover {
+  background: #ffeebf;
+}
 .nav-icon.disabled {
   opacity: 0.28;
   pointer-events: none;
@@ -867,6 +874,13 @@ input[type='checkbox']:checked::after {
 .nav-icon.active {
   color: #e9a520;
   background: #fff7e5;
+}
+.nav-icon.home-nav.active {
+  color: #1767c4;
+  background: #e5f1ff;
+}
+.nav-icon.home-nav.active:hover {
+  background: #d0e6ff;
 }
 .address-wrap {
   display: flex;
@@ -2432,9 +2446,23 @@ html[data-theme='dark'] .profile-list strong {
 html[data-theme='dark'] .nav-icon {
   color: #93a3b8;
 }
+html[data-theme='dark'] .nav-icon.favorite-nav:hover {
+  color: #ffbd45;
+  background: #3b3018;
+}
+html[data-theme='dark'] .nav-icon.favorite-nav.active:hover {
+  background: #4a3e21;
+}
 html[data-theme='dark'] .nav-icon.active {
   color: #ffbd45;
   background: #3b3018;
+}
+html[data-theme='dark'] .nav-icon.home-nav.active {
+  color: #7db7ff;
+  background: #182e48;
+}
+html[data-theme='dark'] .nav-icon.home-nav.active:hover {
+  background: #203c5d;
 }
 html[data-theme='dark'] .drop-overlay {
   background: rgba(20, 50, 82, 0.94);

@@ -63,12 +63,12 @@ const {
       </div>
     </div>
     <AppTooltip :label="t('收藏当前目录')">
-      <div class="nav-icon" :class="{ active: isCurrentFavorite() }" @click="toggleFavorite">
+      <div class="nav-icon favorite-nav" :class="{ active: isCurrentFavorite() }" @click="toggleFavorite">
         <Star :size="18" />
       </div>
     </AppTooltip>
     <AppTooltip :label="t(isCurrentHome() ? '取消首页' : '设为首页')">
-      <div class="nav-icon" :class="{ active: isCurrentHome() }" @click="setCurrentAsHome">
+      <div class="nav-icon home-nav" :class="{ active: isCurrentHome() }" @click="setCurrentAsHome">
         <HousePlus :size="18" />
       </div>
     </AppTooltip>
