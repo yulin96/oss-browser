@@ -34,6 +34,7 @@ import {
   KeyRound,
   LayoutGrid,
   List,
+  LoaderCircle,
   Monitor,
   Moon,
   Pause,
@@ -2046,7 +2047,15 @@ async function checkPermissions(): Promise<void> {
               </div>
             </AppTooltip>
           </div>
-          <div v-if="viewMode === 'list'" class="file-table" @click="handleBlankClick">
+          <div
+            v-if="fileBrowser.loading.value && !objects.length"
+            class="file-loading"
+            role="status"
+          >
+            <LoaderCircle :size="30" />
+            <span>{{ t('正在加载文件列表') }}</span>
+          </div>
+          <div v-else-if="viewMode === 'list'" class="file-table" @click="handleBlankClick">
             <div class="table-row table-head">
               <div>
                 <input
