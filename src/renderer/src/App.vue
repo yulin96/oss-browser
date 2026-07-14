@@ -52,7 +52,7 @@ import {
   Weight,
   X
 } from '@lucide/vue'
-import { computed, onBeforeUnmount, onMounted, reactive, ref, shallowRef } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref, shallowRef, watch } from 'vue'
 import type {
   AuthConfig,
   BucketInfo,
@@ -429,6 +429,25 @@ const {
   toggleAll
 } = fileBrowser
 
+const showFileLoading = ref(false)
+let fileLoadingTimer: ReturnType<typeof setTimeout> | undefined
+
+watch(
+  () => fileBrowser.loading.value,
+  (loading) => {
+    if (fileLoadingTimer) clearTimeout(fileLoadingTimer)
+    fileLoadingTimer = undefined
+    if (!loading || objects.value.length) {
+      showFileLoading.value = false
+      return
+    }
+    fileLoadingTimer = setTimeout(() => {
+      showFileLoading.value = fileBrowser.loading.value && objects.value.length === 0
+      fileLoadingTimer = undefined
+    }, 500)
+  }
+)
+
 const {
   appVersion,
   updateState,
@@ -524,6 +543,7 @@ onBeforeUnmount(() => {
   window.removeEventListener('blur', resetDragState)
   if (toastTimer) clearTimeout(toastTimer)
   if (shareCopyTimer) clearTimeout(shareCopyTimer)
+  if (fileLoadingTimer) clearTimeout(fileLoadingTimer)
 })
 
 function showToast(message: string): void {
@@ -2045,11 +2065,7 @@ async function checkPermissions(): Promise<void> {
               </div>
             </AppTooltip>
           </div>
-          <div
-            v-if="fileBrowser.loading.value && !objects.length"
-            class="file-loading"
-            role="status"
-          >
+          <div v-if="showFileLoading && !objects.length" class="file-loading" role="status">
             <LoaderCircle :size="30" />
             <span>{{ t('正在加载文件列表') }}</span>
           </div>
