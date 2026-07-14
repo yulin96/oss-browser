@@ -18,7 +18,9 @@ const client = new OSS({
   bucket: process.env.OSS_BUCKET,
   region: process.env.OSS_REGION,
   endpoint: process.env.OSS_ENDPOINT || undefined,
-  secure: true
+  secure: true,
+  timeout: 180_000,
+  retryMax: 3
 })
 
 const root = join(process.cwd(), 'release-assets')
@@ -34,10 +36,18 @@ for (const file of [...packages, ...manifests]) {
   const name = relative(root, file).replaceAll('\\', '/')
   const objectName = `${prefix}/${name}`
   const isManifest = manifests.includes(file)
-  await client.put(objectName, file, {
-    headers: {
-      'Cache-Control': isManifest ? 'public, max-age=300' : 'public, max-age=31536000, immutable'
-    }
-  })
+  const headers = {
+    'Cache-Control': isManifest ? 'public, max-age=300' : 'public, max-age=31536000, immutable'
+  }
+
+  if (isManifest) {
+    await client.put(objectName, file, { headers })
+  } else {
+    await client.multipartUpload(objectName, file, {
+      headers,
+      parallel: 4,
+      partSize: 8 * 1024 * 1024
+    })
+  }
   console.log(`Uploaded ${objectName}`)
 }
