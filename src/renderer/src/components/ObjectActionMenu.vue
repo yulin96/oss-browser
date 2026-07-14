@@ -13,6 +13,7 @@ import {
   Trash2,
   Undo2
 } from '@lucide/vue'
+import { nextTick, onMounted, reactive, ref, watch } from 'vue'
 import type { ObjectInfo } from '../../../shared/types'
 import { t } from '../i18n'
 
@@ -31,8 +32,28 @@ export type ObjectAction =
   | 'cache'
   | 'delete'
 
-const props = defineProps<{ selected: ObjectInfo[] }>()
+const props = defineProps<{ selected: ObjectInfo[]; x: number; y: number }>()
 const emit = defineEmits<{ select: [action: ObjectAction] }>()
+const menuElement = ref<HTMLElement | null>(null)
+const position = reactive({ left: props.x, top: props.y })
+
+async function updatePosition(): Promise<void> {
+  await nextTick()
+  const element = menuElement.value
+  if (!element) return
+  const margin = 8
+  position.left = Math.max(
+    margin,
+    Math.min(props.x, window.innerWidth - element.offsetWidth - margin)
+  )
+  position.top = Math.max(
+    margin,
+    Math.min(props.y, window.innerHeight - element.offsetHeight - margin)
+  )
+}
+
+watch(() => [props.x, props.y, props.selected.length], updatePosition)
+onMounted(updatePosition)
 
 function enabled(action: ObjectAction): boolean {
   const count = props.selected.length
@@ -48,7 +69,11 @@ function select(action: ObjectAction): void {
 </script>
 
 <template>
-  <div class="more-menu">
+  <div
+    ref="menuElement"
+    class="more-menu context-menu"
+    :style="{ left: `${position.left}px`, top: `${position.top}px` }"
+  >
     <div :class="{ disabled: !enabled('download') }" @click="select('download')">
       <Download :size="15" />{{ t('下载') }}
     </div>
