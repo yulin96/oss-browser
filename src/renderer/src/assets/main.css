@@ -1348,20 +1348,13 @@ input[type='checkbox']:checked::after {
   font-size: 19px;
 }
 
-@keyframes transfer-slide-in {
-  from {
-    transform: translateX(100%);
-  }
-  to {
-    transform: translateX(0);
-  }
-}
-
 .transfer-layer {
   position: fixed;
   z-index: 95;
   inset: 58px 0 0;
+  opacity: 1;
   pointer-events: none;
+  will-change: opacity;
 }
 
 .transfer-panel {
@@ -1376,8 +1369,37 @@ input[type='checkbox']:checked::after {
   border-radius: 10px;
   background: var(--surface);
   box-shadow: var(--shadow);
-  animation: transfer-slide-in 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  filter: blur(0);
+  transform: translateY(0);
   pointer-events: auto;
+  will-change: transform, filter;
+}
+.transfer-panel-enter-active {
+  transition: opacity var(--panel-open-dur) var(--panel-ease);
+}
+.transfer-panel-leave-active {
+  pointer-events: none;
+  transition: opacity var(--panel-close-dur) var(--panel-ease);
+}
+.transfer-panel-enter-active .transfer-panel {
+  transition:
+    transform var(--panel-open-dur) var(--panel-ease),
+    filter var(--panel-open-dur) var(--panel-ease);
+}
+.transfer-panel-leave-active .transfer-panel {
+  pointer-events: none;
+  transition:
+    transform var(--panel-close-dur) var(--panel-ease),
+    filter var(--panel-close-dur) var(--panel-ease);
+}
+.transfer-panel-enter-from,
+.transfer-panel-leave-to {
+  opacity: 0;
+}
+.transfer-panel-enter-from .transfer-panel,
+.transfer-panel-leave-to .transfer-panel {
+  filter: blur(var(--panel-blur));
+  transform: translateY(var(--panel-translate-y));
 }
 .transfer-head {
   position: sticky;
@@ -1564,20 +1586,19 @@ input[type='checkbox']:checked::after {
   display: grid;
   place-items: center;
   background: rgba(13, 24, 39, 0.45);
-  opacity: 1;
   pointer-events: auto;
-  will-change: opacity;
+  will-change: background-color;
 }
 .modal-enter-active {
-  transition: opacity var(--modal-open-dur) var(--modal-ease);
+  transition: background-color var(--modal-open-dur) var(--modal-ease);
 }
 .modal-leave-active {
   pointer-events: none;
-  transition: opacity var(--modal-close-dur) var(--modal-ease);
+  transition: background-color var(--modal-close-dur) var(--modal-ease);
 }
 .modal-enter-from,
 .modal-leave-to {
-  opacity: 0;
+  background-color: rgba(13, 24, 39, 0);
 }
 .modal-card {
   display: flex;
@@ -1618,6 +1639,10 @@ input[type='checkbox']:checked::after {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .transfer-panel-enter-active,
+  .transfer-panel-leave-active,
+  .transfer-panel-enter-active .transfer-panel,
+  .transfer-panel-leave-active .transfer-panel,
   .modal-enter-active,
   .modal-leave-active,
   .modal-enter-active .modal-card,

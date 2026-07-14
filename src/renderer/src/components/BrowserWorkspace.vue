@@ -121,5 +121,7 @@ const {
     </div>
   </div>
 
-  <TransferPanel v-if="showTransfers" :controller="controller" />
+  <Transition name="transfer-panel">
+    <TransferPanel v-if="showTransfers" :controller="controller" />
+  </Transition>
 </template>
