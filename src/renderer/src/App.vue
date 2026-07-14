@@ -396,6 +396,7 @@ const {
   navigationHistory,
   navigationIndex,
   favorites,
+  homeLocation,
   thumbnailUrls,
   failedThumbnailNames,
   selectedObjects,
@@ -1493,6 +1494,22 @@ function getFileExtension(name: string): string {
   return ext.length <= 10 && /^[a-z0-9]+$/i.test(ext) ? ext : '-'
 }
 
+function isFavoriteDirectory(item: ObjectInfo): boolean {
+  return (
+    item.isDirectory &&
+    Boolean(currentBucket.value) &&
+    favorites.value.some(
+      (favorite) => favorite.bucket === currentBucket.value!.name && favorite.prefix === item.name
+    )
+  )
+}
+
+function isHomeDirectory(item: ObjectInfo): boolean {
+  const home = homeLocation.value
+  if (!item.isDirectory || !home) return false
+  return home.bucket === currentBucket.value?.name && (home.prefix || '') === item.name
+}
+
 function cancelTransfer(id: string): Promise<void> {
   return window.ossBrowser.transfers.cancel(id)
 }
@@ -2049,7 +2066,11 @@ async function checkPermissions(): Promise<void> {
               v-for="item in filteredObjects"
               :key="item.name"
               class="table-row"
-              :class="{ selected: selectedNames.has(item.name) }"
+              :class="{
+                selected: selectedNames.has(item.name),
+                'favorite-location': isFavoriteDirectory(item),
+                'home-location': isHomeDirectory(item)
+              }"
               @click="toggleSelection(item)"
               @contextmenu="openContextMenu($event, item)"
             >
@@ -2076,6 +2097,17 @@ async function checkPermissions(): Promise<void> {
                   @keydown.enter.stop="openItem(item)"
                   >{{ item.displayName }}</span
                 >
+                <span
+                  v-if="isFavoriteDirectory(item) || isHomeDirectory(item)"
+                  class="location-tags"
+                >
+                  <span v-if="isFavoriteDirectory(item)" class="location-tag favorite">
+                    <Star :size="11" fill="currentColor" />{{ t('收藏') }}
+                  </span>
+                  <span v-if="isHomeDirectory(item)" class="location-tag home">
+                    <Home :size="11" />{{ t('首页') }}
+                  </span>
+                </span>
               </div>
               <div>{{ item.isDirectory ? '—' : formatSize(item.size) }}</div>
               <div>{{ item.storageClass || t('标准') }}</div>
@@ -2118,7 +2150,11 @@ async function checkPermissions(): Promise<void> {
                 v-for="item in filteredObjects"
                 :key="item.name"
                 class="object-card"
-                :class="{ selected: selectedNames.has(item.name) }"
+                :class="{
+                  selected: selectedNames.has(item.name),
+                  'favorite-location': isFavoriteDirectory(item),
+                  'home-location': isHomeDirectory(item)
+                }"
                 role="button"
                 tabindex="0"
                 @click="toggleSelection(item)"
@@ -2147,6 +2183,12 @@ async function checkPermissions(): Promise<void> {
                   <span style="display: flex; align-items: center">
                     <template v-if="item.isDirectory">
                       <span>{{ t('文件夹') }}</span>
+                      <span v-if="isFavoriteDirectory(item)" class="location-tag favorite">
+                        <Star :size="11" fill="currentColor" />{{ t('收藏') }}
+                      </span>
+                      <span v-if="isHomeDirectory(item)" class="location-tag home">
+                        <Home :size="11" />{{ t('首页') }}
+                      </span>
                     </template>
                     <template v-else>
                       <span>{{ formatSize(item.size) }}</span>

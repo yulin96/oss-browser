@@ -1050,6 +1050,15 @@ input[type='checkbox']:checked::after {
 .object-card:active {
   transform: var(--accent-active);
 }
+.object-card.favorite-location {
+  background: #fffdf7;
+}
+.object-card.home-location {
+  background: #f7fbff;
+}
+.object-card.favorite-location.home-location {
+  background: linear-gradient(90deg, #fffdf7, #f7fbff);
+}
 .object-card.selected {
   border-color: #76acf0;
   background: #f2f7ff;
@@ -1070,6 +1079,36 @@ input[type='checkbox']:checked::after {
   border-radius: 8px;
   color: #78a9e7;
   background: #f5f8fc;
+}
+.location-tags {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 4px;
+  margin-left: 6px;
+}
+.location-tag {
+  display: inline-flex;
+  height: 20px;
+  align-items: center;
+  gap: 3px;
+  margin-left: 8px;
+  padding: 0 6px;
+  border-radius: 5px;
+  font-size: 10px;
+  font-weight: 650;
+  line-height: 20px;
+  white-space: nowrap;
+}
+.location-tags .location-tag {
+  margin-left: 0;
+}
+.location-tag.favorite {
+  color: #9a6500;
+  background: #fff2c7;
+}
+.location-tag.home {
+  color: #1767c4;
+  background: #e5f1ff;
 }
 .object-preview svg {
   width: min(58%, 48px);
@@ -1126,6 +1165,15 @@ input[type='checkbox']:checked::after {
 }
 .table-row:not(.table-head):hover {
   background: #f8fbff;
+}
+.table-row.favorite-location {
+  background: #fffdf7;
+}
+.table-row.home-location {
+  background: #f7fbff;
+}
+.table-row.favorite-location.home-location {
+  background: linear-gradient(90deg, #fffdf7, #f7fbff);
 }
 .table-row.selected {
   background: #eef6ff;
@@ -2121,6 +2169,26 @@ html[data-theme='dark'] .view-switch > div:hover {
 }
 html[data-theme='dark'] .sort-menu > div.active {
   background: #17283b;
+}
+html[data-theme='dark'] .location-tag.favorite {
+  color: #ffc657;
+  background: #3b3018;
+}
+html[data-theme='dark'] .location-tag.home {
+  color: #74b7ff;
+  background: #172e49;
+}
+html[data-theme='dark'] .object-card.favorite-location,
+html[data-theme='dark'] .table-row.favorite-location {
+  background: #251f15;
+}
+html[data-theme='dark'] .object-card.home-location,
+html[data-theme='dark'] .table-row.home-location {
+  background: #142436;
+}
+html[data-theme='dark'] .object-card.favorite-location.home-location,
+html[data-theme='dark'] .table-row.favorite-location.home-location {
+  background: linear-gradient(90deg, #251f15, #142436);
 }
 html[data-theme='dark'] .more-menu > div {
   color: #cbd6e4;
