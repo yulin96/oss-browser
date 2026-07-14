@@ -679,6 +679,13 @@ function resetAccountRuntimeState(): void {
 
 function closeFloatingMenus(event: PointerEvent): void {
   const target = event.target as HTMLElement
+  if (
+    showTransfers.value &&
+    !target.closest('.transfer-panel') &&
+    !target.closest('.transfer-panel-trigger')
+  ) {
+    showTransfers.value = false
+  }
   if (!target.closest('.more-actions') && !target.closest('.context-menu')) {
     showUploadActions.value = false
     contextMenu.visible = false

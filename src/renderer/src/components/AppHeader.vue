@@ -66,7 +66,12 @@ function changeLocale(event: Event): void {
       <div class="transfer-trigger" role="button" tabindex="0" @click="emit('cacheRefresh')">
         <CloudCog :size="16" /> {{ t('刷新缓存') }}
       </div>
-      <div class="transfer-trigger" role="button" tabindex="0" @click="emit('transfers')">
+      <div
+        class="transfer-trigger transfer-panel-trigger"
+        role="button"
+        tabindex="0"
+        @click="emit('transfers')"
+      >
         <ListTodo :size="16" /> {{ t('传输任务') }}
         <span v-if="transferCount" class="badge">{{ transferCount }}</span>
       </div>
