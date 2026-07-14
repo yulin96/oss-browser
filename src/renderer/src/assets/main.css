@@ -874,14 +874,6 @@ input[type='checkbox']:checked::after {
     visibility 0s linear 80ms,
     opacity 80ms ease;
 }
-.upload-menu::before {
-  position: absolute;
-  right: 0;
-  bottom: 100%;
-  left: 0;
-  height: 8px;
-  content: '';
-}
 .upload-actions.open .upload-menu {
   visibility: visible;
   pointer-events: auto;
