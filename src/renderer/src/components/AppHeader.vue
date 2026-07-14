@@ -56,8 +56,13 @@ function changeLocale(event: Event): void {
         v{{ appVersion }}
         <i
           v-if="['available', 'downloading', 'downloaded'].includes(updateStatus)"
+          :key="updateStatus"
+          class="t-badge"
+          data-open="true"
           aria-hidden="true"
-        />
+        >
+          <span class="t-badge-dot"></span>
+        </i>
       </span>
     </div>
     <div class="top-actions">
@@ -84,7 +89,14 @@ function changeLocale(event: Event): void {
         @click="emit('transfers')"
       >
         <ListTodo :size="16" /> {{ t('传输任务') }}
-        <span v-if="transferCount" class="badge">{{ transferCount }}</span>
+        <span
+          v-if="transferCount"
+          :key="transferCount"
+          class="transfer-count-badge t-badge"
+          data-open="true"
+        >
+          <span class="badge t-badge-dot">{{ transferCount }}</span>
+        </span>
       </div>
       <div class="transfer-trigger" role="button" tabindex="0" @click="emit('settings')">
         <Settings :size="16" /> {{ t('设置') }}

@@ -303,7 +303,6 @@ export function useAppController() {
       profileId,
       run: settingsTask.run,
       taskError: settingsTask.error,
-      showToast,
       openModal: () => {
         modal.value = modal.value === 'settings' ? null : 'settings'
       }
@@ -397,8 +396,7 @@ export function useAppController() {
       bucketMenu.visible = false
     },
     invalidateAddressAccess: invalidateBucketAddressAccess,
-    getError: () => errorMessage.value,
-    showToast
+    getError: () => errorMessage.value
   })
 
   const {
@@ -530,7 +528,7 @@ export function useAppController() {
     initializeUpdates,
     disposeUpdates,
     handleUpdateAction
-  } = useAppUpdates(requestConfirmation, showToast)
+  } = useAppUpdates(requestConfirmation)
 
   const canPaste = computed(() => Boolean(copyBuffer.value && currentBucket.value))
   const isSamePasteLocation = computed(
@@ -1071,7 +1069,6 @@ export function useAppController() {
     if (done === undefined && errorMessage.value) return
     modal.value = null
     await loadObjects()
-    showToast(t('文件夹创建成功'))
   }
 
   function removeSelected(): void {
@@ -1095,7 +1092,6 @@ export function useAppController() {
     )
     if (done === undefined && errorMessage.value) return
     await loadObjects()
-    showToast(t('删除成功'))
   }
 
   async function renameSelected(): Promise<void> {
@@ -1163,7 +1159,6 @@ export function useAppController() {
     if (done === undefined && errorMessage.value) return
     copyBuffer.value = null
     await loadObjects()
-    showToast(t('粘贴成功'))
   }
 
   async function pasteWithNewName(): Promise<void> {
@@ -1177,7 +1172,6 @@ export function useAppController() {
     modal.value = null
     copyBuffer.value = null
     await loadObjects()
-    showToast(t('粘贴成功'))
   }
 
   async function createSymlink(): Promise<void> {
@@ -1217,7 +1211,6 @@ export function useAppController() {
     )
     if (!done) return
     await loadObjects()
-    showToast(t('上传任务已完成'))
   }
 
   async function handleDrop(event: DragEvent): Promise<void> {
@@ -1232,7 +1225,6 @@ export function useAppController() {
     )
     if (!done) return
     await loadObjects()
-    // showToast(t('上传任务已完成'))
   }
 
   async function downloadSelected(): Promise<void> {
@@ -1247,7 +1239,6 @@ export function useAppController() {
       )
     )
     if (!done) return
-    // showToast(t('下载任务已完成'))
   }
 
   async function applyAcl(): Promise<void> {
@@ -1637,7 +1628,6 @@ export function useAppController() {
     addressAccessCache,
     domainOptionsBucket,
     domainOptionsPromise,
-    showToast,
     clearCompletedTransferRecords,
     pauseAllTransfers,
     resumeAllTransfers,

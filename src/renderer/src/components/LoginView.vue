@@ -48,7 +48,11 @@ const {
     <div class="login-card">
       <!-- <div class="login-title">{{ t('连接 OSS') }}</div>
         <div class="login-subtitle">{{ t('使用 AccessKey、STS 凭证或授权码登录') }}</div> -->
-      <div class="auth-tabs">
+      <div
+        class="auth-tabs t-tabs"
+        data-count="2"
+        :data-active="authMode === 'access-key' ? '0' : '1'"
+      >
         <div
           :class="{ active: authMode === 'access-key' }"
           role="button"
@@ -74,7 +78,7 @@ const {
             <div class="textarea-wrap">
               <textarea v-model.trim="authToken" :placeholder="t('粘贴 Base64 授权码')" />
             </div>
-            <div v-if="errorMessage" class="error-box">
+            <div v-if="errorMessage" :key="errorMessage" class="error-box login-error-shake">
               <span>{{ errorMessage }}</span>
               <AppTooltip :label="t('关闭')">
                 <div
@@ -157,7 +161,7 @@ const {
                 ><input v-model="auth.remember" type="checkbox" /> {{ t('记住登录信息') }}</label
               >
             </div>
-            <div v-if="errorMessage" class="error-box">
+            <div v-if="errorMessage" :key="errorMessage" class="error-box login-error-shake">
               <span>{{ errorMessage }}</span>
               <AppTooltip :label="t('关闭')">
                 <div

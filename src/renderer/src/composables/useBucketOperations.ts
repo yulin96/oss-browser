@@ -18,7 +18,6 @@ export function useBucketOperations(options: {
   closeBucketMenu: () => void
   invalidateAddressAccess: (bucket: string) => void
   getError: () => string
-  showToast: (message: string) => void
 }): {
   multipartUploads: Ref<MultipartUploadInfo[]>
   multipartBucket: Ref<BucketInfo | null>
@@ -57,7 +56,6 @@ export function useBucketOperations(options: {
     if (done === undefined && options.getError()) return
     options.setModal(null)
     await options.refreshBuckets()
-    options.showToast(t('Bucket 创建成功'))
   }
 
   function deleteBucket(bucket: BucketInfo): void {
@@ -87,7 +85,6 @@ export function useBucketOperations(options: {
     options.invalidateAddressAccess(bucketName)
     options.setModal(null)
     await options.refreshBuckets()
-    options.showToast(t('Bucket 权限已保存'))
   }
 
   async function openMultipart(bucket: BucketInfo): Promise<void> {
@@ -119,7 +116,6 @@ export function useBucketOperations(options: {
     )
     if (done === undefined && options.getError()) return
     await openMultipart(bucket)
-    options.showToast(t('分片上传已终止'))
   }
 
   return {

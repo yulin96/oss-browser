@@ -34,7 +34,6 @@ export function useAppSettings(options: {
   profileId: () => string
   run: <T>(task: () => Promise<T>) => Promise<T | undefined>
   taskError: Ref<string>
-  showToast: (message: string) => void
   openModal: () => void
 }): {
   settings: AppSettings

@@ -26,11 +26,13 @@ const {
 <template>
   <main class="app-shell">
     <div v-if="anyPending" class="loading-bar" />
-    <div v-if="toastMessage" class="success-toast">
-      <CircleCheck :size="18" />
-      <span>{{ toastMessage }}</span>
-      <div role="button" tabindex="0" @click="toastMessage = ''"><X :size="15" /></div>
-    </div>
+    <Transition name="toast">
+      <div v-if="toastMessage" class="success-toast">
+        <CircleCheck :size="18" />
+        <span>{{ toastMessage }}</span>
+        <div role="button" tabindex="0" @click="toastMessage = ''"><X :size="15" /></div>
+      </div>
+    </Transition>
 
     <section v-if="initializing" class="startup-page">
       <img :src="appIcon" alt="OSS Browser" />

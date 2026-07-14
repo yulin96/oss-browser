@@ -93,7 +93,11 @@ const {
             <strong>{{ t('外观主题') }}</strong
             ><span>{{ t('选择浅色、深色或跟随系统') }}</span>
           </div>
-          <div class="theme-select-buttons">
+          <div
+            class="theme-select-buttons t-tabs"
+            data-count="3"
+            :data-active="themeMode === 'system' ? '0' : themeMode === 'light' ? '1' : '2'"
+          >
             <div
               :class="{ active: themeMode === 'system' }"
               role="button"

@@ -11,6 +11,17 @@
   font-synthesis: none;
   text-rendering: optimizeLegibility;
 
+  /* Motion scale */
+  --duration-micro: 80ms;
+  --duration-quick: 150ms;
+  --duration-fast: 250ms;
+  --duration-medium: 350ms;
+  --duration-slow: 400ms;
+  --ease-smooth-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in-out: ease-in-out;
+  --ease-out: ease-out;
+  --ease-linear: linear;
+
   /* Modal open / close */
   --modal-open-dur: 250ms;
   --modal-close-dur: 150ms;
@@ -24,6 +35,37 @@
   --panel-translate-y: 24px;
   --panel-blur: 2px;
   --panel-ease: cubic-bezier(0.22, 1, 0.36, 1);
+
+  /* Menu dropdown */
+  --dropdown-open-dur: var(--duration-fast);
+  --dropdown-close-dur: var(--duration-quick);
+  --dropdown-pre-scale: 0.97;
+  --dropdown-closing-scale: 0.99;
+  --dropdown-ease: var(--ease-smooth-out);
+
+  /* Sliding tabs */
+  --tabs-dur: var(--duration-fast);
+  --tabs-ease: var(--ease-smooth-out);
+
+  /* Content reveal */
+  --reveal-dur: var(--duration-quick);
+  --reveal-blur: 2px;
+  --reveal-ease: var(--ease-in-out);
+
+  /* Notification badge */
+  --badge-slide-dur: 260ms;
+  --badge-pop-dur: 500ms;
+  --badge-fade-dur: 400ms;
+  --badge-offset-x: -8.2px;
+  --badge-offset-y: 12.4px;
+  --badge-blur: 2px;
+  --badge-slide-ease: var(--ease-smooth-out);
+  --badge-pop-ease: cubic-bezier(0.34, 1.36, 0.64, 1);
+
+  /* Login error */
+  --shake-distance: 6px;
+  --shake-overshoot: 4px;
+  --shake-ease: var(--ease-smooth-out);
 }
 
 * {

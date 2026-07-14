@@ -3,10 +3,7 @@ import type { UpdateState } from '../../../shared/types'
 import { t } from '../i18n'
 import type { ConfirmationRequest } from './useConfirmation'
 
-export function useAppUpdates(
-  requestConfirmation: (request: ConfirmationRequest) => void,
-  showToast: (message: string) => void
-): {
+export function useAppUpdates(requestConfirmation: (request: ConfirmationRequest) => void): {
   appVersion: Ref<string>
   updateState: Ref<UpdateState>
   updateDescription: ComputedRef<string>
@@ -17,7 +14,6 @@ export function useAppUpdates(
 } {
   const appVersion = ref('')
   const updateState = ref<UpdateState>({ status: 'idle' })
-  const manualUpdateCheck = ref(false)
   const isMac = /macintosh|mac os x/i.test(navigator.userAgent)
   let promptedAvailableVersion = ''
   let promptedDownloadedVersion = ''
@@ -37,6 +33,7 @@ export function useAppUpdates(
       })
     if (updateState.value.status === 'error') return t('检查更新失败，请稍后重试')
     if (updateState.value.status === 'unsupported') return t('开发模式下不检查更新')
+    if (updateState.value.status === 'not-available') return t('当前已是最新版本')
     return t('当前版本：{version}', { version: appVersion.value })
   })
 
@@ -85,14 +82,6 @@ export function useAppUpdates(
       promptedDownloadedVersion = state.version || 'latest'
       requestUpdateInstall()
     }
-    if (manualUpdateCheck.value && state.status === 'not-available') {
-      manualUpdateCheck.value = false
-      showToast(t('当前已是最新版本'))
-    }
-    if (manualUpdateCheck.value && state.status === 'error') {
-      manualUpdateCheck.value = false
-      showToast(t('检查更新失败，请稍后重试'))
-    }
   }
 
   async function initializeUpdates(): Promise<void> {
@@ -107,12 +96,10 @@ export function useAppUpdates(
     if (updateState.value.status === 'downloaded') return requestUpdateInstall()
     if (updateState.value.status === 'checking' || updateState.value.status === 'downloading')
       return
-    manualUpdateCheck.value = true
     try {
       handleUpdateState(await window.ossBrowser.updates.check())
     } catch {
-      manualUpdateCheck.value = false
-      showToast(t('检查更新失败，请稍后重试'))
+      updateState.value = { status: 'error' }
     }
   }
 

@@ -158,7 +158,12 @@ const {
         </div>
       </div>
     </div>
-    <div class="view-switch" :aria-label="t('文件显示方式')">
+    <div
+      class="view-switch t-tabs"
+      data-count="2"
+      :data-active="viewMode === 'list' ? '0' : '1'"
+      :aria-label="t('文件显示方式')"
+    >
       <AppTooltip :label="t('列表模式')">
         <div
           :class="{ active: viewMode === 'list' }"

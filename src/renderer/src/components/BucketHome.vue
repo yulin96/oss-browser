@@ -84,20 +84,22 @@ const emit = defineEmits<{
         </div>
       </div>
     </div>
-    <div
-      v-if="menu.visible && actionTarget"
-      class="more-menu context-menu bucket-menu"
-      :style="{ left: `${menu.x}px`, top: `${menu.y}px` }"
-      @click="emit('closeMenu')"
-    >
-      <div @click="emit('acl', actionTarget)"><KeyRound :size="15" />{{ t('Bucket 权限') }}</div>
-      <div @click="emit('multipart', actionTarget)">
-        <ListTodo :size="15" />{{ t('未完成的分片上传') }}
+    <Transition name="context-menu">
+      <div
+        v-if="menu.visible && actionTarget"
+        class="more-menu context-menu bucket-menu"
+        :style="{ left: `${menu.x}px`, top: `${menu.y}px` }"
+        @click="emit('closeMenu')"
+      >
+        <div @click="emit('acl', actionTarget)"><KeyRound :size="15" />{{ t('Bucket 权限') }}</div>
+        <div @click="emit('multipart', actionTarget)">
+          <ListTodo :size="15" />{{ t('未完成的分片上传') }}
+        </div>
+        <div class="danger" @click="emit('delete', actionTarget)">
+          <Trash2 :size="15" />{{ t('删除 Bucket') }}
+        </div>
       </div>
-      <div class="danger" @click="emit('delete', actionTarget)">
-        <Trash2 :size="15" />{{ t('删除 Bucket') }}
-      </div>
-    </div>
+    </Transition>
     <div v-if="!buckets.length" class="welcome-state">
       <LucideIcon name="bucket" :icon-node="bucketIcon" :size="48" />
       <h2>{{ t('暂无 Bucket') }}</h2>

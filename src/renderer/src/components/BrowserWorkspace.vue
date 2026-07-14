@@ -99,27 +99,31 @@ const {
     </section>
   </div>
 
-  <ObjectActionMenu
-    v-if="contextMenu.visible"
-    :selected="selectedObjects"
-    :x="contextMenu.x"
-    :y="contextMenu.y"
-    @select="handleObjectAction"
-  />
+  <Transition name="context-menu">
+    <ObjectActionMenu
+      v-if="contextMenu.visible"
+      :selected="selectedObjects"
+      :x="contextMenu.x"
+      :y="contextMenu.y"
+      @select="handleObjectAction"
+    />
+  </Transition>
 
-  <div
-    v-if="emptyContextMenu.visible"
-    class="more-menu context-menu empty-context-menu"
-    :style="{ left: `${emptyContextMenu.x}px`, top: `${emptyContextMenu.y}px` }"
-    @click="closeActions"
-  >
-    <div @click="upload('files')"><Upload :size="15" />{{ t('上传文件') }}</div>
-    <div @click="upload('folder')"><FolderUp :size="15" />{{ t('上传文件夹') }}</div>
-    <div @click="openModal('create-folder')"><FolderPlus :size="15" />{{ t('新建文件夹') }}</div>
-    <div :class="{ disabled: !canPaste }" @click="canPaste && pasteToCurrentDirectory()">
-      <ClipboardPaste :size="15" />{{ t('粘贴') }}
+  <Transition name="context-menu">
+    <div
+      v-if="emptyContextMenu.visible"
+      class="more-menu context-menu empty-context-menu"
+      :style="{ left: `${emptyContextMenu.x}px`, top: `${emptyContextMenu.y}px` }"
+      @click="closeActions"
+    >
+      <div @click="upload('files')"><Upload :size="15" />{{ t('上传文件') }}</div>
+      <div @click="upload('folder')"><FolderUp :size="15" />{{ t('上传文件夹') }}</div>
+      <div @click="openModal('create-folder')"><FolderPlus :size="15" />{{ t('新建文件夹') }}</div>
+      <div :class="{ disabled: !canPaste }" @click="canPaste && pasteToCurrentDirectory()">
+        <ClipboardPaste :size="15" />{{ t('粘贴') }}
+      </div>
     </div>
-  </div>
+  </Transition>
 
   <Transition name="transfer-panel">
     <TransferPanel v-if="showTransfers" :controller="controller" />

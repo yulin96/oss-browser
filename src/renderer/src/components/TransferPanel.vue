@@ -38,7 +38,11 @@ const {
     >
       <div class="transfer-head">
         <div class="transfer-head-row">
-          <div class="transfer-tabs">
+          <div
+            class="transfer-tabs t-tabs"
+            data-count="2"
+            :data-active="activeTransferTab === 'upload' ? '0' : '1'"
+          >
             <div
               :class="{ active: activeTransferTab === 'upload' }"
               role="button"
