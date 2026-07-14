@@ -79,7 +79,7 @@ import { useAppUpdates } from './composables/useAppUpdates'
 import { useAsyncTask } from './composables/useAsyncTask'
 import { useConfirmation } from './composables/useConfirmation'
 import { useFileBrowser } from './composables/useFileBrowser'
-import { locale, setLocale, t, type AppLocale } from './i18n'
+import { locale, localeLabel, localeOptions, setLocale, t, type AppLocale } from './i18n'
 
 type ModalName =
   | 'create-bucket'
@@ -1647,10 +1647,12 @@ async function checkPermissions(): Promise<void> {
     <section v-else-if="!loggedIn" class="login-page">
       <div class="language-picker login-language">
         <Globe2 :size="16" />
+        <span>{{ localeLabel(locale) }}</span>
+        <ChevronDown :size="14" />
         <select :value="locale" aria-label="Language" @change="changeLocale">
-          <option value="zh-CN">简体中文</option>
-          <option value="en-US">English</option>
-          <option value="ja-JP">日本語</option>
+          <option v-for="option in localeOptions" :key="option.value" :value="option.value">
+            {{ option.label }}
+          </option>
         </select>
       </div>
       <div class="brand-panel">

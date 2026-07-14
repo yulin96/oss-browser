@@ -172,16 +172,20 @@ input[type='checkbox']:checked::after {
   background: #fff;
 }
 .language-picker {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 5px;
+  cursor: pointer;
 }
 .language-picker select {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
   border: 0;
-  outline: 0;
-  color: inherit;
-  background: transparent;
-  font-size: 12px;
+  opacity: 0;
+  cursor: pointer;
 }
 .login-language {
   position: absolute;
@@ -195,14 +199,11 @@ input[type='checkbox']:checked::after {
   background: #fff;
 }
 .top-language {
-  padding: 6px 7px;
+  padding: 6px 10px;
   border-radius: 6px;
 }
 .top-language:hover {
   background: rgba(255, 255, 255, 0.08);
-}
-.top-language select option {
-  color: var(--text);
 }
 .brand-panel {
   position: relative;

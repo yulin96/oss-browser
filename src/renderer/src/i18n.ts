@@ -1,8 +1,20 @@
 import { ref } from 'vue'
+import koKR from './locales/ko-KR'
+import zhTW from './locales/zh-TW'
 
-export type AppLocale = 'zh-CN' | 'en-US' | 'ja-JP'
+export type AppLocale = 'zh-CN' | 'zh-TW' | 'en-US' | 'ja-JP' | 'ko-KR'
+
+export const localeOptions: Array<{ value: AppLocale; label: string; compactLabel: string }> = [
+  { value: 'zh-CN', label: '中文', compactLabel: '中文' },
+  { value: 'zh-TW', label: '繁体中文', compactLabel: '繁体中文' },
+  { value: 'en-US', label: 'English', compactLabel: 'EN' },
+  { value: 'ja-JP', label: '日本語', compactLabel: '日本語' },
+  { value: 'ko-KR', label: '한국어', compactLabel: '한국어' }
+]
 
 const translations: Record<Exclude<AppLocale, 'zh-CN'>, Record<string, string>> = {
+  'zh-TW': zhTW,
+  'ko-KR': koKR,
   'en-US': {
     '快速、安全地管理阿里云对象存储': 'Manage Alibaba Cloud Object Storage quickly and securely',
     '原生支持 Apple Silicon': 'Native Apple Silicon support',
@@ -673,8 +685,15 @@ const translations: Record<Exclude<AppLocale, 'zh-CN'>, Record<string, string>> 
 
 const savedLocale = localStorage.getItem('oss-browser-locale')
 export const locale = ref<AppLocale>(
-  savedLocale === 'en-US' || savedLocale === 'ja-JP' ? savedLocale : 'zh-CN'
+  localeOptions.some((option) => option.value === savedLocale)
+    ? (savedLocale as AppLocale)
+    : 'zh-CN'
 )
+
+export function localeLabel(value: string, compact = false): string {
+  const option = localeOptions.find((item) => item.value === value) || localeOptions[0]
+  return compact ? option.compactLabel : option.label
+}
 
 export function setLocale(value: AppLocale): void {
   locale.value = value

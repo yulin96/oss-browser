@@ -1,9 +1,18 @@
 <script setup lang="ts">
-import { CloudCog, Globe2, ListTodo, LogOut, Settings, StarCheck, UserRound } from '@lucide/vue'
+import {
+  ChevronDown,
+  CloudCog,
+  Globe2,
+  ListTodo,
+  LogOut,
+  Settings,
+  StarCheck,
+  UserRound
+} from '@lucide/vue'
 
 import type { UpdateStatus } from '../../../shared/types'
 import appIcon from '../assets/icon.png'
-import { t } from '../i18n'
+import { localeLabel, localeOptions, t } from '../i18n'
 
 defineProps<{
   appVersion: string
@@ -54,10 +63,12 @@ function changeLocale(event: Event): void {
     <div class="top-actions">
       <div class="language-picker top-language">
         <Globe2 :size="15" />
+        <span>{{ localeLabel(locale, true) }}</span>
+        <ChevronDown :size="14" />
         <select :value="locale" aria-label="Language" @change="changeLocale">
-          <option value="zh-CN">中文</option>
-          <option value="en-US">EN</option>
-          <option value="ja-JP">日本語</option>
+          <option v-for="option in localeOptions" :key="option.value" :value="option.value">
+            {{ option.label }}
+          </option>
         </select>
       </div>
       <div class="transfer-trigger" role="button" tabindex="0" @click="emit('favorites')">
