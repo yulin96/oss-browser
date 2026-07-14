@@ -12,6 +12,9 @@ interface HomeLocation {
   prefix?: string
 }
 
+export type ObjectSortField = 'name' | 'modified' | 'type' | 'size'
+export type SortDirection = 'asc' | 'desc'
+
 export function useFileBrowser(options: {
   settings: AppSettings
   profileId: () => string
@@ -28,6 +31,8 @@ export function useFileBrowser(options: {
   searchText: Ref<string>
   bucketSearchText: Ref<string>
   viewMode: Ref<'list' | 'grid'>
+  sortField: Ref<ObjectSortField>
+  sortDirection: Ref<SortDirection>
   addressInput: Ref<string>
   navigationHistory: Ref<string[]>
   navigationIndex: Ref<number>
@@ -61,6 +66,8 @@ export function useFileBrowser(options: {
   loadObjects: (append?: boolean) => Promise<void>
   markThumbnailFailed: (name: string) => void
   setViewMode: (mode: 'list' | 'grid') => void
+  setSortField: (field: ObjectSortField) => void
+  setSortDirection: (direction: SortDirection) => void
   enterDirectory: (item: ObjectInfo) => Promise<void>
   toggleSelection: (item: ObjectInfo) => void
   toggleAll: () => void
@@ -77,6 +84,8 @@ export function useFileBrowser(options: {
   const viewMode = ref<'list' | 'grid'>(
     localStorage.getItem('oss-browser-view-mode') === 'grid' ? 'grid' : 'list'
   )
+  const sortField = ref<ObjectSortField>('name')
+  const sortDirection = ref<SortDirection>('asc')
   const addressInput = ref('')
   const navigationHistory = ref<string[]>([])
   const navigationIndex = ref(-1)
@@ -92,10 +101,38 @@ export function useFileBrowser(options: {
   const selectedObjects = computed(() =>
     objects.value.filter((item) => selectedNames.value.has(item.name))
   )
+  const nameCollator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' })
   const filteredObjects = computed(() => {
     const keyword = searchText.value.trim().toLowerCase()
-    if (!keyword) return objects.value
-    return objects.value.filter((item) => item.displayName.toLowerCase().includes(keyword))
+    const visibleObjects = keyword
+      ? objects.value.filter((item) => item.displayName.toLowerCase().includes(keyword))
+      : objects.value
+    const direction = sortDirection.value === 'asc' ? 1 : -1
+
+    return [...visibleObjects].sort((left, right) => {
+      if (left.isDirectory !== right.isDirectory) return left.isDirectory ? -1 : 1
+
+      let result = 0
+      if (sortField.value === 'name') {
+        result = nameCollator.compare(left.displayName, right.displayName)
+      } else if (sortField.value === 'modified') {
+        result =
+          (left.lastModified ? new Date(left.lastModified).getTime() : 0) -
+          (right.lastModified ? new Date(right.lastModified).getTime() : 0)
+      } else if (sortField.value === 'type') {
+        const leftType = left.displayName.includes('.')
+          ? left.displayName.slice(left.displayName.lastIndexOf('.') + 1)
+          : ''
+        const rightType = right.displayName.includes('.')
+          ? right.displayName.slice(right.displayName.lastIndexOf('.') + 1)
+          : ''
+        result = nameCollator.compare(leftType, rightType)
+      } else {
+        result = left.size - right.size
+      }
+
+      return (result || nameCollator.compare(left.displayName, right.displayName)) * direction
+    })
   })
   const filteredBuckets = computed(() => {
     const keyword = bucketSearchText.value.trim().toLowerCase()
@@ -116,6 +153,10 @@ export function useFileBrowser(options: {
     return `oss-browser-favorites:${options.profileId()}`
   }
 
+  function sortStorageKey(): string {
+    return `oss-browser-sort:${options.profileId()}`
+  }
+
   function loadAccountPreferences(): void {
     try {
       favorites.value = JSON.parse(localStorage.getItem(favoriteStorageKey()) || '[]')
@@ -129,6 +170,23 @@ export function useFileBrowser(options: {
     } catch {
       homeLocation.value = null
       localStorage.removeItem(homeStorageKey())
+    }
+    try {
+      const preference = JSON.parse(localStorage.getItem(sortStorageKey()) || '{}') as {
+        field?: ObjectSortField
+        direction?: SortDirection
+      }
+      sortField.value =
+        preference.field === 'modified' ||
+        preference.field === 'type' ||
+        preference.field === 'size'
+          ? preference.field
+          : 'name'
+      sortDirection.value = preference.direction === 'desc' ? 'desc' : 'asc'
+    } catch {
+      sortField.value = 'name'
+      sortDirection.value = 'asc'
+      localStorage.removeItem(sortStorageKey())
     }
   }
 
@@ -146,6 +204,8 @@ export function useFileBrowser(options: {
     selectedNames.value = new Set()
     searchText.value = ''
     bucketSearchText.value = ''
+    sortField.value = 'name'
+    sortDirection.value = 'asc'
     addressInput.value = ''
     navigationHistory.value = []
     navigationIndex.value = -1
@@ -384,6 +444,8 @@ export function useFileBrowser(options: {
     searchText,
     bucketSearchText,
     viewMode,
+    sortField,
+    sortDirection,
     addressInput,
     navigationHistory,
     navigationIndex,
@@ -419,6 +481,17 @@ export function useFileBrowser(options: {
     setViewMode: (mode) => {
       viewMode.value = mode
       localStorage.setItem('oss-browser-view-mode', mode)
+    },
+    setSortField: (field) => {
+      sortField.value = field
+      localStorage.setItem(
+        sortStorageKey(),
+        JSON.stringify({ field, direction: sortDirection.value })
+      )
+    },
+    setSortDirection: (direction) => {
+      sortDirection.value = direction
+      localStorage.setItem(sortStorageKey(), JSON.stringify({ field: sortField.value, direction }))
     },
     enterDirectory: (item) => visit(currentBucket.value!, item.name),
     toggleSelection,

@@ -2,7 +2,12 @@
 import {
   ArrowLeft,
   ArrowRight,
+  ArrowDownWideNarrow,
   ArrowUp,
+  ArrowUpNarrowWide,
+  CalendarClock,
+  CaseSensitive,
+  Check,
   ChevronDown,
   CircleCheck,
   ClipboardPaste,
@@ -43,6 +48,7 @@ import {
   Sun,
   Trash2,
   Upload,
+  Weight,
   X
 } from '@lucide/vue'
 import { computed, onBeforeUnmount, onMounted, reactive, ref, shallowRef } from 'vue'
@@ -384,6 +390,8 @@ const {
   searchText,
   bucketSearchText,
   viewMode,
+  sortField,
+  sortDirection,
   addressInput,
   navigationHistory,
   navigationIndex,
@@ -409,6 +417,8 @@ const {
   removeFavorite,
   setCurrentAsHome,
   isCurrentHome,
+  setSortField,
+  setSortDirection,
   loadObjects,
   markThumbnailFailed,
   setViewMode,
@@ -1926,6 +1936,58 @@ async function checkPermissions(): Promise<void> {
             </div>
             <div class="search-wrap toolbar-search">
               <Search :size="15" /><input v-model="searchText" :placeholder="t('搜索当前目录')" />
+            </div>
+            <div class="more-actions sort-actions group">
+              <div class="sort-trigger" role="button" tabindex="0" :aria-label="t('排序字段')">
+                <CaseSensitive v-if="sortField === 'name'" :size="17" />
+                <CalendarClock v-else-if="sortField === 'modified'" :size="17" />
+                <FileType2 v-else-if="sortField === 'type'" :size="17" />
+                <Weight v-else :size="17" />
+              </div>
+              <div
+                class="more-menu sort-menu invisible pointer-events-none opacity-0 group-hover:visible group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:visible group-focus-within:pointer-events-auto group-focus-within:opacity-100"
+              >
+                <div :class="{ active: sortField === 'name' }" @click="setSortField('name')">
+                  <CaseSensitive :size="15" />{{ t('名称')
+                  }}<Check v-if="sortField === 'name'" class="sort-check" :size="14" />
+                </div>
+                <div
+                  :class="{ active: sortField === 'modified' }"
+                  @click="setSortField('modified')"
+                >
+                  <CalendarClock :size="15" />{{ t('修改日期')
+                  }}<Check v-if="sortField === 'modified'" class="sort-check" :size="14" />
+                </div>
+                <div :class="{ active: sortField === 'type' }" @click="setSortField('type')">
+                  <FileType2 :size="15" />{{ t('类型')
+                  }}<Check v-if="sortField === 'type'" class="sort-check" :size="14" />
+                </div>
+                <div :class="{ active: sortField === 'size' }" @click="setSortField('size')">
+                  <Weight :size="15" />{{ t('大小')
+                  }}<Check v-if="sortField === 'size'" class="sort-check" :size="14" />
+                </div>
+              </div>
+            </div>
+            <div class="more-actions sort-actions group">
+              <div class="sort-trigger" role="button" tabindex="0" :aria-label="t('排序方向')">
+                <ArrowDownWideNarrow v-if="sortDirection === 'desc'" :size="17" />
+                <ArrowUpNarrowWide v-else :size="17" />
+              </div>
+              <div
+                class="more-menu sort-menu direction-sort-menu invisible pointer-events-none opacity-0 group-hover:visible group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:visible group-focus-within:pointer-events-auto group-focus-within:opacity-100"
+              >
+                <div :class="{ active: sortDirection === 'asc' }" @click="setSortDirection('asc')">
+                  <ArrowUpNarrowWide :size="15" />{{ t('升序')
+                  }}<Check v-if="sortDirection === 'asc'" class="sort-check" :size="14" />
+                </div>
+                <div
+                  :class="{ active: sortDirection === 'desc' }"
+                  @click="setSortDirection('desc')"
+                >
+                  <ArrowDownWideNarrow :size="15" />{{ t('降序')
+                  }}<Check v-if="sortDirection === 'desc'" class="sort-check" :size="14" />
+                </div>
+              </div>
             </div>
             <div class="view-switch" :aria-label="t('文件显示方式')">
               <AppTooltip :label="t('列表模式')">

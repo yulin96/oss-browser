@@ -895,6 +895,56 @@ input[type='checkbox']:checked::after {
   border-radius: 8px;
   background: #f6f8fb;
 }
+.sort-trigger {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--primary);
+  background: var(--surface);
+  cursor: pointer;
+}
+.sort-trigger:hover,
+.sort-actions:focus-within .sort-trigger {
+  color: var(--primary);
+  border-color: var(--border-hover);
+}
+.sort-menu {
+  top: 42px;
+  width: 150px;
+  transition:
+    visibility 0s linear 80ms,
+    opacity 80ms ease;
+}
+.direction-sort-menu {
+  width: 120px;
+}
+.sort-menu::before {
+  position: absolute;
+  right: 0;
+  bottom: 100%;
+  left: 0;
+  height: 8px;
+  content: '';
+}
+.sort-actions:hover .sort-trigger {
+  color: var(--primary);
+  border-color: var(--border-hover);
+}
+.sort-actions:hover .sort-menu,
+.sort-actions:focus-within .sort-menu {
+  transition-delay: 0s;
+}
+.sort-menu .sort-check {
+  margin-left: auto;
+  color: var(--primary);
+}
+.sort-menu > div.active {
+  color: var(--primary);
+  background: #f0f6ff;
+}
 .view-switch > div {
   display: grid;
   width: 30px;
@@ -2068,6 +2118,9 @@ html[data-theme='dark'] .drop-overlay {
 }
 html[data-theme='dark'] .view-switch > div:hover {
   color: #d5dfeb;
+}
+html[data-theme='dark'] .sort-menu > div.active {
+  background: #17283b;
 }
 html[data-theme='dark'] .more-menu > div {
   color: #cbd6e4;
