@@ -52,7 +52,16 @@ import {
   Weight,
   X
 } from '@lucide/vue'
-import { computed, onBeforeUnmount, onMounted, reactive, ref, shallowRef, watch } from 'vue'
+import {
+  computed,
+  onBeforeUnmount,
+  onMounted,
+  reactive,
+  ref,
+  shallowRef,
+  watch,
+  type Directive
+} from 'vue'
 import type {
   AuthConfig,
   BucketInfo,
@@ -422,12 +431,76 @@ const {
   setSortField,
   setSortDirection,
   loadObjects,
+  requestThumbnail,
   markThumbnailFailed,
   setViewMode,
   enterDirectory,
   toggleSelection,
   toggleAll
 } = fileBrowser
+
+const thumbnailObserverRoots = new Map<
+  Element,
+  { observer: IntersectionObserver; elements: Set<Element> }
+>()
+const thumbnailRootByElement = new WeakMap<Element, Element>()
+const thumbnailItemByElement = new WeakMap<Element, ObjectInfo>()
+
+const vThumbnail: Directive<HTMLElement, ObjectInfo> = {
+  mounted(element, binding) {
+    const item = binding.value
+    if (item.isDirectory || !/\.(png|jpe?g|gif|webp|bmp)$/i.test(item.name)) return
+    const root = element.closest('.file-table, .object-grid-scroll')
+    if (!root) return
+    let state = thumbnailObserverRoots.get(root)
+    if (!state) {
+      const observer = new IntersectionObserver(
+        (entries) => {
+          for (const entry of entries) {
+            if (!entry.isIntersecting || !settings.showImagePreview) continue
+            observer.unobserve(entry.target)
+            const visibleItem = thumbnailItemByElement.get(entry.target)
+            if (visibleItem) requestThumbnail(visibleItem)
+          }
+        },
+        { root, rootMargin: '400px 0px' }
+      )
+      state = { observer, elements: new Set() }
+      thumbnailObserverRoots.set(root, state)
+    }
+    state.elements.add(element)
+    thumbnailRootByElement.set(element, root)
+    thumbnailItemByElement.set(element, item)
+    state.observer.observe(element)
+  },
+  unmounted(element) {
+    const root = thumbnailRootByElement.get(element)
+    if (!root) return
+    const state = thumbnailObserverRoots.get(root)
+    if (!state) return
+    state.observer.unobserve(element)
+    state.elements.delete(element)
+    if (state.elements.size === 0) {
+      state.observer.disconnect()
+      thumbnailObserverRoots.delete(root)
+    }
+    thumbnailRootByElement.delete(element)
+    thumbnailItemByElement.delete(element)
+  }
+}
+
+watch(
+  () => settings.showImagePreview,
+  (enabled) => {
+    if (!enabled) return
+    for (const state of thumbnailObserverRoots.values()) {
+      for (const element of state.elements) {
+        state.observer.unobserve(element)
+        state.observer.observe(element)
+      }
+    }
+  }
+)
 
 const showFileLoading = ref(false)
 let fileLoadingTimer: ReturnType<typeof setTimeout> | undefined
@@ -2115,9 +2188,11 @@ async function checkPermissions(): Promise<void> {
               </div>
               <div class="file-name">
                 <span class="file-icon" :class="getObjectVisual(item).kind">
+                  <span v-thumbnail="item" class="thumbnail-observer-target" />
                   <img
                     v-if="thumbnailUrls[item.name] && !failedThumbnailNames.has(item.name)"
                     :src="thumbnailUrls[item.name]"
+                    loading="lazy"
                     @error="markThumbnailFailed(item.name)"
                   />
                   <component :is="getObjectVisual(item).icon" v-else :size="18" /> </span
@@ -2201,6 +2276,7 @@ async function checkPermissions(): Promise<void> {
                   />
                 </div>
                 <div class="object-preview" :class="getObjectVisual(item).kind">
+                  <span v-thumbnail="item" class="thumbnail-observer-target" />
                   <img
                     v-if="thumbnailUrls[item.name] && !failedThumbnailNames.has(item.name)"
                     :src="thumbnailUrls[item.name]"

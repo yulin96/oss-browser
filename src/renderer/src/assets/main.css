@@ -1084,6 +1084,7 @@ input[type='checkbox']:checked::after {
   right: 8px;
 }
 .object-preview {
+  position: relative;
   display: grid;
   width: 48px;
   height: 48px;
@@ -1093,6 +1094,11 @@ input[type='checkbox']:checked::after {
   border-radius: 8px;
   color: #78a9e7;
   background: #f5f8fc;
+}
+.thumbnail-observer-target {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
 }
 .location-tags {
   display: flex;
@@ -1220,6 +1226,7 @@ input[type='checkbox']:checked::after {
   text-decoration: underline;
 }
 .file-icon {
+  position: relative;
   color: #5f9fe9;
   font-size: 17px;
 }

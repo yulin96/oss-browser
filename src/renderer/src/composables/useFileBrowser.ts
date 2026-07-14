@@ -64,6 +64,7 @@ export function useFileBrowser(options: {
   setCurrentAsHome: () => void
   isCurrentHome: () => boolean
   loadObjects: (append?: boolean) => Promise<void>
+  requestThumbnail: (item: ObjectInfo) => void
   markThumbnailFailed: (name: string) => void
   setViewMode: (mode: 'list' | 'grid') => void
   setSortField: (field: ObjectSortField) => void
@@ -95,7 +96,15 @@ export function useFileBrowser(options: {
   const failedThumbnailNames = ref(new Set<string>())
   const loading = ref(false)
   const error = ref('')
+  const thumbnailQueue: Array<{
+    item: ObjectInfo
+    bucketName: string
+    generation: number
+  }> = []
+  const pendingThumbnailGenerations = new Map<string, number>()
+  let activeThumbnailJobs = 0
   let loadGeneration = 0
+  let thumbnailGeneration = 0
   let bucketGeneration = 0
 
   const selectedObjects = computed(() =>
@@ -192,6 +201,7 @@ export function useFileBrowser(options: {
 
   function reset(): void {
     loadGeneration += 1
+    thumbnailGeneration += 1
     bucketGeneration += 1
     loading.value = false
     error.value = ''
@@ -213,6 +223,8 @@ export function useFileBrowser(options: {
     homeLocation.value = null
     for (const name of Object.keys(thumbnailUrls)) delete thumbnailUrls[name]
     failedThumbnailNames.value = new Set()
+    thumbnailQueue.length = 0
+    pendingThumbnailGenerations.clear()
   }
 
   async function openInitialLocation(
@@ -366,12 +378,15 @@ export function useFileBrowser(options: {
     const requestedPrefix = prefix.value
     const marker = append ? nextMarker.value : undefined
     if (!append) {
+      thumbnailGeneration += 1
       objects.value = []
       nextMarker.value = undefined
       hasMoreObjects.value = false
       selectedNames.value = new Set()
       Object.keys(thumbnailUrls).forEach((key) => delete thumbnailUrls[key])
       failedThumbnailNames.value = new Set()
+      thumbnailQueue.length = 0
+      pendingThumbnailGenerations.clear()
     }
     loading.value = true
     error.value = ''
@@ -393,38 +408,69 @@ export function useFileBrowser(options: {
     )
       return
     objects.value = append ? [...objects.value, ...result.objects] : result.objects
-    void loadThumbnails(result.objects, bucketName, generation)
     nextMarker.value = result.nextMarker
     hasMoreObjects.value = result.isTruncated
     selectedNames.value = new Set()
   }
 
-  async function loadThumbnails(
-    items: ObjectInfo[],
-    bucketName: string,
-    generation: number
-  ): Promise<void> {
-    if (!options.settings.showImagePreview) return
-    await Promise.all(
-      items
-        .filter((item) => !item.isDirectory && /\.(png|jpe?g|gif|webp|bmp)$/i.test(item.name))
-        .map(async (item) => {
-          try {
-            const url = await window.ossBrowser.objects.signedUrl(
-              bucketName,
-              item.name,
-              3600,
-              'image/resize,m_lfit,w_320,h_200/quality,q_80'
-            )
-            if (generation !== loadGeneration || currentBucket.value?.name !== bucketName) return
-            thumbnailUrls[item.name] = url
-            failedThumbnailNames.value.delete(item.name)
-          } catch {
-            if (generation !== loadGeneration || currentBucket.value?.name !== bucketName) return
-            failedThumbnailNames.value.add(item.name)
-          }
-        })
+  function requestThumbnail(item: ObjectInfo): void {
+    if (
+      !options.settings.showImagePreview ||
+      item.isDirectory ||
+      !/\.(png|jpe?g|gif|webp|bmp)$/i.test(item.name) ||
+      thumbnailUrls[item.name] ||
+      failedThumbnailNames.value.has(item.name) ||
+      !currentBucket.value ||
+      pendingThumbnailGenerations.get(item.name) === thumbnailGeneration
     )
+      return
+
+    const generation = thumbnailGeneration
+    pendingThumbnailGenerations.set(item.name, generation)
+    thumbnailQueue.push({ item, bucketName: currentBucket.value.name, generation })
+    runThumbnailQueue()
+  }
+
+  function runThumbnailQueue(): void {
+    while (activeThumbnailJobs < 8 && thumbnailQueue.length) {
+      const job = thumbnailQueue.shift()!
+      activeThumbnailJobs += 1
+      void window.ossBrowser.objects
+        .signedUrl(
+          job.bucketName,
+          job.item.name,
+          3600,
+          'image/resize,m_lfit,w_320,h_200/quality,q_80'
+        )
+        .then((url) => {
+          if (
+            job.generation !== thumbnailGeneration ||
+            currentBucket.value?.name !== job.bucketName
+          )
+            return
+          thumbnailUrls[job.item.name] = url
+          failedThumbnailNames.value.delete(job.item.name)
+        })
+        .catch((reason) => {
+          if (
+            job.generation !== thumbnailGeneration ||
+            currentBucket.value?.name !== job.bucketName
+          )
+            return
+          console.error('[thumbnails] Failed to generate thumbnail URL', {
+            bucket: job.bucketName,
+            object: job.item.name,
+            reason
+          })
+          failedThumbnailNames.value.add(job.item.name)
+        })
+        .finally(() => {
+          if (pendingThumbnailGenerations.get(job.item.name) === job.generation)
+            pendingThumbnailGenerations.delete(job.item.name)
+          activeThumbnailJobs -= 1
+          runThumbnailQueue()
+        })
+    }
   }
 
   function toggleSelection(item: ObjectInfo): void {
@@ -477,6 +523,7 @@ export function useFileBrowser(options: {
     setCurrentAsHome,
     isCurrentHome,
     loadObjects,
+    requestThumbnail,
     markThumbnailFailed: (name) => failedThumbnailNames.value.add(name),
     setViewMode: (mode) => {
       viewMode.value = mode
