@@ -168,16 +168,13 @@ const {
           }"
           role="button"
           tabindex="0"
-          @click="toggleSelection(item)"
-          @dblclick="openItem(item)"
+          @click="openItem(item)"
+          @keydown.enter="openItem(item)"
+          @keydown.space.prevent="openItem(item)"
           @contextmenu="openContextMenu($event, item)"
         >
-          <div class="object-card-check" @click.stop>
-            <input
-              type="checkbox"
-              :checked="selectedNames.has(item.name)"
-              @change="toggleSelection(item)"
-            />
+          <div class="object-card-check" @click.stop="toggleSelection(item)">
+            <input type="checkbox" :checked="selectedNames.has(item.name)" />
           </div>
           <div class="object-preview" :class="getObjectVisual(item).kind">
             <span v-thumbnail="item" class="thumbnail-observer-target" />

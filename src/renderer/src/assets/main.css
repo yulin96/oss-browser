@@ -774,7 +774,6 @@ input[type='checkbox']:checked::after {
   border: 1px solid var(--border);
   border-radius: 10px;
   background: var(--surface);
-  cursor: pointer;
   transition:
     border-color 0.15s ease-in-out,
     box-shadow 0.15s ease-in-out;
@@ -1208,7 +1207,7 @@ input[type='checkbox']:checked::after {
   border: 1px solid var(--border);
   border-radius: 10px;
   background: var(--surface);
-  cursor: default;
+  cursor: pointer;
   transition:
     border-color 0.15s ease-in-out,
     box-shadow 0.15s ease-in-out;
@@ -1233,8 +1232,15 @@ input[type='checkbox']:checked::after {
 .object-card-check {
   position: absolute;
   z-index: 1;
-  top: 8px;
-  right: 8px;
+  top: 0;
+  right: 0;
+  display: grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+}
+.object-card-check input {
+  cursor: default !important;
 }
 .object-preview {
   position: relative;
