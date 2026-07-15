@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { Download, Pause, Play, Trash2, Upload, X } from '@lucide/vue'
+import { onBeforeUnmount, onMounted } from 'vue'
 import type { AppController } from '../composables/useAppController'
 import { t } from '../i18n'
 import AppButton from './AppButton.vue'
@@ -25,6 +26,27 @@ const {
   handleDrop,
   cancelTransfer
 } = props.controller
+
+onMounted(() => {
+  window.addEventListener('keydown', handleKeydown, true)
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('keydown', handleKeydown, true)
+})
+
+function handleKeydown(event: KeyboardEvent): void {
+  if (event.key !== 'Escape' || event.isComposing || event.defaultPrevented) return
+  if (
+    document.querySelector('.modal-mask') ||
+    document.querySelector('[data-slot="alert-dialog-content"][data-state="open"]')
+  )
+    return
+
+  event.preventDefault()
+  event.stopImmediatePropagation()
+  showTransfers.value = false
+}
 </script>
 
 <template>

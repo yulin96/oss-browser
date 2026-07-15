@@ -1,13 +1,15 @@
 <script setup lang="ts">
 import { X } from '@lucide/vue'
-import { onMounted, ref } from 'vue'
+import { onBeforeUnmount, onMounted, ref } from 'vue'
 
 const props = defineProps<{ title: string; width?: string; size?: 'default' | 'large' }>()
 const emit = defineEmits<{ close: [] }>()
 
+const modalMask = ref<HTMLElement | null>(null)
 const modalCard = ref<HTMLElement | null>(null)
 
 onMounted(() => {
+  window.addEventListener('keydown', handleKeydown, true)
   requestAnimationFrame(() => {
     if (props.size === 'large') return
     modalCard.value
@@ -18,13 +20,29 @@ onMounted(() => {
   })
 })
 
+onBeforeUnmount(() => {
+  window.removeEventListener('keydown', handleKeydown, true)
+})
+
 function handleClose(): void {
   emit('close')
+}
+
+function handleKeydown(event: KeyboardEvent): void {
+  if (event.key !== 'Escape' || event.isComposing || event.defaultPrevented) return
+  if (document.querySelector('[data-slot="alert-dialog-content"][data-state="open"]')) return
+
+  const openModals = document.querySelectorAll<HTMLElement>('.modal-mask')
+  if (openModals.item(openModals.length - 1) !== modalMask.value) return
+
+  event.preventDefault()
+  event.stopImmediatePropagation()
+  handleClose()
 }
 </script>
 
 <template>
-  <div class="modal-mask" @mousedown.self="handleClose">
+  <div ref="modalMask" class="modal-mask" @mousedown.self="handleClose">
     <div
       ref="modalCard"
       class="modal-card"
