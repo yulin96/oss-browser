@@ -124,6 +124,7 @@ export function useAppController() {
   const toastMessage = ref('')
   const modal = ref<ModalName>(null)
   const showProfilesModal = ref(false)
+  const showUploadActions = ref(false)
   const contextMenu = reactive({ visible: false, x: 0, y: 0 })
   const emptyContextMenu = reactive({ visible: false, x: 0, y: 0 })
   const bucketMenu = reactive({ visible: false, x: 0, y: 0 })
@@ -634,6 +635,7 @@ export function useAppController() {
     errorMessage.value = ''
     toastMessage.value = ''
     resetTransfers()
+    showUploadActions.value = false
     contextMenu.visible = false
     emptyContextMenu.visible = false
     bucketMenu.visible = false
@@ -691,6 +693,7 @@ export function useAppController() {
       showTransfers.value = false
     }
     if (!target.closest('.more-actions') && !target.closest('.context-menu')) {
+      showUploadActions.value = false
       contextMenu.visible = false
       emptyContextMenu.visible = false
       bucketMenu.visible = false
@@ -699,6 +702,7 @@ export function useAppController() {
 
   function handleGlobalKeydown(event: KeyboardEvent): void {
     if (event.key === 'Escape') {
+      showUploadActions.value = false
       contextMenu.visible = false
       emptyContextMenu.visible = false
       bucketMenu.visible = false
@@ -709,6 +713,7 @@ export function useAppController() {
     event.preventDefault()
     if (!selectedNames.value.has(item.name)) selectedNames.value = new Set([item.name])
     if (!item.isDirectory) void prefetchAddressData(item)
+    showUploadActions.value = false
     contextMenu.x = event.clientX
     contextMenu.y = event.clientY
     contextMenu.visible = true
@@ -719,6 +724,7 @@ export function useAppController() {
     const target = event.target as HTMLElement
     if (target.closest('.object-card, .table-row, .toolbar, .quick-nav, .context-menu')) return
     event.preventDefault()
+    showUploadActions.value = false
 
     contextMenu.visible = false
     selectedNames.value = new Set()
@@ -740,12 +746,18 @@ export function useAppController() {
   }
 
   function closeActions(): void {
+    showUploadActions.value = false
     contextMenu.visible = false
     emptyContextMenu.visible = false
     bucketMenu.visible = false
   }
 
+  function toggleUploadActions(): void {
+    showUploadActions.value = !showUploadActions.value
+  }
+
   function selectUpload(kind: 'files' | 'folder'): void {
+    showUploadActions.value = false
     void upload(kind)
   }
 
@@ -1485,6 +1497,7 @@ export function useAppController() {
     transfers,
     showTransfers,
     activeTransferTab,
+    showUploadActions,
     contextMenu,
     emptyContextMenu,
     bucketMenu,
@@ -1640,6 +1653,7 @@ export function useAppController() {
     openEmptyContextMenu,
     handleBlankClick,
     closeActions,
+    toggleUploadActions,
     selectUpload,
     openBucketMenu,
     openBucketAcl,
