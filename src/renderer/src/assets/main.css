@@ -45,6 +45,10 @@
   cursor: default !important;
 }
 
+[role='button']:focus-visible {
+  outline: none;
+}
+
 input,
 textarea,
 [contenteditable='true'] {
