@@ -67,11 +67,9 @@ const {
               >
             </div>
           </div>
-          <AppTooltip :label="t('关闭')">
-            <div class="icon-button" role="button" tabindex="0" @click="showTransfers = false">
-              <X :size="18" />
-            </div>
-          </AppTooltip>
+          <div class="icon-button" role="button" tabindex="0" @click="showTransfers = false">
+            <X :size="18" />
+          </div>
         </div>
         <div class="transfer-toolbar">
           <span
