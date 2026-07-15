@@ -213,16 +213,38 @@ input[type='checkbox']:checked::after {
   color: #27384e;
   background: #fff;
 }
-.login-language {
+.login-preferences {
   position: absolute;
   z-index: 2;
   top: 20px;
   right: 24px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.login-language {
   padding: 7px 9px;
   border: 1px solid var(--border);
   border-radius: 8px;
   color: #52647b;
   background: #fff;
+}
+.login-theme-switch {
+  width: 112px;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--tab-bg);
+}
+.login-theme-switch > div {
+  display: grid;
+  height: 32px;
+  place-items: center;
+  border-radius: 6px;
+  color: var(--muted);
+}
+.login-theme-switch > div.active {
+  color: var(--text);
 }
 .top-language {
   padding: 6px 10px;
@@ -2438,6 +2460,7 @@ html[data-theme='dark'] .bucket-home {
   background: var(--background);
 }
 html[data-theme='dark'] .login-language,
+html[data-theme='dark'] .login-theme-switch,
 html[data-theme='dark'] .quick-nav,
 html[data-theme='dark'] .search-wrap,
 html[data-theme='dark'] .view-switch,

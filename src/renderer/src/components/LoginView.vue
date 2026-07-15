@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ChevronDown, CircleCheck, Globe2, KeyRound, X } from '@lucide/vue'
+import { ChevronDown, CircleCheck, Globe2, KeyRound, Monitor, Moon, Sun, X } from '@lucide/vue'
 import appIcon from '../assets/icon.png'
 import type { AppController } from '../composables/useAppController'
 import { locale, localeLabel, localeOptions, t } from '../i18n'
@@ -15,6 +15,7 @@ const {
   auth,
   authTask,
   errorMessage,
+  themeMode,
   login,
   loginWithToken,
   changeLocale
@@ -23,15 +24,57 @@ const {
 
 <template>
   <section class="login-page">
-    <div class="language-picker login-language">
-      <Globe2 :size="16" />
-      <span>{{ localeLabel(locale) }}</span>
-      <ChevronDown :size="14" />
-      <select :value="locale" aria-label="Language" @change="changeLocale">
-        <option v-for="option in localeOptions" :key="option.value" :value="option.value">
-          {{ option.label }}
-        </option>
-      </select>
+    <div class="login-preferences">
+      <div
+        class="login-theme-switch t-tabs"
+        data-count="3"
+        :data-active="themeMode === 'system' ? '0' : themeMode === 'light' ? '1' : '2'"
+        :aria-label="t('外观主题')"
+      >
+        <AppTooltip :label="t('跟随系统')" side="bottom">
+          <div
+            :class="{ active: themeMode === 'system' }"
+            role="button"
+            tabindex="0"
+            :aria-label="t('跟随系统')"
+            @click="themeMode = 'system'"
+          >
+            <Monitor :size="15" />
+          </div>
+        </AppTooltip>
+        <AppTooltip :label="t('浅色')" side="bottom">
+          <div
+            :class="{ active: themeMode === 'light' }"
+            role="button"
+            tabindex="0"
+            :aria-label="t('浅色')"
+            @click="themeMode = 'light'"
+          >
+            <Sun :size="15" />
+          </div>
+        </AppTooltip>
+        <AppTooltip :label="t('深色')" side="bottom">
+          <div
+            :class="{ active: themeMode === 'dark' }"
+            role="button"
+            tabindex="0"
+            :aria-label="t('深色')"
+            @click="themeMode = 'dark'"
+          >
+            <Moon :size="15" />
+          </div>
+        </AppTooltip>
+      </div>
+      <div class="language-picker login-language">
+        <Globe2 :size="16" />
+        <span>{{ localeLabel(locale) }}</span>
+        <ChevronDown :size="14" />
+        <select :value="locale" aria-label="Language" @change="changeLocale">
+          <option v-for="option in localeOptions" :key="option.value" :value="option.value">
+            {{ option.label }}
+          </option>
+        </select>
+      </div>
     </div>
     <div class="brand-panel">
       <div class="brand-mark">
