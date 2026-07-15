@@ -447,6 +447,21 @@ input[type='checkbox']:checked::after {
     border-color var(--duration-quick) var(--ease-in-out),
     box-shadow var(--duration-quick) var(--ease-in-out);
 }
+.select-wrap {
+  position: relative;
+}
+.select-wrap::after {
+  position: absolute;
+  top: 50%;
+  right: 14px;
+  width: 6px;
+  height: 6px;
+  border-right: 1.5px solid var(--muted);
+  border-bottom: 1.5px solid var(--muted);
+  content: '';
+  pointer-events: none;
+  transform: translateY(-65%) rotate(45deg);
+}
 .input-wrap:focus-within,
 .select-wrap:focus-within,
 .search-wrap:focus-within {
@@ -463,8 +478,10 @@ input[type='checkbox']:checked::after {
   user-select: text;
 }
 .select-wrap select {
+  appearance: none;
+  -webkit-appearance: none;
   width: 100%;
-  padding: 9px 10px;
+  padding: 9px 36px 9px 10px;
   border: 0;
   outline: 0;
   background: transparent;
