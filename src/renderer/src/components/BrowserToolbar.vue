@@ -28,7 +28,6 @@ import AppTooltip from './AppTooltip.vue'
 
 const props = defineProps<{ controller: AppController }>()
 const {
-  showUploadActions,
   copyBuffer,
   selectedNames,
   searchText,
@@ -43,7 +42,6 @@ const {
   setViewMode,
   toggleAll,
   canPaste,
-  toggleUploadActions,
   selectUpload,
   openModal,
   copySelected,
@@ -54,15 +52,11 @@ const {
 
 <template>
   <div class="toolbar">
-    <div class="more-actions upload-actions" :class="{ open: showUploadActions }">
-      <AppButton
-        :label="t('上传')"
-        :icon="Upload"
-        :end-icon="ChevronDown"
-        tone="primary"
-        @click="toggleUploadActions"
-      />
-      <div class="more-menu upload-menu invisible pointer-events-none opacity-0">
+    <div class="more-actions upload-actions group">
+      <AppButton :label="t('上传')" :icon="Upload" :end-icon="ChevronDown" tone="primary" />
+      <div
+        class="more-menu upload-menu invisible pointer-events-none opacity-0 group-hover:visible group-hover:pointer-events-auto group-hover:scale-100 group-hover:opacity-100 group-focus-within:visible group-focus-within:pointer-events-auto group-focus-within:scale-100 group-focus-within:opacity-100"
+      >
         <div @click="selectUpload('files')"><Upload :size="15" />{{ t('上传文件') }}</div>
         <div @click="selectUpload('folder')"><FolderUp :size="15" />{{ t('上传文件夹') }}</div>
       </div>

@@ -993,10 +993,16 @@ input[type='checkbox']:checked::after {
     opacity var(--dropdown-close-dur) var(--dropdown-ease);
   will-change: transform, opacity;
 }
-.upload-actions.open .upload-menu {
-  visibility: visible;
-  pointer-events: auto;
-  opacity: 1;
+.upload-menu::before {
+  position: absolute;
+  right: 0;
+  bottom: 100%;
+  left: 0;
+  height: 8px;
+  content: '';
+}
+.upload-actions:hover .upload-menu,
+.upload-actions:focus-within .upload-menu {
   transform: scale(1);
   transition-duration: 0s, var(--dropdown-open-dur), var(--dropdown-open-dur);
   transition-delay: 0s;
