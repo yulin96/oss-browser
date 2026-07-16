@@ -695,7 +695,6 @@ input[type='checkbox']:checked::after {
   height: 52px;
   display: flex;
   align-items: center;
-  justify-content: space-between;
   padding: 0 20px;
   color: #fff;
   background: #101b2d;
@@ -717,6 +716,7 @@ input[type='checkbox']:checked::after {
   font-size: 10px;
 }
 .top-actions {
+  margin-left: auto;
   -webkit-app-region: no-drag;
   color: #c7d1df;
 }
