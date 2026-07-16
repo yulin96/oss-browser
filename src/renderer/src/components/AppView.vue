@@ -7,6 +7,9 @@ import AppDialogs from './AppDialogs.vue'
 import BrowserWorkspace from './BrowserWorkspace.vue'
 import ConfirmDialog from './ConfirmDialog.vue'
 import LoginView from './LoginView.vue'
+import WindowTitleBar from './WindowTitleBar.vue'
+
+const platform = window.ossBrowser.system.platform
 
 const props = defineProps<{ controller: AppController }>()
 const { controller } = props
@@ -24,7 +27,8 @@ const {
 </script>
 
 <template>
-  <main class="app-shell">
+  <main class="app-shell" :class="{ 'has-window-titlebar': !loggedIn }">
+    <WindowTitleBar v-if="!loggedIn" :platform="platform" />
     <div v-if="anyPending" class="loading-bar" />
     <Transition name="toast">
       <div v-if="toastMessage" class="success-toast">

@@ -1,5 +1,14 @@
 import { electronApp, is, optimizer } from '@electron-toolkit/utils'
-import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, shell } from 'electron'
+import {
+  app,
+  BrowserWindow,
+  clipboard,
+  dialog,
+  ipcMain,
+  type IpcMainInvokeEvent,
+  Menu,
+  shell
+} from 'electron'
 import { join } from 'node:path'
 import icon from '../../resources/icon.png?asset'
 import type {
@@ -35,6 +44,7 @@ function createWindow(): void {
     autoHideMenuBar: true,
     backgroundColor: '#f6f8fb',
     title: 'OSS Browser',
+    ...(process.platform === 'darwin' ? { titleBarStyle: 'hidden' } : { frame: false }),
     ...(process.platform === 'linux' ? { icon } : {}),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
@@ -45,7 +55,13 @@ function createWindow(): void {
     }
   })
 
+  if (process.platform === 'darwin') {
+    mainWindow.setWindowButtonPosition({ x: 14, y: 19 })
+  }
+
   mainWindow.on('ready-to-show', () => mainWindow?.show())
+  mainWindow.on('maximize', () => mainWindow?.webContents.send('window:maximize-change', true))
+  mainWindow.on('unmaximize', () => mainWindow?.webContents.send('window:maximize-change', false))
   mainWindow.on('closed', () => {
     mainWindow = null
   })
@@ -62,6 +78,9 @@ function createWindow(): void {
 }
 
 function registerIpc(): void {
+  const senderWindow = (event: IpcMainInvokeEvent): BrowserWindow | null =>
+    BrowserWindow.fromWebContents(event.sender)
+
   ipcMain.handle('auth:connect', (_event, config: AuthConfig) => oss.connect(config))
   ipcMain.handle('auth:disconnect', () => oss.disconnect())
   ipcMain.handle('auth:setSecure', (_event, secure: boolean) => oss.setSecure(secure))
@@ -198,6 +217,16 @@ function registerIpc(): void {
   ipcMain.handle('system:openExternal', (_event, url: string) => shell.openExternal(url))
   ipcMain.handle('system:revealFile', (_event, path: string) => shell.showItemInFolder(path))
   ipcMain.handle('system:writeClipboard', (_event, text: string) => clipboard.writeText(text))
+  ipcMain.handle('window:minimize', (event) => senderWindow(event)?.minimize())
+  ipcMain.handle('window:toggleMaximize', (event) => {
+    const window = senderWindow(event)
+    if (!window) return false
+    if (window.isMaximized()) window.unmaximize()
+    else window.maximize()
+    return window.isMaximized()
+  })
+  ipcMain.handle('window:close', (event) => senderWindow(event)?.close())
+  ipcMain.handle('window:isMaximized', (event) => senderWindow(event)?.isMaximized() ?? false)
   ipcMain.handle('updates:getState', () => updates.getState())
   ipcMain.handle('updates:check', () => updates.check())
   ipcMain.handle('updates:download', () => updates.download())

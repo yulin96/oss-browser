@@ -13,6 +13,9 @@ import {
 import type { UpdateStatus } from '../../../shared/types'
 import appIcon from '../assets/icon.png'
 import { localeLabel, localeOptions, t } from '../i18n'
+import WindowControls from './WindowControls.vue'
+
+const platform = window.ossBrowser.system.platform
 
 defineProps<{
   appVersion: string
@@ -37,7 +40,7 @@ function changeLocale(event: Event): void {
 </script>
 
 <template>
-  <header class="topbar">
+  <header class="topbar" :class="`is-${platform}`">
     <div class="top-brand">
       <div class="small-mark"><img :src="appIcon" alt="" /></div>
       <strong>OSS Browser</strong>
@@ -106,5 +109,6 @@ function changeLocale(event: Event): void {
         ><LogOut :size="16" />
       </div>
     </div>
+    <WindowControls :platform="platform" />
   </header>
 </template>

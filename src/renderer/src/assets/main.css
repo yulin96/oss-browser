@@ -96,28 +96,40 @@ input[type='checkbox']:checked::after {
   height: 100%;
   background: var(--background);
 }
-.app-shell.is-mac {
-  box-sizing: border-box;
-  padding-top: 38px;
-}
 .window-titlebar {
-  position: fixed;
+  position: absolute;
   z-index: 1000;
   top: 0;
   left: 0;
-  display: grid;
+  display: flex;
   width: 100%;
-  height: 38px;
-  place-items: center;
+  height: 52px;
+  align-items: center;
+  justify-content: space-between;
   color: var(--muted);
   background: var(--background);
-  font-size: 12px;
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
   font-weight: 650;
   -webkit-app-region: drag;
   user-select: none;
 }
-.app-shell.is-mac .startup-page {
-  min-height: calc(100vh - 38px);
+.window-titlebar-brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-left: 14px;
+}
+.window-titlebar.is-darwin .window-titlebar-brand {
+  padding-left: 96px;
+}
+.window-titlebar-brand img {
+  width: 20px;
+  height: 20px;
+  border-radius: 5px;
+}
+.app-shell.has-window-titlebar {
+  padding-top: 52px;
 }
 .loading-bar {
   position: fixed;
@@ -680,7 +692,7 @@ input[type='checkbox']:checked::after {
 }
 
 .topbar {
-  height: 58px;
+  height: 52px;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -689,6 +701,9 @@ input[type='checkbox']:checked::after {
   background: #101b2d;
   -webkit-app-region: drag;
 }
+.topbar.is-darwin {
+  padding-left: 96px;
+}
 .top-brand,
 .top-actions {
   display: flex;
@@ -696,8 +711,8 @@ input[type='checkbox']:checked::after {
   gap: 11px;
 }
 .small-mark {
-  width: 31px;
-  height: 31px;
+  width: 29px;
+  height: 29px;
   border-radius: 8px;
   font-size: 10px;
 }
@@ -705,11 +720,39 @@ input[type='checkbox']:checked::after {
   -webkit-app-region: no-drag;
   color: #c7d1df;
 }
+.window-controls {
+  align-self: stretch;
+  display: flex;
+  flex: 0 0 auto;
+  margin: 0 -20px 0 8px;
+  -webkit-app-region: no-drag;
+}
+.window-titlebar .window-controls {
+  margin: 0;
+}
+.window-control {
+  width: 46px;
+  display: grid;
+  place-items: center;
+  color: inherit;
+  cursor: default;
+  transition: background-color var(--duration-micro) var(--ease-out);
+}
+.window-control:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+.window-titlebar .window-control:hover {
+  background: rgba(15, 23, 42, 0.08);
+}
+.window-control.is-close:hover {
+  color: #fff;
+  background: #e81123;
+}
 .transfer-trigger {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 8px 10px;
+  padding: 7px 9px;
   border-radius: 6px;
   cursor: pointer;
   font-size: 13px;
@@ -774,7 +817,7 @@ input[type='checkbox']:checked::after {
   transform: var(--accent-active);
 }
 .workspace-full {
-  height: calc(100% - 58px);
+  height: calc(100% - 52px);
 }
 .bucket-home {
   height: 100%;
@@ -1546,7 +1589,7 @@ input[type='checkbox']:checked::after {
 .transfer-layer {
   position: fixed;
   z-index: 95;
-  inset: 58px 0 0;
+  inset: 52px 0 0;
   opacity: 1;
   pointer-events: none;
   will-change: opacity;

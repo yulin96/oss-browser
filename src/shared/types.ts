@@ -157,6 +157,8 @@ export interface MultipartUploadInfo {
   initiated?: string
 }
 
+export type AppPlatform = 'darwin' | 'win32' | 'linux'
+
 export interface OssBrowserApi {
   auth: {
     connect: (config: AuthConfig) => Promise<BucketInfo[]>
@@ -239,10 +241,18 @@ export interface OssBrowserApi {
     cancelAll: (direction: TransferItem['direction']) => Promise<void>
   }
   system: {
+    platform: AppPlatform
     getVersion: () => Promise<string>
     openExternal: (url: string) => Promise<void>
     revealFile: (path: string) => Promise<void>
     writeClipboard: (text: string) => Promise<void>
+  }
+  window: {
+    minimize: () => Promise<void>
+    toggleMaximize: () => Promise<boolean>
+    close: () => Promise<void>
+    isMaximized: () => Promise<boolean>
+    onMaximizeChange: (listener: (maximized: boolean) => void) => () => void
   }
   updates: {
     getState: () => Promise<UpdateState>

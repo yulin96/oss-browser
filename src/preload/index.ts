@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
-import type { OssBrowserApi, TransferItem, UpdateState } from '../shared/types'
+import type { AppPlatform, OssBrowserApi, TransferItem, UpdateState } from '../shared/types'
 
 const api: OssBrowserApi = {
   auth: {
@@ -82,10 +82,23 @@ const api: OssBrowserApi = {
     cancelAll: (direction) => ipcRenderer.invoke('transfers:cancelAll', direction)
   },
   system: {
+    platform: process.platform as AppPlatform,
     getVersion: () => ipcRenderer.invoke('system:getVersion'),
     openExternal: (url) => ipcRenderer.invoke('system:openExternal', url),
     revealFile: (path) => ipcRenderer.invoke('system:revealFile', path),
     writeClipboard: (text) => ipcRenderer.invoke('system:writeClipboard', text)
+  },
+  window: {
+    minimize: () => ipcRenderer.invoke('window:minimize'),
+    toggleMaximize: () => ipcRenderer.invoke('window:toggleMaximize'),
+    close: () => ipcRenderer.invoke('window:close'),
+    isMaximized: () => ipcRenderer.invoke('window:isMaximized'),
+    onMaximizeChange: (listener) => {
+      const handler = (_event: Electron.IpcRendererEvent, maximized: boolean): void =>
+        listener(maximized)
+      ipcRenderer.on('window:maximize-change', handler)
+      return () => ipcRenderer.removeListener('window:maximize-change', handler)
+    }
   },
   updates: {
     getState: () => ipcRenderer.invoke('updates:getState'),
