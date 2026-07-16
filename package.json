@@ -34,7 +34,7 @@
   },
   "dependencies": {
     "@alicloud/cdn20180510": "9.2.0",
-    "@alicloud/openapi-core": "1.0.7",
+    "@alicloud/openapi-core": "1.0.8",
     "@alicloud/ram20150501": "1.2.1",
     "@alicloud/sts20150401": "1.2.0",
     "@electron-toolkit/preload": "^3.0.2",
@@ -46,7 +46,7 @@
     "ali-oss": "6.23.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
-    "electron-updater": "6.6.2",
+    "electron-updater": "6.8.9",
     "reka-ui": "^2.10.1",
     "tailwind-merge": "^3.6.0",
     "tailwindcss": "^4.3.2",
@@ -57,8 +57,8 @@
     "@electron-toolkit/eslint-config-ts": "^3.1.0",
     "@electron-toolkit/tsconfig": "^2.0.0",
     "@types/node": "^22.19.1",
-    "@vitejs/plugin-vue": "^6.0.2",
-    "electron": "^39.2.6",
+    "@vitejs/plugin-vue": "^6.0.8",
+    "electron": "^43.1.1",
     "electron-builder": "^26.0.12",
     "electron-vite": "^5.0.0",
     "eslint": "^9.39.1",
@@ -66,7 +66,7 @@
     "prettier": "^3.7.4",
     "typescript": "^5.9.3",
     "vite": "^7.2.6",
-    "vue": "^3.5.25",
+    "vue": "^3.5.40",
     "vue-eslint-parser": "^10.2.0",
     "vue-tsc": "^3.1.6"
   }

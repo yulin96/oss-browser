@@ -9,7 +9,7 @@ import {
   Menu,
   shell
 } from 'electron'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import icon from '../../resources/icon.png?asset'
 import type {
   AppSettings,
@@ -33,6 +33,8 @@ const oss = new OssService((item: TransferItem) => {
 })
 const profiles = new ProfileStore()
 const updates = new UpdateService(() => mainWindow)
+let lastUploadDirectory: string | undefined
+let lastDownloadDirectory: string | undefined
 
 function createWindow(): void {
   mainWindow = new BrowserWindow({
@@ -184,15 +186,24 @@ function registerIpc(): void {
   ipcMain.handle('files:pickUpload', async (_event, kind: 'files' | 'folder') => {
     const properties: Electron.OpenDialogOptions['properties'] =
       kind === 'folder' ? ['openDirectory'] : ['openFile', 'multiSelections']
-    const result = await dialog.showOpenDialog(mainWindow!, { title: '选择上传内容', properties })
-    return result.canceled ? [] : result.filePaths
+    const result = await dialog.showOpenDialog(mainWindow!, {
+      title: '选择上传内容',
+      defaultPath: lastUploadDirectory,
+      properties
+    })
+    if (result.canceled) return []
+    lastUploadDirectory = kind === 'folder' ? result.filePaths[0] : dirname(result.filePaths[0])
+    return result.filePaths
   })
   ipcMain.handle('files:pickDownloadFolder', async () => {
     const result = await dialog.showOpenDialog(mainWindow!, {
       title: '选择下载位置',
+      defaultPath: lastDownloadDirectory,
       properties: ['openDirectory', 'createDirectory']
     })
-    return result.canceled ? null : result.filePaths[0]
+    if (result.canceled) return null
+    lastDownloadDirectory = result.filePaths[0]
+    return lastDownloadDirectory
   })
   ipcMain.handle('files:upload', (_event, bucket: string, prefix: string, paths: string[]) =>
     oss.upload(bucket, prefix, paths)
