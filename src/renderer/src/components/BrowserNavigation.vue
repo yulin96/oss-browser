@@ -37,12 +37,12 @@ const {
 
 <template>
   <div class="quick-nav">
-    <AppTooltip :label="t('后退')">
+    <AppTooltip :label="t('后退')" side="top">
       <div class="nav-icon" :class="{ disabled: navigationIndex <= 0 }" @click="goBack">
         <ArrowLeft :size="18" />
       </div>
     </AppTooltip>
-    <AppTooltip :label="t('前进')">
+    <AppTooltip :label="t('前进')" side="top">
       <div
         class="nav-icon"
         :class="{ disabled: navigationIndex >= navigationHistory.length - 1 }"
@@ -51,18 +51,18 @@ const {
         <ArrowRight :size="18" />
       </div>
     </AppTooltip>
-    <AppTooltip :label="t('上一级')">
+    <AppTooltip :label="t('上一级')" side="top">
       <div class="nav-icon" @click="goUp"><ArrowUp :size="18" /></div>
     </AppTooltip>
-    <AppTooltip :label="t('刷新')">
+    <AppTooltip :label="t('刷新')" side="top">
       <div class="nav-icon" @click="loadObjects()"><RefreshCw :size="18" /></div>
     </AppTooltip>
-    <AppTooltip :label="t('Bucket 首页')">
+    <AppTooltip :label="t('Bucket 首页')" side="top">
       <div class="nav-icon" @click="goBucketHome">
         <LucideIcon name="bucket" :icon-node="bucketIcon" :size="18" />
       </div>
     </AppTooltip>
-    <AppTooltip :label="t('首页')">
+    <AppTooltip :label="t('首页')" side="top">
       <div class="nav-icon" @click="goHome"><Home :size="18" /></div>
     </AppTooltip>
     <div class="address-wrap">
@@ -80,7 +80,7 @@ const {
       </div>
       <BucketStorageStat :controller="controller" />
     </div>
-    <AppTooltip :label="t('收藏当前目录')">
+    <AppTooltip :label="t('收藏当前目录')" side="top">
       <div
         class="nav-icon favorite-nav"
         :class="{ active: isCurrentFavorite() }"
@@ -89,7 +89,7 @@ const {
         <Star :size="18" />
       </div>
     </AppTooltip>
-    <AppTooltip :label="t(isCurrentHome() ? '取消首页' : '设为首页')">
+    <AppTooltip :label="t(isCurrentHome() ? '取消首页' : '设为首页')" side="top">
       <div class="nav-icon home-nav" :class="{ active: isCurrentHome() }" @click="setCurrentAsHome">
         <HousePlus :size="18" />
       </div>
