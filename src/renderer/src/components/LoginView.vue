@@ -5,6 +5,7 @@ import type { AppController } from '../composables/useAppController'
 import { locale, localeLabel, localeOptions, t } from '../i18n'
 import AppButton from './AppButton.vue'
 import AppTooltip from './AppTooltip.vue'
+import { Switch } from './ui/switch'
 
 const props = defineProps<{ controller: AppController }>()
 const {
@@ -199,10 +200,8 @@ const {
             </template>
 
             <div class="login-options">
-              <label><input v-model="auth.secure" type="checkbox" /> {{ t('使用 HTTPS') }}</label>
-              <label
-                ><input v-model="auth.remember" type="checkbox" /> {{ t('记住登录信息') }}</label
-              >
+              <label><Switch v-model="auth.secure" /> {{ t('使用 HTTPS') }}</label>
+              <label><Switch v-model="auth.remember" /> {{ t('记住登录信息') }}</label>
             </div>
             <div v-if="errorMessage" :key="errorMessage" class="error-box login-error-shake">
               <span>{{ errorMessage }}</span>

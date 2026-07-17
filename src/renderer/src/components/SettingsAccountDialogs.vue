@@ -4,6 +4,7 @@ import type { AppController } from '../composables/useAppController'
 import { t } from '../i18n'
 import AppButton from './AppButton.vue'
 import ModalShell from './ModalShell.vue'
+import { Switch } from './ui/switch'
 
 const props = defineProps<{ controller: AppController }>()
 const {
@@ -132,16 +133,20 @@ const {
             <strong>{{ t('连接安全') }}</strong
             ><span>{{ t('OSS 请求默认使用 HTTPS') }}</span>
           </div>
-          <label><input v-model="auth.secure" type="checkbox" /> HTTPS</label>
+          <label class="setting-switch">
+            <span>HTTPS</span>
+            <Switch v-model="auth.secure" :aria-label="t('连接安全')" />
+          </label>
         </div>
         <div class="setting-row">
           <div>
             <strong>{{ t('图片缩略图') }}</strong
             ><span>{{ t('在文件列表中显示图片预览') }}</span>
           </div>
-          <label
-            ><input v-model="settings.showImagePreview" type="checkbox" /> {{ t('显示') }}</label
-          >
+          <label class="setting-switch">
+            <span>{{ t('显示') }}</span>
+            <Switch v-model="settings.showImagePreview" :aria-label="t('图片缩略图')" />
+          </label>
         </div>
 
         <div class="settings-section-title">{{ t('账号与权限') }}</div>

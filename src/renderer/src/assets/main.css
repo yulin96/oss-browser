@@ -546,7 +546,7 @@ input[type='checkbox']:checked::after {
 }
 .login-options label {
   display: flex;
-  gap: 7px;
+  gap: 8px;
   align-items: center;
 }
 .error-box,
@@ -2119,6 +2119,14 @@ input[type='checkbox']:checked::after {
   font-size: 12px;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.setting-switch {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 10px;
+  color: var(--muted);
+  font-size: 12px;
 }
 .update-progress-track {
   width: min(360px, 48vw);
