@@ -30,6 +30,7 @@ import type {
   CacheRefreshRequest,
   GrantOptions,
   GrantResult,
+  ImageDimensions,
   MultipartUploadInfo,
   ObjectDetails,
   ObjectInfo,
@@ -69,7 +70,8 @@ export class OssService {
     timeoutSeconds: 60,
     retryTimes: 5,
     listPageSize: 500,
-    showImagePreview: true
+    showImagePreview: true,
+    showImageResolution: false
   }
   private readonly activeTransfers = new Map<string, ActiveTransfer>()
   private readonly transferBatches = new Map<string, TransferBatch>()
@@ -603,6 +605,20 @@ export class OssService {
 
   signedUrl(bucket: string, name: string, expires: number, process?: string): string {
     return this.bucketClient(bucket).signatureUrl(name, { expires, process })
+  }
+
+  async getImageDimensions(bucket: string, name: string): Promise<ImageDimensions> {
+    const result = await this.bucketClient(bucket).get(name, { process: 'image/info' })
+    const info = JSON.parse(result.content.toString('utf8')) as {
+      ImageWidth?: { value?: string }
+      ImageHeight?: { value?: string }
+    }
+    const width = Number(info.ImageWidth?.value)
+    const height = Number(info.ImageHeight?.value)
+    if (!Number.isFinite(width) || width <= 0 || !Number.isFinite(height) || height <= 0) {
+      throw new Error('OSS 未返回有效的图片分辨率')
+    }
+    return { width, height }
   }
 
   async readText(bucket: string, name: string): Promise<string> {

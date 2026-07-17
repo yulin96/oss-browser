@@ -11,7 +11,8 @@ const defaultSettings: AppSettings = {
   timeoutSeconds: 60,
   retryTimes: 5,
   listPageSize: 500,
-  showImagePreview: true
+  showImagePreview: true,
+  showImageResolution: false
 }
 
 const legacyDefaultSettings: AppSettings = {

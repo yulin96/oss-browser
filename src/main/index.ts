@@ -162,6 +162,9 @@ function registerIpc(): void {
     (_event, bucket: string, name: string, expires: number, process?: string) =>
       oss.signedUrl(bucket, name, expires, process)
   )
+  ipcMain.handle('objects:imageDimensions', (_event, bucket: string, name: string) =>
+    oss.getImageDimensions(bucket, name)
+  )
   ipcMain.handle('objects:readText', (_event, bucket: string, name: string) =>
     oss.readText(bucket, name)
   )

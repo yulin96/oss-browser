@@ -340,6 +340,7 @@ export function useAppController() {
     favorites,
     homeLocation,
     thumbnailUrls,
+    imageDimensions,
     failedThumbnailNames,
     selectedObjects,
     filteredObjects,
@@ -365,7 +366,7 @@ export function useAppController() {
     setSortField,
     setSortDirection,
     loadObjects,
-    requestThumbnail,
+    requestImageAssets,
     markThumbnailFailed,
     setViewMode,
     enterDirectory,
@@ -461,10 +462,14 @@ export function useAppController() {
         const observer = new IntersectionObserver(
           (entries) => {
             for (const entry of entries) {
-              if (!entry.isIntersecting || !settings.showImagePreview) continue
+              if (
+                !entry.isIntersecting ||
+                (!settings.showImagePreview && !settings.showImageResolution)
+              )
+                continue
               observer.unobserve(entry.target)
               const visibleItem = thumbnailItemByElement.get(entry.target)
-              if (visibleItem) requestThumbnail(visibleItem)
+              if (visibleItem) requestImageAssets(visibleItem)
             }
           },
           { root, rootMargin: '400px 0px' }
@@ -494,9 +499,9 @@ export function useAppController() {
   }
 
   watch(
-    () => settings.showImagePreview,
-    (enabled) => {
-      if (!enabled) return
+    () => [settings.showImagePreview, settings.showImageResolution],
+    ([showPreview, showResolution]) => {
+      if (!showPreview && !showResolution) return
       for (const state of thumbnailObserverRoots.values()) {
         for (const element of state.elements) {
           state.observer.unobserve(element)
@@ -1582,6 +1587,7 @@ export function useAppController() {
     favorites,
     homeLocation,
     thumbnailUrls,
+    imageDimensions,
     failedThumbnailNames,
     selectedObjects,
     filteredObjects,
@@ -1607,7 +1613,7 @@ export function useAppController() {
     setSortField,
     setSortDirection,
     loadObjects,
-    requestThumbnail,
+    requestImageAssets,
     markThumbnailFailed,
     setViewMode,
     enterDirectory,

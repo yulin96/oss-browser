@@ -1283,6 +1283,7 @@ input[type='checkbox']:checked::after {
   padding: 14px 18px;
 }
 .object-card {
+  container-type: inline-size;
   position: relative;
   display: flex;
   align-items: center;
@@ -1411,12 +1412,47 @@ input[type='checkbox']:checked::after {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.object-info > span {
-  display: block;
+.object-info > .object-grid-name {
+  display: flex;
+}
+.object-grid-name-start {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.object-grid-name-end {
+  flex: 0 0 auto;
+}
+.object-grid-metadata {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 5px;
   margin: 1px 0 0;
+  overflow: hidden;
   color: var(--muted);
   font-size: 11px;
   line-height: 16px;
+  white-space: nowrap;
+}
+.object-grid-size,
+.object-grid-resolution {
+  flex: 0 0 auto;
+}
+.object-grid-type {
+  display: inline-flex;
+  flex: 0 0 auto;
+  gap: 5px;
+}
+.object-grid-resolution {
+  display: inline-flex;
+  gap: 5px;
+}
+@container (max-width: 300px) {
+  .object-grid-metadata.has-resolution .object-grid-type {
+    display: none;
+  }
 }
 .table-row {
   display: grid;
@@ -1427,6 +1463,19 @@ input[type='checkbox']:checked::after {
   border-bottom: 1px solid #edf1f5;
   color: #56667b;
   font-size: 13px;
+}
+.object-size-metadata {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 1px;
+  line-height: 16px;
+}
+.image-resolution {
+  color: var(--muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 .table-row:not(.table-head):hover {
   background: #f8fbff;

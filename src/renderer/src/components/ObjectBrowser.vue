@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { Folder, FolderPlus, Home, LoaderCircle, Star, Upload, X } from '@lucide/vue'
+import type { ObjectInfo } from '../../../shared/types'
 import type { AppController } from '../composables/useAppController'
 import { storageClassLabel, t } from '../i18n'
 import AppButton from './AppButton.vue'
@@ -11,6 +12,7 @@ const {
   modal,
   dragActive,
   errorMessage,
+  settings,
   fileBrowser,
   currentBucket,
   objects,
@@ -19,6 +21,7 @@ const {
   searchText,
   viewMode,
   thumbnailUrls,
+  imageDimensions,
   failedThumbnailNames,
   filteredObjects,
   loadObjects,
@@ -36,6 +39,23 @@ const {
   isFavoriteDirectory,
   isHomeDirectory
 } = props.controller
+
+function fileNameParts(item: ObjectInfo): {
+  start: string
+  end: string
+} {
+  if (item.isDirectory) return { start: item.displayName, end: '' }
+  const dotIndex = item.displayName.lastIndexOf('.')
+  if (dotIndex <= 0 || dotIndex === item.displayName.length - 1) {
+    return { start: item.displayName, end: '' }
+  }
+  const baseName = item.displayName.slice(0, dotIndex)
+  const preservedLength = Math.min(4, Math.max(1, Math.floor(baseName.length / 3)))
+  return {
+    start: baseName.slice(0, -preservedLength),
+    end: item.displayName.slice(dotIndex - preservedLength)
+  }
+}
 </script>
 
 <template>
@@ -120,7 +140,15 @@ const {
             </span>
           </span>
         </div>
-        <div>{{ item.isDirectory ? '—' : formatSize(item.size) }}</div>
+        <div class="object-size-metadata">
+          <span>{{ item.isDirectory ? '—' : formatSize(item.size) }}</span>
+          <span
+            v-if="settings.showImageResolution && imageDimensions[item.name]"
+            class="image-resolution"
+          >
+            {{ imageDimensions[item.name].width }}×{{ imageDimensions[item.name].height }}
+          </span>
+        </div>
         <div>{{ storageClassLabel(item.storageClass) }}</div>
         <div>
           {{ item.lastModified ? new Date(item.lastModified).toLocaleString() : '—' }}
@@ -188,8 +216,16 @@ const {
             <component :is="getObjectVisual(item).icon" v-else :size="44" />
           </div>
           <div class="object-info">
-            <strong :title="item.displayName">{{ item.displayName }}</strong>
-            <span style="display: flex; align-items: center">
+            <strong class="object-grid-name" :title="item.displayName">
+              <span class="object-grid-name-start">{{ fileNameParts(item).start }}</span>
+              <span class="object-grid-name-end">{{ fileNameParts(item).end }}</span>
+            </strong>
+            <span
+              class="object-grid-metadata"
+              :class="{
+                'has-resolution': settings.showImageResolution && imageDimensions[item.name]
+              }"
+            >
               <template v-if="item.isDirectory">
                 <span>{{ t('文件夹') }}</span>
                 <span v-if="isFavoriteDirectory(item)" class="location-tag favorite">
@@ -200,9 +236,19 @@ const {
                 </span>
               </template>
               <template v-else>
-                <span>{{ formatSize(item.size) }}</span>
-                <span class="mx-1">·</span>
-                <span class="uppercase">{{ getFileExtension(item.name) }}</span>
+                <span class="object-grid-size">{{ formatSize(item.size) }}</span>
+                <span class="object-grid-type">
+                  <span>·</span>
+                  <span class="uppercase">{{ getFileExtension(item.name) }}</span>
+                </span>
+                <template v-if="settings.showImageResolution && imageDimensions[item.name]">
+                  <span class="object-grid-resolution">
+                    <span>·</span>
+                    <span class="image-resolution">
+                      {{ imageDimensions[item.name].width }}×{{ imageDimensions[item.name].height }}
+                    </span>
+                  </span>
+                </template>
               </template>
             </span>
           </div>

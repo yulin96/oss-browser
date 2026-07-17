@@ -54,6 +54,7 @@ const api: OssBrowserApi = {
       ipcRenderer.invoke('objects:setHeaders', bucket, name, headers),
     signedUrl: (bucket, name, expires, process) =>
       ipcRenderer.invoke('objects:signedUrl', bucket, name, expires, process),
+    imageDimensions: (bucket, name) => ipcRenderer.invoke('objects:imageDimensions', bucket, name),
     readText: (bucket, name) => ipcRenderer.invoke('objects:readText', bucket, name),
     saveText: (bucket, name, content) =>
       ipcRenderer.invoke('objects:saveText', bucket, name, content),

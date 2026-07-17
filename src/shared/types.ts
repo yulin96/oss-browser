@@ -51,6 +51,7 @@ export interface AppSettings {
   retryTimes: number
   listPageSize: number
   showImagePreview: boolean
+  showImageResolution: boolean
 }
 
 export type CacheRefreshType = 'File' | 'Directory' | 'Regex'
@@ -114,6 +115,11 @@ export interface ObjectInfo {
 export interface ObjectDetails {
   headers: Record<string, string>
   metadata: Record<string, string>
+}
+
+export interface ImageDimensions {
+  width: number
+  height: number
 }
 
 export interface ObjectListResult {
@@ -216,6 +222,7 @@ export interface OssBrowserApi {
     setAcl: (bucket: string, name: string, acl: string) => Promise<void>
     setHeaders: (bucket: string, name: string, headers: Record<string, string>) => Promise<void>
     signedUrl: (bucket: string, name: string, expires: number, process?: string) => Promise<string>
+    imageDimensions: (bucket: string, name: string) => Promise<ImageDimensions>
     readText: (bucket: string, name: string) => Promise<string>
     saveText: (bucket: string, name: string, content: string) => Promise<void>
     createSymlink: (bucket: string, name: string, target: string) => Promise<void>

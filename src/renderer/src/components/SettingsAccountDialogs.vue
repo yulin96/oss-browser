@@ -148,6 +148,16 @@ const {
             <Switch v-model="settings.showImagePreview" :aria-label="t('图片缩略图')" />
           </label>
         </div>
+        <div class="setting-row">
+          <div>
+            <strong>{{ t('图片分辨率') }}</strong
+            ><span>{{ t('在文件列表中显示图片原始宽高') }}</span>
+          </div>
+          <label class="setting-switch">
+            <span>{{ t('显示') }}</span>
+            <Switch v-model="settings.showImageResolution" :aria-label="t('图片分辨率')" />
+          </label>
+        </div>
 
         <div class="settings-section-title">{{ t('账号与权限') }}</div>
         <div class="setting-row">
