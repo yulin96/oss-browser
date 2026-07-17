@@ -72,7 +72,10 @@ const api: OssBrowserApi = {
     getPathForFile: (file) => webUtils.getPathForFile(file),
     pickUpload: (kind) => ipcRenderer.invoke('files:pickUpload', kind),
     pickDownloadFolder: () => ipcRenderer.invoke('files:pickDownloadFolder'),
-    upload: (bucket, prefix, paths) => ipcRenderer.invoke('files:upload', bucket, prefix, paths),
+    findUploadConflicts: (bucket, prefix, paths) =>
+      ipcRenderer.invoke('files:findUploadConflicts', bucket, prefix, paths),
+    upload: (bucket, prefix, paths, options) =>
+      ipcRenderer.invoke('files:upload', bucket, prefix, paths, options),
     download: (bucket, items, destination) =>
       ipcRenderer.invoke('files:download', bucket, items, destination)
   },

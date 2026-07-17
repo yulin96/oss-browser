@@ -5,6 +5,7 @@ import CloudDialogs from './CloudDialogs.vue'
 import ObjectDialogs from './ObjectDialogs.vue'
 import SettingsAccountDialogs from './SettingsAccountDialogs.vue'
 import SharePreviewDialogs from './SharePreviewDialogs.vue'
+import UploadConflictDialog from './UploadConflictDialog.vue'
 
 defineProps<{ controller: AppController }>()
 </script>
@@ -16,5 +17,6 @@ defineProps<{ controller: AppController }>()
     <SharePreviewDialogs :controller="controller" />
     <CloudDialogs :controller="controller" />
     <SettingsAccountDialogs :controller="controller" />
+    <UploadConflictDialog :controller="controller" />
   </div>
 </template>

@@ -38,12 +38,20 @@ import type {
   PermissionProbeItem,
   RamAccessKey,
   RamUser,
-  TransferItem
+  TransferItem,
+  UploadConflict,
+  UploadOptions
 } from '../shared/types'
 
 type TransferReporter = (item: TransferItem) => void
 type OssClient = InstanceType<typeof OSS>
 type TransferDirection = TransferItem['direction']
+interface UploadEntry {
+  localPath: string
+  relativePath: string
+  isDirectory: boolean
+  name: string
+}
 type TransferBatch = {
   id: string
   direction: TransferDirection
@@ -71,7 +79,8 @@ export class OssService {
     retryTimes: 5,
     listPageSize: 500,
     showImagePreview: true,
-    showImageResolution: false
+    showImageResolution: false,
+    uploadConflictPolicy: 'ask'
   }
   private readonly activeTransfers = new Map<string, ActiveTransfer>()
   private readonly transferBatches = new Map<string, TransferBatch>()
@@ -643,15 +652,74 @@ export class OssService {
     await this.bucketClient(bucket).abortMultipartUpload(name, uploadId)
   }
 
-  async upload(bucket: string, prefix: string, paths: string[]): Promise<boolean> {
-    const files = await this.expandLocalPaths(paths)
+  async findUploadConflicts(
+    bucket: string,
+    prefix: string,
+    paths: string[]
+  ): Promise<UploadConflict[]> {
+    const files = (await this.prepareUploadEntries(prefix, paths)).filter(
+      (entry) => !entry.isDirectory
+    )
+    const client = this.bucketClient(bucket)
+    const conflictNames = new Set<string>()
+    const directFiles: UploadEntry[] = []
+    const directoryFiles = new Map<string, UploadEntry[]>()
+    for (const file of files) {
+      const separatorIndex = file.relativePath.indexOf(sep)
+      if (separatorIndex === -1) {
+        directFiles.push(file)
+        continue
+      }
+      const rootName = file.relativePath.slice(0, separatorIndex)
+      const rootPrefix = `${prefix}${rootName}/`
+      const group = directoryFiles.get(rootPrefix) || []
+      group.push(file)
+      directoryFiles.set(rootPrefix, group)
+    }
+
+    const conflictConcurrency = Math.min(10, Math.max(2, this.settings.maxUploadJobs * 2))
+    const checks: Array<() => Promise<void>> = directFiles.map((file) => async () => {
+      const result = await client.list({ prefix: file.name, 'max-keys': 1 })
+      if ((result.objects || []).some((object) => object.name === file.name)) {
+        conflictNames.add(file.name)
+      }
+    })
+    checks.push(
+      ...[...directoryFiles].map(([rootPrefix, group]) => async () => {
+        const existingNames = new Set(await this.listAllObjectNames(client, rootPrefix))
+        for (const file of group) {
+          if (existingNames.has(file.name)) conflictNames.add(file.name)
+        }
+      })
+    )
+    await this.runPool(checks, conflictConcurrency, async (check) => {
+      await check()
+    })
+    const returnedNames = new Set<string>()
+    return files.flatMap((file) => {
+      if (!conflictNames.has(file.name) || returnedNames.has(file.name)) return []
+      returnedNames.add(file.name)
+      return [{ name: file.name, displayName: file.relativePath }]
+    })
+  }
+
+  async upload(
+    bucket: string,
+    prefix: string,
+    paths: string[],
+    options: UploadOptions = {}
+  ): Promise<boolean> {
+    const skippedNames = new Set(options.skipNames || [])
+    const files = (await this.prepareUploadEntries(prefix, paths)).filter(
+      (file) => !skippedNames.has(file.name)
+    )
+    if (!files.length) return true
     const batch = this.newTransferBatch('upload', files.length)
 
     await this.runPool(
       files,
       this.settings.maxUploadJobs,
-      async ({ localPath, relativePath, isDirectory }) => {
-        const name = `${prefix}${relativePath.split(sep).join('/')}${isDirectory ? '/' : ''}`
+      async ({ localPath, isDirectory, name }) => {
         const transfer = this.newTransfer('upload', name, batch)
         const client = this.bucketClient(bucket)
         if (isDirectory) {
@@ -849,6 +917,13 @@ export class OssService {
       }
     }
     return files
+  }
+
+  private async prepareUploadEntries(prefix: string, paths: string[]): Promise<UploadEntry[]> {
+    return (await this.expandLocalPaths(paths)).map((file) => ({
+      ...file,
+      name: `${prefix}${file.relativePath.split(sep).join('/')}${file.isDirectory ? '/' : ''}`
+    }))
   }
 
   private async walk(directory: string): Promise<Array<{ path: string; isDirectory: boolean }>> {

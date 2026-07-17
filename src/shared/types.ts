@@ -52,7 +52,10 @@ export interface AppSettings {
   listPageSize: number
   showImagePreview: boolean
   showImageResolution: boolean
+  uploadConflictPolicy: UploadConflictPolicy
 }
+
+export type UploadConflictPolicy = 'ask' | 'replace' | 'skip'
 
 export type CacheRefreshType = 'File' | 'Directory' | 'Regex'
 
@@ -120,6 +123,15 @@ export interface ObjectDetails {
 export interface ImageDimensions {
   width: number
   height: number
+}
+
+export interface UploadConflict {
+  name: string
+  displayName: string
+}
+
+export interface UploadOptions {
+  skipNames?: string[]
 }
 
 export interface ObjectListResult {
@@ -238,7 +250,17 @@ export interface OssBrowserApi {
     getPathForFile: (file: File) => string
     pickUpload: (kind: 'files' | 'folder') => Promise<string[]>
     pickDownloadFolder: () => Promise<string | null>
-    upload: (bucket: string, prefix: string, paths: string[]) => Promise<boolean>
+    findUploadConflicts: (
+      bucket: string,
+      prefix: string,
+      paths: string[]
+    ) => Promise<UploadConflict[]>
+    upload: (
+      bucket: string,
+      prefix: string,
+      paths: string[],
+      options?: UploadOptions
+    ) => Promise<boolean>
     download: (bucket: string, items: ObjectInfo[], destination: string) => Promise<boolean>
   }
   transfers: {

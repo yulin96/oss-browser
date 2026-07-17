@@ -39,6 +39,7 @@ import { useAsyncTask } from './useAsyncTask'
 import { useConfirmation } from './useConfirmation'
 import { useFileBrowser } from './useFileBrowser'
 import { useTransfers } from './useTransfers'
+import { useUploadConflict } from './useUploadConflict'
 import { setLocale, t, type AppLocale } from '../i18n'
 
 // The inferred return type is the renderer's typed controller contract.
@@ -150,6 +151,19 @@ export function useAppController() {
     finishConfirmationClose,
     resetConfirmation
   } = useConfirmation()
+  const {
+    uploadConflictOpen,
+    currentUploadConflict,
+    uploadConflictIndex,
+    uploadConflictTotal,
+    rememberUploadConflictChoice,
+    resolveUploadConflicts,
+    replaceUploadConflict,
+    replaceAllUploadConflicts,
+    skipUploadConflict,
+    skipAllUploadConflicts,
+    cancelUploadConflicts
+  } = useUploadConflict()
   const {
     transfers,
     showTransfers,
@@ -660,6 +674,7 @@ export function useAppController() {
     cdnDomains.value = []
     selectedCdnDomain.value = ''
     resetConfirmation()
+    cancelUploadConflicts()
     resetCloudOperations()
     authToken.value = ''
     modal.value = null
@@ -1212,15 +1227,39 @@ export function useAppController() {
     await loadObjects()
   }
 
+  async function uploadPaths(paths: string[]): Promise<void> {
+    if (!currentBucket.value || !paths.length) return
+    const bucketName = currentBucket.value.name
+    const targetPrefix = prefix.value
+    let skipNames: string[] = []
+
+    if (settings.uploadConflictPolicy !== 'replace') {
+      const conflicts = await run(() =>
+        window.ossBrowser.files.findUploadConflicts(bucketName, targetPrefix, paths)
+      )
+      if (conflicts === undefined) return
+      if (settings.uploadConflictPolicy === 'skip') {
+        skipNames = conflicts.map((conflict) => conflict.name)
+      } else if (conflicts.length) {
+        const resolution = await resolveUploadConflicts(conflicts)
+        if (!resolution) return
+        skipNames = resolution.skipNames
+        if (resolution.rememberedPolicy) {
+          settings.uploadConflictPolicy = resolution.rememberedPolicy
+        }
+      }
+    }
+
+    const done = await run(() =>
+      window.ossBrowser.files.upload(bucketName, targetPrefix, paths, { skipNames })
+    )
+    if (done) await loadObjects()
+  }
+
   async function upload(kind: 'files' | 'folder'): Promise<void> {
     if (!currentBucket.value) return
     const paths = await window.ossBrowser.files.pickUpload(kind)
-    if (!paths.length) return
-    const done = await run(() =>
-      window.ossBrowser.files.upload(currentBucket.value!.name, prefix.value, paths)
-    )
-    if (!done) return
-    await loadObjects()
+    await uploadPaths(paths)
   }
 
   async function handleDrop(event: DragEvent): Promise<void> {
@@ -1230,11 +1269,7 @@ export function useAppController() {
       .map((file) => window.ossBrowser.files.getPathForFile(file))
       .filter(Boolean)
     if (!paths.length) return
-    const done = await run(() =>
-      window.ossBrowser.files.upload(currentBucket.value!.name, prefix.value, paths)
-    )
-    if (!done) return
-    await loadObjects()
+    await uploadPaths(paths)
   }
 
   async function downloadSelected(): Promise<void> {
@@ -1536,6 +1571,16 @@ export function useAppController() {
     closeConfirmation,
     confirmPendingAction,
     finishConfirmationClose,
+    uploadConflictOpen,
+    currentUploadConflict,
+    uploadConflictIndex,
+    uploadConflictTotal,
+    rememberUploadConflictChoice,
+    replaceUploadConflict,
+    replaceAllUploadConflicts,
+    skipUploadConflict,
+    skipAllUploadConflicts,
+    cancelUploadConflicts,
     auth,
     authTask,
     browserTask,

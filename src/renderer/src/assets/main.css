@@ -2007,6 +2007,62 @@ input[type='checkbox']:checked::after {
   gap: 8px;
   margin-top: 16px;
 }
+.upload-conflict-description {
+  margin: 0 0 14px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+.upload-conflict-file {
+  display: grid;
+  gap: 5px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--background);
+}
+.upload-conflict-file strong {
+  overflow: hidden;
+  color: var(--text);
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.upload-conflict-file span {
+  overflow-wrap: anywhere;
+  color: var(--muted);
+  font:
+    11px/1.5 'SFMono-Regular',
+    Consolas,
+    monospace;
+}
+.upload-conflict-progress {
+  margin-top: 9px;
+  color: var(--muted);
+  font-size: 11px;
+  text-align: right;
+}
+.upload-conflict-remember {
+  color: var(--text);
+  font-size: 12px;
+}
+.upload-conflict-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  gap: 16px;
+}
+.upload-conflict-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 9px;
+}
+.upload-conflict-cancel {
+  color: var(--muted);
+}
 .warning-box {
   margin-top: 16px;
   padding: 12px 14px;

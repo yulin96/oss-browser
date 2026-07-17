@@ -199,6 +199,19 @@ const {
         </div>
 
         <div class="settings-section-title">{{ t('上传下载设置') }}</div>
+        <div class="setting-row">
+          <div>
+            <strong>{{ t('上传同名文件') }}</strong
+            ><span>{{ t('设置上传遇到同名对象时的默认处理方式') }}</span>
+          </div>
+          <div class="select-wrap setting-select">
+            <select v-model="settings.uploadConflictPolicy" :aria-label="t('上传同名文件')">
+              <option value="ask">{{ t('每次询问') }}</option>
+              <option value="replace">{{ t('直接替换') }}</option>
+              <option value="skip">{{ t('直接跳过') }}</option>
+            </select>
+          </div>
+        </div>
         <div class="settings-grid">
           <label
             >{{ t('同时上传任务') }}

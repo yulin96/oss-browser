@@ -18,7 +18,8 @@ import type {
   GrantOptions,
   ObjectInfo,
   SavedProfile,
-  TransferItem
+  TransferItem,
+  UploadOptions
 } from '../shared/types'
 import { OssService } from './oss-service'
 import { ProfileStore } from './profile-store'
@@ -208,8 +209,15 @@ function registerIpc(): void {
     lastDownloadDirectory = result.filePaths[0]
     return lastDownloadDirectory
   })
-  ipcMain.handle('files:upload', (_event, bucket: string, prefix: string, paths: string[]) =>
-    oss.upload(bucket, prefix, paths)
+  ipcMain.handle(
+    'files:findUploadConflicts',
+    (_event, bucket: string, prefix: string, paths: string[]) =>
+      oss.findUploadConflicts(bucket, prefix, paths)
+  )
+  ipcMain.handle(
+    'files:upload',
+    (_event, bucket: string, prefix: string, paths: string[], options?: UploadOptions) =>
+      oss.upload(bucket, prefix, paths, options)
   )
   ipcMain.handle(
     'files:download',

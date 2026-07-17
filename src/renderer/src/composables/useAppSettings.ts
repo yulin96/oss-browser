@@ -12,7 +12,8 @@ const defaultSettings: AppSettings = {
   retryTimes: 5,
   listPageSize: 500,
   showImagePreview: true,
-  showImageResolution: false
+  showImageResolution: false,
+  uploadConflictPolicy: 'ask'
 }
 
 const legacyDefaultSettings: AppSettings = {
@@ -56,7 +57,12 @@ export function useAppSettings(options: {
     const source = value as Record<string, unknown>
     return Object.fromEntries(
       settingKeys
-        .filter((key) => typeof source[key] === typeof defaultSettings[key])
+        .filter((key) => {
+          if (key === 'uploadConflictPolicy') {
+            return source[key] === 'ask' || source[key] === 'replace' || source[key] === 'skip'
+          }
+          return typeof source[key] === typeof defaultSettings[key]
+        })
         .map((key) => [key, source[key]])
     ) as Partial<AppSettings>
   }
