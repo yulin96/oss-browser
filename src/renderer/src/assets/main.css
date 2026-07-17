@@ -2327,6 +2327,11 @@ input[type='checkbox']:checked::after {
   min-height: 48px;
   padding: 7px 5px;
   border-bottom: 1px solid var(--border);
+  transition: background-color var(--duration-quick) var(--ease-out);
+}
+.favorite-row:hover,
+.favorite-row:focus-within {
+  background: var(--surface-hover);
 }
 .favorite-row > div:first-child {
   min-width: 0;
@@ -2336,6 +2341,10 @@ input[type='checkbox']:checked::after {
   gap: 9px;
   color: #34506f;
   cursor: pointer;
+}
+.favorite-row:hover > div:first-child,
+.favorite-row:focus-within > div:first-child {
+  color: var(--primary);
 }
 .favorite-row > div:first-child svg {
   color: #e9a520;
@@ -2629,6 +2638,10 @@ html[data-theme='dark'] .details-list strong,
 html[data-theme='dark'] .settings-grid label,
 html[data-theme='dark'] .favorite-row > div:first-child {
   color: #b9c8d9;
+}
+html[data-theme='dark'] .favorite-row:hover > div:first-child,
+html[data-theme='dark'] .favorite-row:focus-within > div:first-child {
+  color: var(--primary);
 }
 html[data-theme='dark'] .new-access-key {
   border-color: #6d5724;
