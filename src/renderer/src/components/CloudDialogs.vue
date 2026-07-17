@@ -35,7 +35,7 @@ const {
         width="620px"
         @close="modal = null"
       >
-        <label class="field-label">RAM 角色 ARN</label>
+        <label class="field-label">{{ t('RAM 角色 ARN') }}</label>
         <div class="input-wrap">
           <input v-model.trim="grantForm.roleArn" placeholder="acs:ram::123456789:role/example" />
         </div>

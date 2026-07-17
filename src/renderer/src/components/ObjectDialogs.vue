@@ -116,15 +116,15 @@ const {
       <ModalShell v-if="modal === 'headers'" :title="t('设置 HTTP 头')" @close="modal = null">
         <label class="field-label">Cache-Control</label>
         <div class="input-wrap">
-          <input v-model.trim="objectForm.cacheControl" placeholder="例如 max-age=3600" />
+          <input v-model.trim="objectForm.cacheControl" :placeholder="t('例如 max-age=3600')" />
         </div>
         <label class="field-label">Content-Type</label>
         <div class="input-wrap">
-          <input v-model.trim="objectForm.contentType" placeholder="例如 image/png" />
+          <input v-model.trim="objectForm.contentType" :placeholder="t('例如 image/png')" />
         </div>
         <label class="field-label">Content-Disposition</label>
         <div class="input-wrap">
-          <input v-model.trim="objectForm.contentDisposition" placeholder="例如 attachment" />
+          <input v-model.trim="objectForm.contentDisposition" :placeholder="t('例如 attachment')" />
         </div>
         <template #footer
           ><AppButton :label="t('取消')" @click="modal = null" /><AppButton
