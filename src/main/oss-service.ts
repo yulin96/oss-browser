@@ -88,6 +88,7 @@ export class OssService {
     string,
     { direction: TransferDirection; run: () => Promise<void> }
   >()
+  private readonly localMediaPreviews = new Map<string, { localPath: string; expiresAt: number }>()
   private readonly pausedDirections = new Set<TransferDirection>()
   private readonly pauseWaiters: Record<TransferDirection, Array<() => void>> = {
     upload: [],
@@ -657,6 +658,7 @@ export class OssService {
     prefix: string,
     paths: string[]
   ): Promise<UploadConflict[]> {
+    this.localMediaPreviews.clear()
     const files = (await this.prepareUploadEntries(prefix, paths)).filter(
       (entry) => !entry.isDirectory
     )
@@ -714,14 +716,34 @@ export class OssService {
                 })
               : image
           conflict.incomingPreviewUrl = preview.toDataURL()
+          conflict.previewType = 'image'
           conflict.existingPreviewUrl = client.signatureUrl(file.name, {
             expires: 300,
             process: 'image/resize,m_lfit,w_480,h_320/quality,q_80'
           })
         }
+      } else if (/\.(mp4|mov|mkv|webm|avi|m4v|flv|wmv|mpeg|mpg)$/i.test(file.name)) {
+        const previewToken = randomUUID()
+        this.localMediaPreviews.set(previewToken, {
+          localPath: file.localPath,
+          expiresAt: Date.now() + 60 * 60 * 1000
+        })
+        conflict.previewType = 'video'
+        conflict.existingPreviewUrl = client.signatureUrl(file.name, { expires: 3600 })
+        conflict.incomingPreviewUrl = `oss-browser-media://upload/${previewToken}`
       }
       return [conflict]
     })
+  }
+
+  resolveLocalMediaPreview(token: string): string | undefined {
+    const preview = this.localMediaPreviews.get(token)
+    if (!preview) return undefined
+    if (preview.expiresAt <= Date.now()) {
+      this.localMediaPreviews.delete(token)
+      return undefined
+    }
+    return preview.localPath
   }
 
   async upload(

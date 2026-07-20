@@ -128,6 +128,7 @@ export interface ImageDimensions {
 export interface UploadConflict {
   name: string
   displayName: string
+  previewType?: 'image' | 'video'
   existingPreviewUrl?: string
   incomingPreviewUrl?: string
 }

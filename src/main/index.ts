@@ -5,11 +5,14 @@ import {
   clipboard,
   dialog,
   ipcMain,
+  net,
+  protocol,
   type IpcMainInvokeEvent,
   Menu,
   shell
 } from 'electron'
 import { dirname, join } from 'node:path'
+import { pathToFileURL } from 'node:url'
 import icon from '../../resources/icon.png?asset'
 import type {
   AppSettings,
@@ -28,6 +31,13 @@ import { UpdateService } from './update-service'
 app.setPath('userData', join(app.getPath('appData'), is.dev ? 'oss-browser-dev' : 'oss-browser'))
 app.setName('OSS Browser')
 
+protocol.registerSchemesAsPrivileged([
+  {
+    scheme: 'oss-browser-media',
+    privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true }
+  }
+])
+
 let mainWindow: BrowserWindow | null = null
 const oss = new OssService((item: TransferItem) => {
   mainWindow?.webContents.send('transfer:progress', item)
@@ -36,6 +46,24 @@ const profiles = new ProfileStore()
 const updates = new UpdateService(() => mainWindow)
 let lastUploadDirectory: string | undefined
 let lastDownloadDirectory: string | undefined
+
+function registerLocalMediaProtocol(): void {
+  protocol.handle('oss-browser-media', (request) => {
+    const url = new URL(request.url)
+    const token = url.hostname === 'upload' ? url.pathname.slice(1) : ''
+    const localPath =
+      token && !token.includes('/') ? oss.resolveLocalMediaPreview(token) : undefined
+    if (!localPath) return new Response(null, { status: 404 })
+    if (request.method !== 'GET' && request.method !== 'HEAD') {
+      return new Response(null, { status: 405 })
+    }
+    const range = request.headers.get('range')
+    return net.fetch(pathToFileURL(localPath).toString(), {
+      method: request.method,
+      headers: range ? { range } : undefined
+    })
+  })
+}
 
 function createWindow(): void {
   mainWindow = new BrowserWindow({
@@ -269,6 +297,7 @@ app.whenReady().then(() => {
   electronApp.setAppUserModelId('com.yulin96.ossbrowser')
   Menu.setApplicationMenu(null)
   app.on('browser-window-created', (_, window) => optimizer.watchWindowShortcuts(window))
+  registerLocalMediaProtocol()
   registerIpc()
   createWindow()
   updates.initialize()

@@ -20,19 +20,19 @@ const {
 } = props.controller
 
 const failedPreviewUrls = reactive(new Set<string>())
-const showImageComparison = computed(() => {
+const showMediaComparison = computed(() => {
   const conflict = currentUploadConflict.value
   return Boolean(
-    conflict?.existingPreviewUrl &&
-    conflict.incomingPreviewUrl &&
-    !failedPreviewUrls.has(conflict.existingPreviewUrl) &&
-    !failedPreviewUrls.has(conflict.incomingPreviewUrl)
+    conflict?.previewType && conflict?.existingPreviewUrl && conflict.incomingPreviewUrl
   )
 })
 
-function markPreviewFailed(event: Event): void {
-  const url = (event.currentTarget as HTMLImageElement).currentSrc
+function markPreviewFailed(url?: string): void {
   if (url) failedPreviewUrls.add(url)
+}
+
+function previewFailed(url?: string): boolean {
+  return Boolean(url && failedPreviewUrls.has(url))
 }
 </script>
 
@@ -41,7 +41,7 @@ function markPreviewFailed(event: Event): void {
     <ModalShell
       v-if="uploadConflictOpen && currentUploadConflict"
       :title="t('发现同名文件')"
-      :width="showImageComparison ? '680px' : '560px'"
+      :width="showMediaComparison ? '680px' : '560px'"
       @close="cancelUploadConflicts"
     >
       <p class="upload-conflict-description">
@@ -53,25 +53,49 @@ function markPreviewFailed(event: Event): void {
         </strong>
         <span :title="currentUploadConflict.name">{{ currentUploadConflict.name }}</span>
       </div>
-      <div v-if="showImageComparison" class="upload-conflict-comparison">
+      <div v-if="showMediaComparison" class="upload-conflict-comparison">
         <figure>
           <figcaption>{{ t('覆盖前（OSS）') }}</figcaption>
           <div class="upload-conflict-preview">
             <img
+              v-if="
+                currentUploadConflict.previewType === 'image' &&
+                !previewFailed(currentUploadConflict.existingPreviewUrl)
+              "
               :src="currentUploadConflict.existingPreviewUrl"
               :alt="t('覆盖前（OSS）')"
-              @error="markPreviewFailed"
+              @error="markPreviewFailed(currentUploadConflict.existingPreviewUrl)"
             />
+            <video
+              v-else-if="!previewFailed(currentUploadConflict.existingPreviewUrl)"
+              :src="currentUploadConflict.existingPreviewUrl"
+              controls
+              preload="metadata"
+              @error="markPreviewFailed(currentUploadConflict.existingPreviewUrl)"
+            />
+            <span v-else>{{ t('该格式暂不支持直接预览') }}</span>
           </div>
         </figure>
         <figure>
           <figcaption>{{ t('覆盖后（本地）') }}</figcaption>
           <div class="upload-conflict-preview">
             <img
+              v-if="
+                currentUploadConflict.previewType === 'image' &&
+                !previewFailed(currentUploadConflict.incomingPreviewUrl)
+              "
               :src="currentUploadConflict.incomingPreviewUrl"
               :alt="t('覆盖后（本地）')"
-              @error="markPreviewFailed"
+              @error="markPreviewFailed(currentUploadConflict.incomingPreviewUrl)"
             />
+            <video
+              v-else-if="!previewFailed(currentUploadConflict.incomingPreviewUrl)"
+              :src="currentUploadConflict.incomingPreviewUrl"
+              controls
+              preload="metadata"
+              @error="markPreviewFailed(currentUploadConflict.incomingPreviewUrl)"
+            />
+            <span v-else>{{ t('该格式暂不支持直接预览') }}</span>
           </div>
         </figure>
       </div>
