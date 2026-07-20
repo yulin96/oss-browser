@@ -4,6 +4,7 @@ import {
   ArrowLeft,
   ArrowRight,
   ArrowUp,
+  CloudUpload,
   Home,
   HousePlus,
   Icon as LucideIcon,
@@ -31,7 +32,10 @@ const {
   isCurrentFavorite,
   setCurrentAsHome,
   isCurrentHome,
-  loadObjects
+  loadObjects,
+  floatingUploadState,
+  toggleFloatingUpload,
+  showFloatingUploadMenu
 } = props.controller
 </script>
 
@@ -72,6 +76,21 @@ const {
         spellcheck="false"
         @keydown.enter="goToAddress()"
       />
+      <AppTooltip :label="t('悬浮上传')" side="top">
+        <div
+          class="address-action"
+          :class="{ active: floatingUploadState.visible }"
+          role="button"
+          tabindex="0"
+          :aria-pressed="floatingUploadState.visible"
+          @click="toggleFloatingUpload"
+          @contextmenu.prevent="showFloatingUploadMenu"
+          @keydown.enter.prevent="toggleFloatingUpload"
+          @keydown.space.prevent="toggleFloatingUpload"
+        >
+          <CloudUpload :size="18" />
+        </div>
+      </AppTooltip>
       <div
         v-if="currentBucket?.region"
         class="ml-1 flex select-none items-center border-l border-solid border-(--border) px-2.5 font-mono text-[11px] text-muted-foreground"

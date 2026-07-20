@@ -991,6 +991,35 @@ input[type='checkbox']:checked::after {
   font-size: 12px;
   user-select: text;
 }
+.address-action {
+  display: grid;
+  width: 36px;
+  height: 34px;
+  flex: 0 0 36px;
+  place-items: center;
+  align-self: center;
+  border-left: 1px solid var(--border);
+  color: #607087;
+  cursor: pointer;
+  transition:
+    color var(--duration-micro) var(--ease-out),
+    background-color var(--duration-micro) var(--ease-out),
+    transform var(--duration-micro) var(--ease-out);
+}
+.address-action:hover,
+.address-action.active {
+  color: var(--primary);
+  background: var(--primary-soft);
+}
+.address-action:active {
+  transform: var(--accent-active);
+}
+.address-action:focus-visible {
+  position: relative;
+  z-index: 1;
+  outline: 2px solid var(--primary);
+  outline-offset: -3px;
+}
 .drop-overlay {
   position: absolute;
   z-index: 10;
@@ -2699,6 +2728,14 @@ html[data-theme='dark'] .profile-list strong {
 
 html[data-theme='dark'] .nav-icon {
   color: #93a3b8;
+}
+html[data-theme='dark'] .address-action {
+  color: #93a3b8;
+}
+html[data-theme='dark'] .address-action:hover,
+html[data-theme='dark'] .address-action.active {
+  color: #7db7ff;
+  background: #182e48;
 }
 html[data-theme='dark'] .nav-icon.favorite-nav:hover {
   color: #ffbd45;

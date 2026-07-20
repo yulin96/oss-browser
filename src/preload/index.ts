@@ -1,5 +1,12 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
-import type { AppPlatform, OssBrowserApi, TransferItem, UpdateState } from '../shared/types'
+import type {
+  AppPlatform,
+  FloatingUploadRequest,
+  FloatingUploadState,
+  OssBrowserApi,
+  TransferItem,
+  UpdateState
+} from '../shared/types'
 
 const api: OssBrowserApi = {
   auth: {
@@ -84,6 +91,31 @@ const api: OssBrowserApi = {
     pauseAll: (direction) => ipcRenderer.invoke('transfers:pauseAll', direction),
     resumeAll: (direction) => ipcRenderer.invoke('transfers:resumeAll', direction),
     cancelAll: (direction) => ipcRenderer.invoke('transfers:cancelAll', direction)
+  },
+  floatingUpload: {
+    getState: () => ipcRenderer.invoke('floating-upload:getState'),
+    toggle: (suggestedTarget) => ipcRenderer.invoke('floating-upload:toggle', suggestedTarget),
+    setTarget: (target) => ipcRenderer.invoke('floating-upload:setTarget', target),
+    close: () => ipcRenderer.invoke('floating-upload:close'),
+    showMenu: (suggestedTarget) => ipcRenderer.invoke('floating-upload:showMenu', suggestedTarget),
+    setExpanded: (expanded) => ipcRenderer.invoke('floating-upload:setExpanded', expanded),
+    getPosition: () => ipcRenderer.invoke('floating-upload:getPosition'),
+    moveTo: (position) => ipcRenderer.invoke('floating-upload:moveTo', position),
+    finishMove: () => ipcRenderer.invoke('floating-upload:finishMove'),
+    upload: (paths) => ipcRenderer.invoke('floating-upload:upload', paths),
+    resolveRequest: (skipNames) => ipcRenderer.invoke('floating-upload:resolveRequest', skipNames),
+    onState: (listener) => {
+      const handler = (_event: Electron.IpcRendererEvent, state: FloatingUploadState): void =>
+        listener(state)
+      ipcRenderer.on('floating-upload:state', handler)
+      return () => ipcRenderer.removeListener('floating-upload:state', handler)
+    },
+    onRequest: (listener) => {
+      const handler = (_event: Electron.IpcRendererEvent, request: FloatingUploadRequest): void =>
+        listener(request)
+      ipcRenderer.on('floating-upload:request', handler)
+      return () => ipcRenderer.removeListener('floating-upload:request', handler)
+    }
   },
   system: {
     platform: process.platform as AppPlatform,

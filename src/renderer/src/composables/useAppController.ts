@@ -27,6 +27,9 @@ import type {
   AuthConfig,
   BucketInfo,
   CacheRefreshType,
+  FloatingUploadRequest,
+  FloatingUploadState,
+  FloatingUploadTarget,
   ObjectInfo,
   SavedProfile
 } from '../../../shared/types'
@@ -130,6 +133,15 @@ export function useAppController() {
   const emptyContextMenu = reactive({ visible: false, x: 0, y: 0 })
   const bucketMenu = reactive({ visible: false, x: 0, y: 0 })
   const dragActive = ref(false)
+  const floatingUploadState = ref<FloatingUploadState>({
+    visible: false,
+    expanded: false,
+    dockSide: 'right',
+    status: 'idle',
+    progress: 0,
+    completed: 0,
+    total: 0
+  })
   const previewUrl = ref('')
   const previewText = ref('')
   const shareNeedsExpiry = ref(true)
@@ -586,6 +598,8 @@ export function useAppController() {
   const addressAccessCache = new Map<string, Promise<boolean>>()
   let domainOptionsBucket = ''
   let domainOptionsPromise: Promise<void> | undefined
+  let removeFloatingUploadStateListener: (() => void) | undefined
+  let removeFloatingUploadRequestListener: (() => void) | undefined
 
   onMounted(async () => {
     document.addEventListener('pointerdown', closeFloatingMenus)
@@ -594,6 +608,13 @@ export function useAppController() {
     window.addEventListener('dragend', resetDragState)
     window.addEventListener('drop', resetDragState)
     window.addEventListener('blur', resetDragState)
+    removeFloatingUploadStateListener = window.ossBrowser.floatingUpload.onState((state) => {
+      floatingUploadState.value = state
+    })
+    removeFloatingUploadRequestListener = window.ossBrowser.floatingUpload.onRequest((request) => {
+      void handleFloatingUploadRequest(request)
+    })
+    floatingUploadState.value = await window.ossBrowser.floatingUpload.getState()
     viewMode.value = localStorage.getItem('oss-browser-view-mode') === 'grid' ? 'grid' : 'list'
     await initializeUpdates()
     try {
@@ -610,6 +631,8 @@ export function useAppController() {
     disposeTransfers()
     disposeUpdates()
     disposeSettings()
+    removeFloatingUploadStateListener?.()
+    removeFloatingUploadRequestListener?.()
     document.removeEventListener('pointerdown', closeFloatingMenus)
     document.removeEventListener('keydown', handleGlobalKeydown)
     document.removeEventListener('dragleave', handleDocumentDragLeave)
@@ -779,6 +802,36 @@ export function useAppController() {
   function selectUpload(kind: 'files' | 'folder'): void {
     showUploadActions.value = false
     void upload(kind)
+  }
+
+  function currentFloatingUploadTarget(): FloatingUploadTarget | undefined {
+    if (!currentBucket.value) return undefined
+    return {
+      accountId: profileId(),
+      bucket: currentBucket.value.name,
+      prefix: prefix.value
+    }
+  }
+
+  async function toggleFloatingUpload(): Promise<void> {
+    const state = await run(() =>
+      window.ossBrowser.floatingUpload.toggle(currentFloatingUploadTarget())
+    )
+    if (state) floatingUploadState.value = state
+  }
+
+  function showFloatingUploadMenu(): void {
+    void window.ossBrowser.floatingUpload.showMenu(currentFloatingUploadTarget())
+  }
+
+  async function handleFloatingUploadRequest(request: FloatingUploadRequest): Promise<void> {
+    const resolution = await resolveUploadConflicts(request.conflicts)
+    if (!resolution) {
+      await run(() => window.ossBrowser.floatingUpload.resolveRequest(null))
+      return
+    }
+    if (resolution.rememberedPolicy) settings.uploadConflictPolicy = resolution.rememberedPolicy
+    await run(() => window.ossBrowser.floatingUpload.resolveRequest(resolution.skipNames))
   }
 
   function openBucketMenu(event: MouseEvent, bucket: BucketInfo): void {
@@ -1542,6 +1595,7 @@ export function useAppController() {
     emptyContextMenu,
     bucketMenu,
     dragActive,
+    floatingUploadState,
     previewUrl,
     previewText,
     shareNeedsExpiry,
@@ -1706,6 +1760,8 @@ export function useAppController() {
     closeActions,
     toggleUploadActions,
     selectUpload,
+    toggleFloatingUpload,
+    showFloatingUploadMenu,
     openBucketMenu,
     openBucketAcl,
     login,

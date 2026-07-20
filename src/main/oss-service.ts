@@ -140,6 +140,10 @@ export class OssService {
     this.settings = settings
   }
 
+  getUploadConflictPolicy(): AppSettings['uploadConflictPolicy'] {
+    return this.settings.uploadConflictPolicy
+  }
+
   async probePermissions(): Promise<PermissionProbeItem[]> {
     if (!this.auth) throw new Error('请先登录')
     const probe = async (
@@ -750,7 +754,8 @@ export class OssService {
     bucket: string,
     prefix: string,
     paths: string[],
-    options: UploadOptions = {}
+    options: UploadOptions = {},
+    onBatchCreated?: (batchId: string) => void
   ): Promise<boolean> {
     const skippedNames = new Set(options.skipNames || [])
     const files = (await this.prepareUploadEntries(prefix, paths)).filter(
@@ -758,6 +763,7 @@ export class OssService {
     )
     if (!files.length) return true
     const batch = this.newTransferBatch('upload', files.length)
+    onBatchCreated?.(batch.id)
 
     await this.runPool(
       files,

@@ -25,6 +25,8 @@ import type {
   UploadOptions
 } from '../shared/types'
 import { OssService } from './oss-service'
+import { FloatingUploadManager } from './floating-upload-manager'
+import { FloatingUploadStore } from './floating-upload-store'
 import { ProfileStore } from './profile-store'
 import { UpdateService } from './update-service'
 
@@ -39,13 +41,39 @@ protocol.registerSchemesAsPrivileged([
 ])
 
 let mainWindow: BrowserWindow | null = null
+let isQuitting = false
 const oss = new OssService((item: TransferItem) => {
   mainWindow?.webContents.send('transfer:progress', item)
+  floatingUpload?.handleTransfer(item)
 })
 const profiles = new ProfileStore()
+const floatingUploadStore = new FloatingUploadStore()
 const updates = new UpdateService(() => mainWindow)
 let lastUploadDirectory: string | undefined
 let lastDownloadDirectory: string | undefined
+
+function showMainWindow(): void {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    createWindow()
+    return
+  }
+  if (mainWindow.isMinimized()) mainWindow.restore()
+  mainWindow.show()
+  mainWindow.focus()
+}
+
+function quitApplication(): void {
+  isQuitting = true
+  app.quit()
+}
+
+const floatingUpload = new FloatingUploadManager(
+  oss,
+  floatingUploadStore,
+  () => mainWindow,
+  showMainWindow,
+  quitApplication
+)
 
 function registerLocalMediaProtocol(): void {
   protocol.handle('oss-browser-media', (request) => {
@@ -93,6 +121,15 @@ function createWindow(): void {
   mainWindow.on('ready-to-show', () => mainWindow?.show())
   mainWindow.on('maximize', () => mainWindow?.webContents.send('window:maximize-change', true))
   mainWindow.on('unmaximize', () => mainWindow?.webContents.send('window:maximize-change', false))
+  mainWindow.on('close', (event) => {
+    if (isQuitting) return
+    event.preventDefault()
+    if (floatingUpload.isVisible()) {
+      mainWindow?.hide()
+      return
+    }
+    quitApplication()
+  })
   mainWindow.on('closed', () => {
     mainWindow = null
   })
@@ -112,8 +149,20 @@ function registerIpc(): void {
   const senderWindow = (event: IpcMainInvokeEvent): BrowserWindow | null =>
     BrowserWindow.fromWebContents(event.sender)
 
-  ipcMain.handle('auth:connect', (_event, config: AuthConfig) => oss.connect(config))
-  ipcMain.handle('auth:disconnect', () => oss.disconnect())
+  ipcMain.handle('auth:connect', async (_event, config: AuthConfig) => {
+    try {
+      const buckets = await oss.connect(config)
+      await floatingUpload.setAccount(`${config.endpoint}|${config.accessKeyId}`)
+      return buckets
+    } catch (error) {
+      await floatingUpload.setAccount(null)
+      throw error
+    }
+  })
+  ipcMain.handle('auth:disconnect', async () => {
+    oss.disconnect()
+    await floatingUpload.setAccount(null)
+  })
   ipcMain.handle('auth:setSecure', (_event, secure: boolean) => oss.setSecure(secure))
   ipcMain.handle('auth:probePermissions', () => oss.probePermissions())
   ipcMain.handle('profiles:list', () => profiles.list())
@@ -263,6 +312,28 @@ function registerIpc(): void {
     oss.cancelAllTransfers(direction)
   )
 
+  ipcMain.handle('floating-upload:getState', () => floatingUpload.getState())
+  ipcMain.handle('floating-upload:toggle', (_event, suggestedTarget) =>
+    floatingUpload.toggle(suggestedTarget)
+  )
+  ipcMain.handle('floating-upload:setTarget', (_event, target) => floatingUpload.setTarget(target))
+  ipcMain.handle('floating-upload:close', () => floatingUpload.close())
+  ipcMain.handle('floating-upload:showMenu', (_event, suggestedTarget) =>
+    floatingUpload.showMenu(suggestedTarget)
+  )
+  ipcMain.handle('floating-upload:setExpanded', (_event, expanded: boolean) =>
+    floatingUpload.setExpanded(expanded)
+  )
+  ipcMain.handle('floating-upload:getPosition', () => floatingUpload.getPosition())
+  ipcMain.handle('floating-upload:moveTo', (_event, position) => floatingUpload.moveTo(position))
+  ipcMain.handle('floating-upload:finishMove', () => floatingUpload.finishMove())
+  ipcMain.handle('floating-upload:upload', (_event, paths: string[]) =>
+    floatingUpload.upload(paths)
+  )
+  ipcMain.handle('floating-upload:resolveRequest', (_event, skipNames: string[] | null) =>
+    floatingUpload.resolveRequest(skipNames)
+  )
+
   ipcMain.handle('system:getVersion', () => app.getVersion())
   ipcMain.handle('system:openExternal', (_event, url: string) => shell.openExternal(url))
   ipcMain.handle('system:revealFile', (_event, path: string) => shell.showItemInFolder(path))
@@ -287,10 +358,11 @@ const hasSingleInstanceLock = is.dev || app.requestSingleInstanceLock()
 if (!hasSingleInstanceLock) app.quit()
 
 app.on('second-instance', () => {
-  if (!mainWindow) return
-  if (mainWindow.isMinimized()) mainWindow.restore()
-  mainWindow.show()
-  mainWindow.focus()
+  showMainWindow()
+})
+
+app.on('before-quit', () => {
+  isQuitting = true
 })
 
 app.whenReady().then(() => {
@@ -303,7 +375,7 @@ app.whenReady().then(() => {
   updates.initialize()
 
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow()
+    showMainWindow()
   })
 })
 

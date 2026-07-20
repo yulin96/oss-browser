@@ -155,6 +155,38 @@ export interface TransferItem {
   error?: string
 }
 
+export interface FloatingUploadTarget {
+  accountId: string
+  bucket: string
+  prefix: string
+}
+
+export type FloatingUploadStatus =
+  'idle' | 'checking' | 'waiting' | 'uploading' | 'success' | 'error'
+
+export interface FloatingUploadState {
+  visible: boolean
+  expanded: boolean
+  dockSide: 'left' | 'right'
+  target?: FloatingUploadTarget
+  status: FloatingUploadStatus
+  progress: number
+  completed: number
+  total: number
+  message?: string
+}
+
+export interface FloatingUploadRequest {
+  target: FloatingUploadTarget
+  paths: string[]
+  conflicts: UploadConflict[]
+}
+
+export interface FloatingWindowPosition {
+  x: number
+  y: number
+}
+
 export type UpdateStatus =
   | 'idle'
   | 'checking'
@@ -271,6 +303,21 @@ export interface OssBrowserApi {
     pauseAll: (direction: TransferItem['direction']) => Promise<void>
     resumeAll: (direction: TransferItem['direction']) => Promise<void>
     cancelAll: (direction: TransferItem['direction']) => Promise<void>
+  }
+  floatingUpload: {
+    getState: () => Promise<FloatingUploadState>
+    toggle: (suggestedTarget?: FloatingUploadTarget) => Promise<FloatingUploadState>
+    setTarget: (target: FloatingUploadTarget) => Promise<FloatingUploadState>
+    close: () => Promise<void>
+    showMenu: (suggestedTarget?: FloatingUploadTarget) => Promise<void>
+    setExpanded: (expanded: boolean) => Promise<void>
+    getPosition: () => Promise<FloatingWindowPosition>
+    moveTo: (position: FloatingWindowPosition) => Promise<void>
+    finishMove: () => Promise<void>
+    upload: (paths: string[]) => Promise<void>
+    resolveRequest: (skipNames: string[] | null) => Promise<void>
+    onState: (listener: (state: FloatingUploadState) => void) => () => void
+    onRequest: (listener: (request: FloatingUploadRequest) => void) => () => void
   }
   system: {
     platform: AppPlatform
