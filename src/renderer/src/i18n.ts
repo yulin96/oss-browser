@@ -256,6 +256,8 @@ const translations: Record<Exclude<AppLocale, 'zh-CN'>, Record<string, string>> 
     发现同名文件: 'File already exists',
     '目标位置已存在同名文件，请选择处理方式。':
       'A file with the same name already exists at the destination.',
+    '覆盖前（OSS）': 'Before overwrite (OSS)',
+    '覆盖后（本地）': 'After overwrite (local)',
     '第 {current} 个，共 {total} 个冲突': 'Conflict {current} of {total}',
     '不再询问，并记住所选操作': 'Do not ask again and remember this action',
     取消上传: 'Cancel upload',
@@ -641,6 +643,8 @@ const translations: Record<Exclude<AppLocale, 'zh-CN'>, Record<string, string>> 
     发现同名文件: '同名ファイルが見つかりました',
     '目标位置已存在同名文件，请选择处理方式。':
       'アップロード先に同名ファイルがあります。処理方法を選択してください。',
+    '覆盖前（OSS）': '置換前（OSS）',
+    '覆盖后（本地）': '置換後（ローカル）',
     '第 {current} 个，共 {total} 个冲突': '{total} 件中 {current} 件目の競合',
     '不再询问，并记住所选操作': '今後確認せず、この操作を記憶する',
     取消上传: 'アップロードをキャンセル',

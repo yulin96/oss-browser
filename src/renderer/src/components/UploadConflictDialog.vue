@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { computed, reactive } from 'vue'
 import type { AppController } from '../composables/useAppController'
 import { t } from '../i18n'
 import AppButton from './AppButton.vue'
@@ -17,6 +18,22 @@ const {
   skipAllUploadConflicts,
   cancelUploadConflicts
 } = props.controller
+
+const failedPreviewUrls = reactive(new Set<string>())
+const showImageComparison = computed(() => {
+  const conflict = currentUploadConflict.value
+  return Boolean(
+    conflict?.existingPreviewUrl &&
+    conflict.incomingPreviewUrl &&
+    !failedPreviewUrls.has(conflict.existingPreviewUrl) &&
+    !failedPreviewUrls.has(conflict.incomingPreviewUrl)
+  )
+})
+
+function markPreviewFailed(event: Event): void {
+  const url = (event.currentTarget as HTMLImageElement).currentSrc
+  if (url) failedPreviewUrls.add(url)
+}
 </script>
 
 <template>
@@ -24,7 +41,7 @@ const {
     <ModalShell
       v-if="uploadConflictOpen && currentUploadConflict"
       :title="t('发现同名文件')"
-      width="560px"
+      :width="showImageComparison ? '680px' : '560px'"
       @close="cancelUploadConflicts"
     >
       <p class="upload-conflict-description">
@@ -35,6 +52,28 @@ const {
           {{ currentUploadConflict.displayName }}
         </strong>
         <span :title="currentUploadConflict.name">{{ currentUploadConflict.name }}</span>
+      </div>
+      <div v-if="showImageComparison" class="upload-conflict-comparison">
+        <figure>
+          <figcaption>{{ t('覆盖前（OSS）') }}</figcaption>
+          <div class="upload-conflict-preview">
+            <img
+              :src="currentUploadConflict.existingPreviewUrl"
+              :alt="t('覆盖前（OSS）')"
+              @error="markPreviewFailed"
+            />
+          </div>
+        </figure>
+        <figure>
+          <figcaption>{{ t('覆盖后（本地）') }}</figcaption>
+          <div class="upload-conflict-preview">
+            <img
+              :src="currentUploadConflict.incomingPreviewUrl"
+              :alt="t('覆盖后（本地）')"
+              @error="markPreviewFailed"
+            />
+          </div>
+        </figure>
       </div>
       <div class="upload-conflict-progress">
         {{

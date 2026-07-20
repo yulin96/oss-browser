@@ -2036,6 +2036,38 @@ input[type='checkbox']:checked::after {
     Consolas,
     monospace;
 }
+.upload-conflict-comparison {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 14px;
+}
+.upload-conflict-comparison figure {
+  min-width: 0;
+  margin: 0;
+}
+.upload-conflict-comparison figcaption {
+  margin-bottom: 7px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+.upload-conflict-preview {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 190px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--background);
+}
+.upload-conflict-preview img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
 .upload-conflict-progress {
   margin-top: 9px;
   color: var(--muted);

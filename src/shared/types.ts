@@ -128,6 +128,8 @@ export interface ImageDimensions {
 export interface UploadConflict {
   name: string
   displayName: string
+  existingPreviewUrl?: string
+  incomingPreviewUrl?: string
 }
 
 export interface UploadOptions {

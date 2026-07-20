@@ -16,7 +16,7 @@ import RamClient, {
 } from '@alicloud/ram20150501'
 import StsClient, { AssumeRoleRequest } from '@alicloud/sts20150401'
 import OSS from 'ali-oss'
-import { app } from 'electron'
+import { app, nativeImage } from 'electron'
 import { createHash, randomUUID } from 'node:crypto'
 import { createWriteStream } from 'node:fs'
 import { mkdir, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises'
@@ -699,7 +699,28 @@ export class OssService {
     return files.flatMap((file) => {
       if (!conflictNames.has(file.name) || returnedNames.has(file.name)) return []
       returnedNames.add(file.name)
-      return [{ name: file.name, displayName: file.relativePath }]
+      const conflict: UploadConflict = { name: file.name, displayName: file.relativePath }
+      if (/\.(png|jpe?g|gif|webp|bmp)$/i.test(file.name)) {
+        const image = nativeImage.createFromPath(file.localPath)
+        if (!image.isEmpty()) {
+          const { width, height } = image.getSize()
+          const scale = Math.min(480 / width, 320 / height, 1)
+          const preview =
+            scale < 1
+              ? image.resize({
+                  width: Math.max(1, Math.round(width * scale)),
+                  height: Math.max(1, Math.round(height * scale)),
+                  quality: 'good'
+                })
+              : image
+          conflict.incomingPreviewUrl = preview.toDataURL()
+          conflict.existingPreviewUrl = client.signatureUrl(file.name, {
+            expires: 300,
+            process: 'image/resize,m_lfit,w_480,h_320/quality,q_80'
+          })
+        }
+      }
+      return [conflict]
     })
   }
 
