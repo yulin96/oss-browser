@@ -1,0 +1,402 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="description"
+      content="OSS Browser 是基于 Electron、Vue 3 与 TypeScript 构建的第三方阿里云 OSS 桌面客户端，支持对象管理、分片传输、预览、权限与 CDN 操作。"
+    />
+    <meta name="theme-color" content="#0b0f0d" />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="OSS Browser — 开源阿里云 OSS 桌面客户端" />
+    <meta
+      property="og:description"
+      content="基于 Electron、Vue 3 与 TypeScript 构建的第三方 OSS 桌面客户端。"
+    />
+    <meta property="og:image" content="./og.png" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="OSS Browser — 开源阿里云 OSS 桌面客户端" />
+    <meta
+      name="twitter:description"
+      content="基于 Electron、Vue 3 与 TypeScript 构建的第三方 OSS 桌面客户端。"
+    />
+    <meta name="twitter:image" content="./og.png" />
+    <title>OSS Browser — 开源阿里云 OSS 桌面客户端</title>
+    <link rel="icon" href="./assets/icon.png" />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <a class="skip-link" href="#main">跳到主要内容</a>
+
+    <header class="site-header">
+      <div class="container nav-wrap">
+        <a class="brand" href="#top" aria-label="OSS Browser 首页">
+          <img src="./assets/icon.png" alt="" width="42" height="42" />
+          <span>OSS Browser</span>
+        </a>
+        <nav class="nav-links" aria-label="主导航">
+          <a href="#features">核心能力</a>
+          <a href="#experience">使用流程</a>
+          <a href="#implementation">实现方式</a>
+          <a href="#security">安全说明</a>
+        </nav>
+        <a
+          class="button button-small button-ghost"
+          href="https://github.com/yulin96/oss-browser"
+          target="_blank"
+          rel="noreferrer"
+        >
+          GitHub <span aria-hidden="true">↗</span>
+        </a>
+      </div>
+    </header>
+
+    <main id="main">
+      <section class="hero" id="top">
+        <div class="hero-glow hero-glow-one" aria-hidden="true"></div>
+        <div class="hero-glow hero-glow-two" aria-hidden="true"></div>
+        <div class="container hero-grid">
+          <div class="hero-copy">
+            <div class="eyebrow"><span></span> 第三方开源桌面客户端</div>
+            <h1>用桌面界面管理<em>阿里云 OSS。</em></h1>
+            <p class="hero-lead">
+              面向开发、运维和云资源管理场景，提供 Bucket
+              与对象管理、分片传输、文件预览、临时链接、CDN 刷新和 RAM 用户管理。项目基于
+              Electron、Vue 3 与 TypeScript 构建。
+            </p>
+            <div class="hero-actions">
+              <a
+                class="button button-primary"
+                href="https://github.com/yulin96/oss-browser/releases/latest"
+                target="_blank"
+                rel="noreferrer"
+              >
+                前往 GitHub 下载 <span aria-hidden="true">→</span>
+              </a>
+              <a
+                class="button button-secondary"
+                href="https://github.com/yulin96/oss-browser#readme"
+                target="_blank"
+                rel="noreferrer"
+              >
+                查看项目说明
+              </a>
+            </div>
+            <div class="platforms" aria-label="支持的平台">
+              <span>Windows x64</span>
+              <span>macOS Intel / Apple Silicon</span>
+              <span>Linux x64</span>
+            </div>
+          </div>
+
+          <div class="product-stage" aria-label="OSS Browser 界面示意">
+            <div class="stage-halo" aria-hidden="true"></div>
+            <div class="app-window">
+              <div class="window-bar">
+                <div class="traffic-lights" aria-hidden="true"><i></i><i></i><i></i></div>
+                <div class="window-title">
+                  <img src="./assets/icon.png" alt="" width="22" height="22" />
+                  OSS Browser
+                </div>
+                <div class="window-actions" aria-hidden="true"><i></i><i></i></div>
+              </div>
+              <div class="toolbar">
+                <div class="tool-buttons" aria-hidden="true"><b>←</b><b>→</b><b>↑</b></div>
+                <div class="address"><span>oss://</span>product-assets/releases/</div>
+                <div class="avatar">YL</div>
+              </div>
+              <div class="file-head">
+                <div>
+                  <span class="kicker">当前目录</span>
+                  <strong>releases</strong>
+                </div>
+                <div class="file-actions">
+                  <span>新建文件夹</span>
+                  <b>上传</b>
+                </div>
+              </div>
+              <div class="file-table" role="presentation">
+                <div class="table-row table-labels">
+                  <span>名称</span><span>大小</span><span>更新时间</span><span></span>
+                </div>
+                <div class="table-row">
+                  <span class="file-name"><i class="folder-icon"></i>macOS</span>
+                  <span>—</span><span>刚刚</span><span>•••</span>
+                </div>
+                <div class="table-row">
+                  <span class="file-name"><i class="file-icon image-icon"></i>cover.webp</span>
+                  <span>2.4 MB</span><span>2 分钟前</span><span>•••</span>
+                </div>
+                <div class="table-row active-row">
+                  <span class="file-name"><i class="file-icon archive-icon"></i>release.zip</span>
+                  <span>1.8 GB</span><span>今天</span><span>•••</span>
+                </div>
+              </div>
+              <div class="transfer-card">
+                <div class="transfer-icon" aria-hidden="true">↓</div>
+                <div class="transfer-detail">
+                  <div><strong>release.zip</strong><span>82%</span></div>
+                  <div class="progress-track"><i></i></div>
+                  <small>并行分片下载 · 38.6 MB/s</small>
+                </div>
+              </div>
+            </div>
+            <div class="floating-chip chip-secure"><span>✓</span> 凭证安全存储</div>
+            <div class="floating-chip chip-fast"><span>⇅</span> 并行传输</div>
+          </div>
+        </div>
+      </section>
+
+      <section class="proof-strip" aria-label="产品亮点">
+        <div class="container proof-grid">
+          <div><strong>Electron</strong><span>跨平台桌面运行时</span></div>
+          <div><strong>Vue 3</strong><span>前端界面与交互</span></div>
+          <div><strong>TypeScript</strong><span>完整类型检查</span></div>
+          <div><strong>MIT</strong><span>开源许可</span></div>
+        </div>
+      </section>
+
+      <section class="section features" id="features">
+        <div class="container">
+          <div class="section-heading">
+            <div class="eyebrow"><span></span> 核心能力</div>
+            <h2>覆盖常用 OSS 操作</h2>
+            <p>功能按对象管理、传输、预览、账号权限和云服务操作组织，适合日常开发与运维工作。</p>
+          </div>
+
+          <div class="bento-grid">
+            <article class="feature-card feature-large feature-transfer">
+              <div class="feature-icon">⇅</div>
+              <div>
+                <span class="tag">传输任务</span>
+                <h3>分片上传与 Range 下载</h3>
+                <p>支持并行分片上传、Range 下载、任务进度与断点记录，用于处理体积较大的对象。</p>
+              </div>
+              <div class="speed-visual" aria-hidden="true">
+                <div class="speed-top"><span>release.zip</span><strong>38.6 MB/s</strong></div>
+                <div class="speed-bars">
+                  <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>
+                </div>
+              </div>
+            </article>
+
+            <article class="feature-card">
+              <div class="feature-icon">⌘</div>
+              <span class="tag">文件管理</span>
+              <h3>Bucket、目录与对象操作</h3>
+              <p>
+                支持新建、上传、下载、复制、移动、重命名、删除、收藏，以及通过 OSS 地址直接定位。
+              </p>
+            </article>
+
+            <article class="feature-card feature-dark">
+              <div class="feature-icon">◫</div>
+              <span class="tag">内容预览</span>
+              <h3>常见文件格式预览</h3>
+              <p>支持图片、视频、音频、PDF、Office 与文本文件预览，也能处理图片和提取视频帧。</p>
+              <div class="preview-stack" aria-hidden="true">
+                <i class="preview-one"></i><i class="preview-two"></i><i class="preview-three"></i>
+              </div>
+            </article>
+
+            <article class="feature-card">
+              <div class="feature-icon">◎</div>
+              <span class="tag">身份与权限</span>
+              <h3>AccessKey、STS 与授权码</h3>
+              <p>支持三种凭证接入方式，并提供对象 ACL、RAM 用户管理和临时授权码管理功能。</p>
+            </article>
+
+            <article class="feature-card feature-wide">
+              <div class="feature-icon">⌁</div>
+              <div>
+                <span class="tag">URL 与 CDN</span>
+                <h3>临时链接、自定义域名与 CDN</h3>
+                <p>创建临时分享链接，使用自定义域名，并在需要时提交 CDN 缓存刷新。</p>
+              </div>
+              <div class="link-preview" aria-hidden="true">
+                <span>https://assets.example.com/release.zip</span><b>复制链接</b>
+              </div>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section class="section experience" id="experience">
+        <div class="container experience-grid">
+          <div class="experience-copy">
+            <div class="eyebrow"><span></span> 使用流程</div>
+            <h2>连接账号并定位对象</h2>
+            <p>
+              客户端直接调用阿里云 OSS
+              接口，不经过项目自建的中转服务。账号配置与界面状态保存在本机。
+            </p>
+            <a
+              class="text-link"
+              href="https://github.com/yulin96/oss-browser/releases/latest"
+              target="_blank"
+              rel="noreferrer"
+            >
+              下载最新版本 <span aria-hidden="true">→</span>
+            </a>
+          </div>
+          <ol class="steps">
+            <li>
+              <span>01</span>
+              <div>
+                <strong>配置访问凭证</strong>
+                <p>添加 AccessKey、STS 凭证或临时授权码，并配置对应的 Endpoint。</p>
+              </div>
+            </li>
+            <li>
+              <span>02</span>
+              <div>
+                <strong>选择 Bucket 与路径</strong>
+                <p>从 Bucket 列表进入，或输入 <code>oss://bucket/path/</code> 地址定位对象前缀。</p>
+              </div>
+            </li>
+            <li>
+              <span>03</span>
+              <div>
+                <strong>执行 OSS 操作</strong>
+                <p>上传、下载或管理对象，并按需使用预览、临时 URL、ACL 和 CDN 刷新功能。</p>
+              </div>
+            </li>
+          </ol>
+        </div>
+      </section>
+
+      <section class="section implementation" id="implementation">
+        <div class="container">
+          <div class="section-heading">
+            <div class="eyebrow"><span></span> 实现方式</div>
+            <h2>项目说明</h2>
+            <p>
+              这是一个可本地运行、可自行构建的 Electron
+              项目。仓库包含应用源码、打包配置和跨平台发布工作流。
+            </p>
+          </div>
+          <div class="implementation-grid">
+            <article>
+              <code>01 / STACK</code>
+              <h3>Electron + Vue 3 + TypeScript</h3>
+              <p>
+                Electron 提供桌面能力，Vue 3 负责渲染界面，TypeScript
+                用于主进程、预加载脚本与渲染进程代码。
+              </p>
+            </article>
+            <article>
+              <code>02 / PROCESS</code>
+              <h3>主进程隔离系统能力</h3>
+              <p>OSS 请求、凭证访问和文件系统操作保留在主进程，通过受控的预加载接口提供给界面。</p>
+            </article>
+            <article>
+              <code>03 / LOCAL DATA</code>
+              <h3>账号数据保存在本地</h3>
+              <p>
+                首页位置、收藏、显示设置和传输记录按账号存储；保存的凭证由 Electron safeStorage
+                保护。
+              </p>
+            </article>
+            <article>
+              <code>04 / RELEASE</code>
+              <h3>仓库内完成多平台构建</h3>
+              <p>
+                使用 pnpm 执行开发、检查与打包任务，GitHub Actions 为 macOS、Windows 和 Linux
+                生成发布包。
+              </p>
+            </article>
+          </div>
+          <a
+            class="text-link"
+            href="https://github.com/yulin96/oss-browser#development"
+            target="_blank"
+            rel="noreferrer"
+          >
+            查看开发与构建说明 <span aria-hidden="true">→</span>
+          </a>
+        </div>
+      </section>
+
+      <section class="section security" id="security">
+        <div class="container security-card">
+          <div class="security-copy">
+            <div class="eyebrow eyebrow-light"><span></span> 本地安全边界</div>
+            <h2>凭证与本地数据处理</h2>
+            <p>
+              保存的凭证通过 Electron
+              <code>safeStorage</code>
+              调用操作系统密钥存储能力加密。账号首页、收藏、显示设置与传输记录按账号写入本地应用数据目录。
+            </p>
+            <div class="security-note">
+              OSS Browser 是独立维护的第三方项目，并非阿里云官方客户端。发布包由仓库中的 GitHub
+              Actions 构建并上传到 GitHub Releases。
+            </div>
+          </div>
+          <div class="security-panel" aria-label="安全特性">
+            <div>
+              <i>01</i
+              ><span
+                ><strong>系统安全存储</strong><small>不把凭证明文写入 localStorage</small></span
+              >
+            </div>
+            <div>
+              <i>02</i
+              ><span><strong>进程能力隔离</strong><small>OSS 与系统操作保留在主进程</small></span>
+            </div>
+            <div>
+              <i>03</i
+              ><span
+                ><strong>开放源代码</strong><small>主进程、预加载与界面代码均可审查</small></span
+              >
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section final-cta">
+        <div class="container cta-card">
+          <img src="./assets/icon.png" alt="OSS Browser" width="92" height="92" />
+          <div>
+            <span class="tag">下载与源码</span>
+            <h2>获取构建产物或检出源码</h2>
+            <p>GitHub Releases 提供 Windows、macOS 与 Linux 构建产物，源码采用 MIT License。</p>
+          </div>
+          <div class="cta-actions">
+            <a
+              class="button button-primary"
+              href="https://github.com/yulin96/oss-browser/releases/latest"
+              target="_blank"
+              rel="noreferrer"
+            >
+              下载 OSS Browser <span aria-hidden="true">→</span>
+            </a>
+            <small>当前安装包未签名，系统可能显示安全提示。</small>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div class="container footer-grid">
+        <div class="brand footer-brand">
+          <img src="./assets/icon.png" alt="" width="36" height="36" />
+          <span>OSS Browser</span>
+        </div>
+        <p>第三方 Electron 客户端，受 Alibaba OSS Browser 项目启发。</p>
+        <div class="footer-links">
+          <a href="https://github.com/yulin96/oss-browser" target="_blank" rel="noreferrer">源码</a>
+          <a href="https://github.com/yulin96/oss-browser/issues" target="_blank" rel="noreferrer"
+            >反馈</a
+          >
+          <a
+            href="https://github.com/yulin96/oss-browser/blob/main/LICENSE"
+            target="_blank"
+            rel="noreferrer"
+            >MIT License</a
+          >
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>
