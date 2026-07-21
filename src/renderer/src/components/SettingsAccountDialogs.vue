@@ -239,7 +239,7 @@ const {
               /></div
           ></label>
           <label
-            >{{ t('上传分片大小（MB）') }}
+            >{{ t('传输分片大小（MB）') }}
             <div class="input-wrap">
               <input v-model.number="settings.partSizeMb" type="number" min="1" max="1024" /></div
           ></label>

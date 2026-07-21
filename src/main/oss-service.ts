@@ -18,10 +18,8 @@ import StsClient, { AssumeRoleRequest } from '@alicloud/sts20150401'
 import OSS from 'ali-oss'
 import { app, nativeImage } from 'electron'
 import { createHash, randomUUID } from 'node:crypto'
-import { createWriteStream } from 'node:fs'
-import { mkdir, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises'
+import { mkdir, open, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises'
 import { basename, isAbsolute, join, relative, sep } from 'node:path'
-import { pipeline } from 'node:stream/promises'
 import type {
   AppSettings,
   AuthConfig,
@@ -40,7 +38,8 @@ import type {
   RamUser,
   TransferItem,
   UploadConflict,
-  UploadOptions
+  UploadOptions,
+  UploadPreparation
 } from '../shared/types'
 
 type TransferReporter = (item: TransferItem) => void
@@ -51,6 +50,23 @@ interface UploadEntry {
   relativePath: string
   isDirectory: boolean
   name: string
+}
+interface PreparedUpload {
+  bucket: string
+  prefix: string
+  paths: string[]
+  entries: UploadEntry[]
+}
+interface DownloadRange {
+  start: number
+  end: number
+}
+interface DownloadCheckpoint {
+  version: 1
+  total: number
+  etag: string
+  partSize: number
+  completed: DownloadRange[]
 }
 type TransferBatch = {
   id: string
@@ -66,6 +82,7 @@ type ActiveTransfer = Omit<TransferItem, 'batchId' | 'batchTotal' | 'batchDone'>
   batch: TransferBatch
   cancelRequested: boolean
   cancelOperation: () => void
+  lastProgressReportAt: number
 }
 
 export class OssService {
@@ -73,7 +90,7 @@ export class OssService {
   private settings: AppSettings = {
     maxUploadJobs: 3,
     maxDownloadJobs: 3,
-    multipartParallel: 4,
+    multipartParallel: 5,
     partSizeMb: 10,
     timeoutSeconds: 60,
     retryTimes: 5,
@@ -89,6 +106,7 @@ export class OssService {
     { direction: TransferDirection; run: () => Promise<void> }
   >()
   private readonly localMediaPreviews = new Map<string, { localPath: string; expiresAt: number }>()
+  private readonly preparedUploads = new Map<string, PreparedUpload>()
   private readonly pausedDirections = new Set<TransferDirection>()
   private readonly pauseWaiters: Record<TransferDirection, Array<() => void>> = {
     upload: [],
@@ -101,6 +119,7 @@ export class OssService {
 
   async connect(config: AuthConfig): Promise<BucketInfo[]> {
     this.resetActiveTransfers()
+    this.preparedUploads.clear()
     this.auth = config
     try {
       if (config.presetPath) {
@@ -129,6 +148,7 @@ export class OssService {
     this.resetActiveTransfers()
     this.auth = null
     this.bucketRegions.clear()
+    this.preparedUploads.clear()
   }
 
   setSecure(secure: boolean): void {
@@ -674,11 +694,10 @@ export class OssService {
     bucket: string,
     prefix: string,
     paths: string[]
-  ): Promise<UploadConflict[]> {
+  ): Promise<UploadPreparation> {
     this.localMediaPreviews.clear()
-    const files = (await this.prepareUploadEntries(prefix, paths)).filter(
-      (entry) => !entry.isDirectory
-    )
+    const entries = await this.prepareUploadEntries(prefix, paths)
+    const files = entries.filter((entry) => !entry.isDirectory)
     const client = this.bucketClient(bucket)
     const conflictNames = new Set<string>()
     const directFiles: UploadEntry[] = []
@@ -715,7 +734,7 @@ export class OssService {
       await check()
     })
     const returnedNames = new Set<string>()
-    return files.flatMap((file) => {
+    const conflicts = files.flatMap((file) => {
       if (!conflictNames.has(file.name) || returnedNames.has(file.name)) return []
       returnedNames.add(file.name)
       const conflict: UploadConflict = { name: file.name, displayName: file.relativePath }
@@ -751,6 +770,13 @@ export class OssService {
       }
       return [conflict]
     })
+    const id = randomUUID()
+    this.preparedUploads.set(id, { bucket, prefix, paths: [...paths], entries })
+    return { id, conflicts }
+  }
+
+  discardUploadPreparation(id: string): void {
+    this.preparedUploads.delete(id)
   }
 
   resolveLocalMediaPreview(token: string): string | undefined {
@@ -771,9 +797,21 @@ export class OssService {
     onBatchCreated?: (batchId: string) => void
   ): Promise<boolean> {
     const skippedNames = new Set(options.skipNames || [])
-    const files = (await this.prepareUploadEntries(prefix, paths)).filter(
-      (file) => !skippedNames.has(file.name)
-    )
+    const prepared = options.preparationId
+      ? this.preparedUploads.get(options.preparationId)
+      : undefined
+    if (options.preparationId) this.preparedUploads.delete(options.preparationId)
+    if (
+      prepared &&
+      (prepared.bucket !== bucket ||
+        prepared.prefix !== prefix ||
+        prepared.paths.length !== paths.length ||
+        prepared.paths.some((path, index) => path !== paths[index]))
+    ) {
+      throw new Error('上传准备结果与当前任务不匹配')
+    }
+    const entries = prepared?.entries || (await this.prepareUploadEntries(prefix, paths))
+    const files = entries.filter((file) => !skippedNames.has(file.name))
     if (!files.length) return true
     const batch = this.newTransferBatch('upload', files.length)
     onBatchCreated?.(batch.id)
@@ -792,6 +830,12 @@ export class OssService {
         }
         const checkpointPath = this.checkpointPath(bucket, name, localPath)
         await this.runControlledTransfer(transfer, client, async () => {
+          const fileSize = (await stat(localPath)).size
+          if (fileSize <= this.settings.partSizeMb * 1024 * 1024) {
+            await client.put(name, localPath)
+            await rm(checkpointPath, { force: true })
+            return
+          }
           const checkpoint = await this.readCheckpoint(checkpointPath)
           await client.multipartUpload(name, localPath, {
             checkpoint,
@@ -840,39 +884,215 @@ export class OssService {
         throw new Error('下载文件路径无效，检测到越界穿越风险')
       }
       const partialPath = `${localPath}.ossbrowser.part`
+      const checkpointPath = `${partialPath}.json`
       const transfer = this.newTransfer('download', object.name, batch)
       const client = this.bucketClient(bucket)
       await this.runControlledTransfer(transfer, client, async () => {
         await mkdir(join(localPath, '..'), { recursive: true })
         const metadata = await client.getObjectMeta(object.name)
         const total = Number(metadata.res.headers['content-length'] || 0)
-        let downloaded = 0
-        try {
-          downloaded = (await stat(partialPath)).size
-        } catch {
-          downloaded = 0
-        }
-        if (downloaded > total) downloaded = 0
+        const etag = String(metadata.res.headers.etag || '')
+        if (!Number.isSafeInteger(total) || total < 0) throw new Error('OSS 返回的对象大小无效')
+        if (!etag) throw new Error('OSS 未返回对象 ETag，无法安全执行并行下载')
+
         if (total === 0) {
           await writeFile(partialPath, '')
-        } else if (downloaded < total) {
-          const result = await client.getStream(object.name, {
-            headers: downloaded ? { Range: `bytes=${downloaded}-` } : undefined
-          })
-          transfer.cancelOperation = () => {
-            const error = new Error('cancel')
-            error.name = 'CancelError'
-            result.stream.destroy(error)
-          }
-          result.stream.on('data', (chunk: Buffer) => {
-            downloaded += chunk.length
-            this.updateTransfer(transfer, total ? downloaded / total : 0, 'running')
-          })
-          await pipeline(
-            result.stream,
-            createWriteStream(partialPath, { flags: downloaded ? 'a' : 'w' })
-          )
+          await rm(checkpointPath, { force: true })
+          await rm(localPath, { force: true })
+          await rename(partialPath, localPath)
+          return
         }
+
+        let partialSize = 0
+        try {
+          partialSize = (await stat(partialPath)).size
+        } catch {
+          partialSize = 0
+        }
+
+        let checkpointExists = false
+        let checkpoint: DownloadCheckpoint | undefined
+        try {
+          checkpointExists = true
+          const parsed = JSON.parse(await readFile(checkpointPath, 'utf8')) as DownloadCheckpoint
+          const maxCompletedEnd = Array.isArray(parsed.completed)
+            ? parsed.completed.reduce((maximum, range) => Math.max(maximum, range.end), 0)
+            : 0
+          const validRanges =
+            Array.isArray(parsed.completed) &&
+            parsed.completed.every(
+              (range) =>
+                Number.isSafeInteger(range.start) &&
+                Number.isSafeInteger(range.end) &&
+                range.start >= 0 &&
+                range.start < range.end &&
+                range.end <= total
+            )
+          if (
+            parsed.version === 1 &&
+            parsed.total === total &&
+            parsed.etag === etag &&
+            Number.isSafeInteger(parsed.partSize) &&
+            parsed.partSize > 0 &&
+            validRanges &&
+            partialSize >= maxCompletedEnd
+          ) {
+            checkpoint = parsed
+          }
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code === 'ENOENT') checkpointExists = false
+        }
+
+        if (!checkpoint) {
+          if (checkpointExists || partialSize > 0) {
+            await rm(partialPath, { force: true })
+            partialSize = 0
+          }
+          checkpoint = {
+            version: 1,
+            total,
+            etag,
+            partSize: Math.max(this.settings.partSizeMb * 1024 * 1024, Math.ceil(total / 10_000)),
+            completed: []
+          }
+        }
+
+        const completed = [...checkpoint.completed].sort((a, b) => a.start - b.start)
+        for (let index = 1; index < completed.length; index += 1) {
+          if (completed[index].start < completed[index - 1].end) {
+            await rm(partialPath, { force: true })
+            completed.splice(0, completed.length)
+            break
+          }
+        }
+        checkpoint.completed = completed
+        await writeFile(checkpointPath, JSON.stringify(checkpoint))
+        try {
+          await stat(partialPath)
+        } catch {
+          await writeFile(partialPath, Buffer.alloc(0))
+        }
+
+        const pending: DownloadRange[] = []
+        const appendPending = (start: number, end: number): void => {
+          for (let offset = start; offset < end; offset += checkpoint.partSize) {
+            pending.push({ start: offset, end: Math.min(end, offset + checkpoint.partSize) })
+          }
+        }
+        let cursor = 0
+        for (const range of completed) {
+          if (cursor < range.start) appendPending(cursor, range.start)
+          cursor = range.end
+        }
+        if (cursor < total) appendPending(cursor, total)
+
+        let completedBytes = completed.reduce((sum, range) => sum + range.end - range.start, 0)
+        this.updateTransfer(transfer, completedBytes / total, 'running')
+        const activeBytes = new Map<number, number>()
+        const activeStreams = new Set<{ destroy: (error?: Error) => void }>()
+        let abortError: Error | undefined
+        transfer.cancelOperation = () => {
+          abortError = new Error('cancel')
+          abortError.name = 'CancelError'
+          for (const stream of activeStreams) stream.destroy(abortError)
+        }
+
+        const file = await open(partialPath, 'r+')
+        let checkpointWrite = Promise.resolve()
+        const persistCheckpoint = (): Promise<void> => {
+          checkpointWrite = checkpointWrite.then(() =>
+            writeFile(
+              checkpointPath,
+              JSON.stringify({
+                ...checkpoint,
+                completed: [...completed].sort((a, b) => a.start - b.start)
+              })
+            )
+          )
+          return checkpointWrite
+        }
+        const queue = [...pending]
+        let workerFailed = false
+        let workerError: unknown
+        const stopWorkers = (error: unknown): void => {
+          if (workerFailed) return
+          workerFailed = true
+          workerError = error
+          const streamError = error instanceof Error ? error : new Error(String(error))
+          for (const stream of activeStreams) stream.destroy(streamError)
+        }
+
+        try {
+          const workers = Array.from(
+            { length: Math.min(this.settings.multipartParallel, queue.length) },
+            async () => {
+              while (queue.length && !workerFailed) {
+                const range = queue.shift()
+                if (!range) return
+                if (abortError) {
+                  stopWorkers(abortError)
+                  return
+                }
+                try {
+                  const result = await client.getStream(object.name, {
+                    headers: {
+                      Range: `bytes=${range.start}-${range.end - 1}`,
+                      ...(etag ? { 'If-Match': etag } : {})
+                    }
+                  })
+                  const stream = result.stream as typeof result.stream & AsyncIterable<Buffer>
+                  activeStreams.add(stream)
+                  if (abortError) stream.destroy(abortError)
+                  let position = range.start
+                  activeBytes.set(range.start, 0)
+                  try {
+                    for await (const chunk of stream) {
+                      let written = 0
+                      while (written < chunk.length) {
+                        const result = await file.write(
+                          chunk,
+                          written,
+                          chunk.length - written,
+                          position + written
+                        )
+                        if (!result.bytesWritten) throw new Error('下载文件写入未取得进展')
+                        written += result.bytesWritten
+                      }
+                      position += chunk.length
+                      activeBytes.set(range.start, position - range.start)
+                      const activeDownloaded = [...activeBytes.values()].reduce(
+                        (sum, value) => sum + value,
+                        0
+                      )
+                      this.updateTransfer(
+                        transfer,
+                        Math.min(1, (completedBytes + activeDownloaded) / total),
+                        'running'
+                      )
+                    }
+                  } finally {
+                    activeStreams.delete(stream)
+                    activeBytes.delete(range.start)
+                  }
+                  if (position !== range.end) throw new Error('下载分片长度与预期不一致')
+                  completed.push(range)
+                  completedBytes += range.end - range.start
+                  await persistCheckpoint()
+                } catch (error) {
+                  stopWorkers(error)
+                }
+              }
+            }
+          )
+          await Promise.all(workers)
+          if (workerFailed) throw workerError
+          if (completedBytes !== total) throw new Error('下载文件分片不完整')
+        } finally {
+          await file.close()
+        }
+
+        if ((await stat(partialPath)).size !== total) throw new Error('下载文件大小与预期不一致')
+        await rm(checkpointPath, { force: true })
         await rm(localPath, { force: true })
         await rename(partialPath, localPath)
       })
@@ -1183,7 +1403,8 @@ export class OssService {
       generation: this.transferGeneration,
       batch,
       cancelRequested: false,
-      cancelOperation: () => undefined
+      cancelOperation: () => undefined,
+      lastProgressReportAt: Date.now()
     }
     this.reportActiveTransfer(transfer)
     return transfer
@@ -1194,9 +1415,13 @@ export class OssService {
     progress: number,
     status: TransferItem['status']
   ): void {
+    const statusChanged = transfer.status !== status
     if (status === 'done' && transfer.status !== 'done') transfer.batch.done += 1
     transfer.progress = progress
     transfer.status = status
+    const now = Date.now()
+    if (status === 'running' && !statusChanged && now - transfer.lastProgressReportAt < 100) return
+    transfer.lastProgressReportAt = now
     this.reportActiveTransfer(transfer)
   }
 

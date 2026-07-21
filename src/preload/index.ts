@@ -81,6 +81,7 @@ const api: OssBrowserApi = {
     pickDownloadFolder: () => ipcRenderer.invoke('files:pickDownloadFolder'),
     findUploadConflicts: (bucket, prefix, paths) =>
       ipcRenderer.invoke('files:findUploadConflicts', bucket, prefix, paths),
+    discardUploadPreparation: (id) => ipcRenderer.invoke('files:discardUploadPreparation', id),
     upload: (bucket, prefix, paths, options) =>
       ipcRenderer.invoke('files:upload', bucket, prefix, paths, options),
     download: (bucket, items, destination) =>

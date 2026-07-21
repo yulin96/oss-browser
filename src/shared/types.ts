@@ -135,6 +135,12 @@ export interface UploadConflict {
 
 export interface UploadOptions {
   skipNames?: string[]
+  preparationId?: string
+}
+
+export interface UploadPreparation {
+  id: string
+  conflicts: UploadConflict[]
 }
 
 export interface ObjectListResult {
@@ -289,7 +295,8 @@ export interface OssBrowserApi {
       bucket: string,
       prefix: string,
       paths: string[]
-    ) => Promise<UploadConflict[]>
+    ) => Promise<UploadPreparation>
+    discardUploadPreparation: (id: string) => Promise<void>
     upload: (
       bucket: string,
       prefix: string,

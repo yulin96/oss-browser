@@ -6,7 +6,7 @@ export type ThemeMode = 'system' | 'light' | 'dark'
 const defaultSettings: AppSettings = {
   maxUploadJobs: 3,
   maxDownloadJobs: 3,
-  multipartParallel: 4,
+  multipartParallel: 5,
   partSizeMb: 10,
   timeoutSeconds: 60,
   retryTimes: 5,

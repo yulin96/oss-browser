@@ -291,6 +291,9 @@ function registerIpc(): void {
     (_event, bucket: string, prefix: string, paths: string[]) =>
       oss.findUploadConflicts(bucket, prefix, paths)
   )
+  ipcMain.handle('files:discardUploadPreparation', (_event, id: string) =>
+    oss.discardUploadPreparation(id)
+  )
   ipcMain.handle(
     'files:upload',
     (_event, bucket: string, prefix: string, paths: string[], options?: UploadOptions) =>

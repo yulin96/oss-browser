@@ -34,6 +34,7 @@ export class FloatingUploadManager {
   private activeBatchId: string | null = null
   private readonly transferItems = new Map<string, TransferItem>()
   private pendingRequest: FloatingUploadRequest | null = null
+  private pendingPreparationId: string | null = null
   private resetTimer: NodeJS.Timeout | undefined
   private resizeSequence = 0
   private expansionTarget = false
@@ -238,18 +239,22 @@ export class FloatingUploadManager {
     try {
       const policy = this.oss.getUploadConflictPolicy()
       let skipNames: string[] = []
+      let preparationId: string | undefined
       if (policy !== 'replace') {
-        const conflicts = await this.oss.findUploadConflicts(target.bucket, target.prefix, paths)
+        const preparation = await this.oss.findUploadConflicts(target.bucket, target.prefix, paths)
+        preparationId = preparation.id
+        const conflicts = preparation.conflicts
         if (policy === 'skip') skipNames = conflicts.map((item) => item.name)
         else if (conflicts.length) {
           this.pendingRequest = { target, paths, conflicts }
+          this.pendingPreparationId = preparationId
           this.setStatus('waiting', '需要确认同名文件')
           this.showMainWindow()
           this.getMainWindow()?.webContents.send('floating-upload:request', this.pendingRequest)
           return
         }
       }
-      await this.performUpload(paths, skipNames)
+      await this.performUpload(paths, skipNames, preparationId)
     } catch (error) {
       this.setStatus('error', error instanceof Error ? error.message : String(error))
       throw error
@@ -258,13 +263,16 @@ export class FloatingUploadManager {
 
   async resolveRequest(skipNames: string[] | null): Promise<void> {
     const request = this.pendingRequest
+    const preparationId = this.pendingPreparationId
     this.pendingRequest = null
+    this.pendingPreparationId = null
     if (!request) return
     if (skipNames === null) {
+      if (preparationId) this.oss.discardUploadPreparation(preparationId)
       this.setStatus('idle')
       return
     }
-    await this.performUpload(request.paths, skipNames)
+    await this.performUpload(request.paths, skipNames, preparationId || undefined)
   }
 
   handleTransfer(item: TransferItem): void {
@@ -292,9 +300,16 @@ export class FloatingUploadManager {
     this.emitState()
   }
 
-  private async performUpload(paths: string[], skipNames: string[]): Promise<void> {
+  private async performUpload(
+    paths: string[],
+    skipNames: string[],
+    preparationId?: string
+  ): Promise<void> {
     const target = this.state.target
-    if (!target) return
+    if (!target) {
+      if (preparationId) this.oss.discardUploadPreparation(preparationId)
+      return
+    }
     this.activeBatchId = null
     this.transferItems.clear()
     this.state.total = paths.length
@@ -306,7 +321,7 @@ export class FloatingUploadManager {
         target.bucket,
         target.prefix,
         paths,
-        { skipNames },
+        { skipNames, preparationId },
         (batchId) => {
           this.activeBatchId = batchId
         }

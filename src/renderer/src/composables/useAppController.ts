@@ -1285,17 +1285,23 @@ export function useAppController() {
     const bucketName = currentBucket.value.name
     const targetPrefix = prefix.value
     let skipNames: string[] = []
+    let preparationId: string | undefined
 
     if (settings.uploadConflictPolicy !== 'replace') {
-      const conflicts = await run(() =>
+      const preparation = await run(() =>
         window.ossBrowser.files.findUploadConflicts(bucketName, targetPrefix, paths)
       )
-      if (conflicts === undefined) return
+      if (preparation === undefined) return
+      preparationId = preparation.id
+      const conflicts = preparation.conflicts
       if (settings.uploadConflictPolicy === 'skip') {
         skipNames = conflicts.map((conflict) => conflict.name)
       } else if (conflicts.length) {
         const resolution = await resolveUploadConflicts(conflicts)
-        if (!resolution) return
+        if (!resolution) {
+          await window.ossBrowser.files.discardUploadPreparation(preparationId)
+          return
+        }
         skipNames = resolution.skipNames
         if (resolution.rememberedPolicy) {
           settings.uploadConflictPolicy = resolution.rememberedPolicy
@@ -1304,7 +1310,10 @@ export function useAppController() {
     }
 
     const done = await run(() =>
-      window.ossBrowser.files.upload(bucketName, targetPrefix, paths, { skipNames })
+      window.ossBrowser.files.upload(bucketName, targetPrefix, paths, {
+        skipNames,
+        preparationId
+      })
     )
     if (done) await loadObjects()
   }
