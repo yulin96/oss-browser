@@ -19,9 +19,13 @@ import type {
 import { FloatingUploadStore } from './floating-upload-store'
 import type { OssService } from './oss-service'
 
-const collapsedSize = 64
-const expandedWidth = 280
+const controlSize = 64
+const expandedControlWidth = 280
+const shadowPadding = 12
+const collapsedSize = controlSize + shadowPadding * 2
+const expandedWidth = expandedControlWidth + shadowPadding * 2
 const screenMargin = 12
+const useFixedWindowShape = process.platform === 'win32'
 
 export class FloatingUploadManager {
   private window: BrowserWindow | null = null
@@ -31,6 +35,8 @@ export class FloatingUploadManager {
   private readonly transferItems = new Map<string, TransferItem>()
   private pendingRequest: FloatingUploadRequest | null = null
   private resetTimer: NodeJS.Timeout | undefined
+  private resizeSequence = 0
+  private expansionTarget = false
   private state: FloatingUploadState = {
     visible: false,
     expanded: false,
@@ -97,9 +103,10 @@ export class FloatingUploadManager {
     }
     this.assertAccount()
     const settings = await this.store.get(this.accountId!)
-    if (!settings.target) {
-      if (!suggestedTarget) throw new Error('请先进入一个 Bucket 目录')
+    if (suggestedTarget) {
       await this.setTarget(suggestedTarget)
+    } else if (!settings.target) {
+      throw new Error('请先进入一个 Bucket 目录')
     } else {
       this.state.target = settings.target
     }
@@ -149,14 +156,25 @@ export class FloatingUploadManager {
     })
   }
 
-  setExpanded(expanded: boolean): void {
-    if (!this.window || this.window.isDestroyed() || this.state.expanded === expanded) return
-    const bounds = this.window.getBounds()
-    const width = expanded ? expandedWidth : collapsedSize
-    const x = this.state.dockSide === 'right' ? bounds.x + bounds.width - width : bounds.x
-    this.window.setBounds({ x, y: bounds.y, width, height: collapsedSize }, false)
+  async setExpanded(expanded: boolean, duration: number): Promise<void> {
+    const window = this.window
+    if (!window || window.isDestroyed() || this.expansionTarget === expanded) return
+    this.expansionTarget = expanded
+    const sequence = ++this.resizeSequence
+    if (expanded) {
+      if (useFixedWindowShape) this.setWindowShape(window, true)
+      else this.setWindowWidth(window, window.getBounds(), expandedWidth)
+    }
     this.state.expanded = expanded
     this.emitState()
+    if (!expanded && duration > 0) {
+      await new Promise<void>((resolve) => setTimeout(resolve, duration))
+    }
+    if (sequence !== this.resizeSequence || window.isDestroyed()) return
+    if (!expanded) {
+      if (useFixedWindowShape) this.setWindowShape(window, false)
+      else this.setWindowWidth(window, window.getBounds(), collapsedSize)
+    }
   }
 
   getPosition(): FloatingWindowPosition {
@@ -166,14 +184,15 @@ export class FloatingUploadManager {
 
   moveTo(position: FloatingWindowPosition): void {
     if (!this.window || this.window.isDestroyed()) return
-    const display = screen.getDisplayNearestPoint(position)
+    const offset = this.collapsedWindowOffset()
+    const display = screen.getDisplayNearestPoint({ x: position.x + offset, y: position.y })
     const x = Math.min(
-      display.workArea.x + display.workArea.width - collapsedSize,
-      Math.max(display.workArea.x, Math.round(position.x))
+      display.workArea.x + display.workArea.width - controlSize - shadowPadding - offset,
+      Math.max(display.workArea.x - shadowPadding - offset, Math.round(position.x))
     )
     const y = Math.min(
-      display.workArea.y + display.workArea.height - collapsedSize,
-      Math.max(display.workArea.y, Math.round(position.y))
+      display.workArea.y + display.workArea.height - controlSize - shadowPadding,
+      Math.max(display.workArea.y - shadowPadding, Math.round(position.y))
     )
     this.window.setPosition(x, y)
   }
@@ -181,20 +200,27 @@ export class FloatingUploadManager {
   async finishMove(): Promise<void> {
     if (!this.window || this.window.isDestroyed() || !this.accountId) return
     const bounds = this.window.getBounds()
-    const display = screen.getDisplayMatching(bounds)
-    const center = bounds.x + bounds.width / 2
+    const offset = this.collapsedWindowOffset()
+    const collapsedBounds = { ...bounds, x: bounds.x + offset, width: collapsedSize }
+    const display = screen.getDisplayMatching(collapsedBounds)
+    const center = collapsedBounds.x + collapsedBounds.width / 2
     this.state.dockSide =
       center < display.workArea.x + display.workArea.width / 2 ? 'left' : 'right'
-    const x =
+    const collapsedX =
       this.state.dockSide === 'left'
-        ? display.workArea.x + screenMargin
-        : display.workArea.x + display.workArea.width - collapsedSize - screenMargin
+        ? display.workArea.x + screenMargin - shadowPadding
+        : display.workArea.x + display.workArea.width - controlSize - screenMargin - shadowPadding
+    const x = collapsedX - this.collapsedWindowOffset()
     const y = Math.min(
-      display.workArea.y + display.workArea.height - collapsedSize - screenMargin,
-      Math.max(display.workArea.y + screenMargin, bounds.y)
+      display.workArea.y + display.workArea.height - controlSize - screenMargin - shadowPadding,
+      Math.max(display.workArea.y + screenMargin - shadowPadding, bounds.y)
     )
-    this.window.setBounds({ x, y, width: collapsedSize, height: collapsedSize }, true)
-    await this.store.update(this.accountId, { position: { x, y } })
+    this.window.setBounds(
+      { x, y, width: useFixedWindowShape ? expandedWidth : collapsedSize, height: collapsedSize },
+      false
+    )
+    this.setWindowShape(this.window, false)
+    await this.store.update(this.accountId, { position: { x: collapsedX, y } })
     this.emitState()
   }
 
@@ -312,17 +338,19 @@ export class FloatingUploadManager {
 
   private createWindow(position?: FloatingWindowPosition): void {
     const initial = this.initialPosition(position)
+    const initialWidth = useFixedWindowShape ? expandedWidth : collapsedSize
     this.window = new BrowserWindow({
       x: initial.x,
       y: initial.y,
-      width: collapsedSize,
+      width: initialWidth,
       height: collapsedSize,
-      minWidth: collapsedSize,
+      minWidth: initialWidth,
       minHeight: collapsedSize,
       maxHeight: collapsedSize,
       show: false,
       frame: false,
       transparent: true,
+      backgroundColor: '#00000000',
       resizable: false,
       movable: false,
       alwaysOnTop: true,
@@ -337,6 +365,7 @@ export class FloatingUploadManager {
         spellcheck: false
       }
     })
+    this.setWindowShape(this.window, false)
     this.window.setAlwaysOnTop(true, 'floating')
     if (process.platform === 'darwin') {
       this.window.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
@@ -375,6 +404,8 @@ export class FloatingUploadManager {
   }
 
   private destroyWindow(): void {
+    this.resizeSequence += 1
+    this.expansionTarget = false
     if (!this.window || this.window.isDestroyed()) return
     this.window.destroy()
     this.window = null
@@ -390,21 +421,43 @@ export class FloatingUploadManager {
       ? screen.getDisplayNearestPoint(saved)
       : screen.getDisplayNearestPoint(screen.getCursorScreenPoint())
     if (saved) {
+      const collapsedX = Math.min(
+        display.workArea.x + display.workArea.width - controlSize - screenMargin - shadowPadding,
+        Math.max(display.workArea.x + screenMargin - shadowPadding, saved.x)
+      )
       return {
-        x: Math.min(
-          display.workArea.x + display.workArea.width - collapsedSize - screenMargin,
-          Math.max(display.workArea.x + screenMargin, saved.x)
-        ),
+        x: collapsedX - this.collapsedWindowOffset(),
         y: Math.min(
-          display.workArea.y + display.workArea.height - collapsedSize - screenMargin,
-          Math.max(display.workArea.y + screenMargin, saved.y)
+          display.workArea.y + display.workArea.height - controlSize - screenMargin - shadowPadding,
+          Math.max(display.workArea.y + screenMargin - shadowPadding, saved.y)
         )
       }
     }
+    const collapsedX =
+      display.workArea.x + display.workArea.width - controlSize - screenMargin - shadowPadding
     return {
-      x: display.workArea.x + display.workArea.width - collapsedSize - screenMargin,
+      x: collapsedX - this.collapsedWindowOffset(),
       y: display.workArea.y + Math.round((display.workArea.height - collapsedSize) / 2)
     }
+  }
+
+  private collapsedWindowOffset(): number {
+    return useFixedWindowShape && this.state.dockSide === 'right'
+      ? expandedWidth - collapsedSize
+      : 0
+  }
+
+  private setWindowShape(window: BrowserWindow, expanded: boolean): void {
+    if (!useFixedWindowShape) return
+    const x = expanded ? 0 : this.collapsedWindowOffset()
+    window.setShape([
+      { x, y: 0, width: expanded ? expandedWidth : collapsedSize, height: collapsedSize }
+    ])
+  }
+
+  private setWindowWidth(window: BrowserWindow, start: Electron.Rectangle, width: number): void {
+    const x = this.state.dockSide === 'right' ? start.x + start.width - width : start.x
+    window.setBounds({ x, y: start.y, width, height: collapsedSize }, false)
   }
 
   private setStatus(status: FloatingUploadState['status'], message?: string): void {

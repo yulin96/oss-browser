@@ -98,7 +98,8 @@ const api: OssBrowserApi = {
     setTarget: (target) => ipcRenderer.invoke('floating-upload:setTarget', target),
     close: () => ipcRenderer.invoke('floating-upload:close'),
     showMenu: (suggestedTarget) => ipcRenderer.invoke('floating-upload:showMenu', suggestedTarget),
-    setExpanded: (expanded) => ipcRenderer.invoke('floating-upload:setExpanded', expanded),
+    setExpanded: (expanded, duration) =>
+      ipcRenderer.invoke('floating-upload:setExpanded', expanded, duration),
     getPosition: () => ipcRenderer.invoke('floating-upload:getPosition'),
     moveTo: (position) => ipcRenderer.invoke('floating-upload:moveTo', position),
     finishMove: () => ipcRenderer.invoke('floating-upload:finishMove'),

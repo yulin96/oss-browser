@@ -310,7 +310,7 @@ export interface OssBrowserApi {
     setTarget: (target: FloatingUploadTarget) => Promise<FloatingUploadState>
     close: () => Promise<void>
     showMenu: (suggestedTarget?: FloatingUploadTarget) => Promise<void>
-    setExpanded: (expanded: boolean) => Promise<void>
+    setExpanded: (expanded: boolean, duration: number) => Promise<void>
     getPosition: () => Promise<FloatingWindowPosition>
     moveTo: (position: FloatingWindowPosition) => Promise<void>
     finishMove: () => Promise<void>

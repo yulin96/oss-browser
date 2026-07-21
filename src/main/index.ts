@@ -321,8 +321,8 @@ function registerIpc(): void {
   ipcMain.handle('floating-upload:showMenu', (_event, suggestedTarget) =>
     floatingUpload.showMenu(suggestedTarget)
   )
-  ipcMain.handle('floating-upload:setExpanded', (_event, expanded: boolean) =>
-    floatingUpload.setExpanded(expanded)
+  ipcMain.handle('floating-upload:setExpanded', (_event, expanded: boolean, duration: number) =>
+    floatingUpload.setExpanded(expanded, duration)
   )
   ipcMain.handle('floating-upload:getPosition', () => floatingUpload.getPosition())
   ipcMain.handle('floating-upload:moveTo', (_event, position) => floatingUpload.moveTo(position))

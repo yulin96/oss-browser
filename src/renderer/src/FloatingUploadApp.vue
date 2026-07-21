@@ -51,9 +51,19 @@ function applyTheme(): void {
   document.documentElement.dataset.theme = theme
 }
 
+function transitionDuration(name: '--morph-open-dur' | '--morph-close-dur'): number {
+  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return 0
+  const value = getComputedStyle(document.documentElement).getPropertyValue(name).trim()
+  const duration = Number.parseFloat(value)
+  return value.endsWith('ms') ? duration : duration * 1000
+}
+
 function setExpanded(expanded: boolean): void {
   if (moveStart || dragActive.value) return
-  void window.ossBrowser.floatingUpload.setExpanded(expanded)
+  void window.ossBrowser.floatingUpload.setExpanded(
+    expanded,
+    transitionDuration(expanded ? '--morph-open-dur' : '--morph-close-dur')
+  )
 }
 
 function expand(): void {
@@ -75,7 +85,7 @@ function handleDragEnter(): void {
   dragActive.value = true
   if (collapseTimer) clearTimeout(collapseTimer)
   collapseTimer = undefined
-  void window.ossBrowser.floatingUpload.setExpanded(true)
+  void window.ossBrowser.floatingUpload.setExpanded(true, transitionDuration('--morph-open-dur'))
 }
 
 function handleDragLeave(): void {
@@ -107,7 +117,7 @@ async function startMove(event: PointerEvent): Promise<void> {
   collapseTimer = undefined
   event.currentTarget instanceof HTMLElement &&
     event.currentTarget.setPointerCapture(event.pointerId)
-  await window.ossBrowser.floatingUpload.setExpanded(false)
+  await window.ossBrowser.floatingUpload.setExpanded(false, 0)
   moveStart = {
     pointerX: event.screenX,
     pointerY: event.screenY,
@@ -201,15 +211,19 @@ onBeforeUnmount(() => {
       </div>
 
       <div
-        v-if="state.expanded"
         class="floating-target"
+        :aria-hidden="!state.expanded"
         :title="`oss://${state.target?.bucket}/${state.target?.prefix || ''}`"
       >
         <strong>{{ state.target?.bucket }}</strong>
         <span :class="`status-${state.status}`">{{ statusLabel }}</span>
       </div>
 
-      <div v-if="state.expanded" class="floating-status-icon" :class="`status-${state.status}`">
+      <div
+        class="floating-status-icon"
+        :class="`status-${state.status}`"
+        :aria-hidden="!state.expanded"
+      >
         <component
           :is="statusIcon"
           :size="18"
@@ -227,11 +241,19 @@ html.floating-window #app {
   background: transparent !important;
 }
 
+html.floating-window {
+  --morph-open-dur: 350ms;
+  --morph-close-dur: 250ms;
+  --morph-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --morph-close-ease: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
 .floating-upload-shell {
   display: flex;
   width: 100%;
-  height: 64px;
-  overflow: hidden;
+  height: 100%;
+  padding: 12px;
+  overflow: visible;
   align-items: center;
   background: transparent;
 }
@@ -250,15 +272,20 @@ html.floating-window #app {
   border-radius: 32px;
   background: transparent;
   transition:
+    width var(--morph-close-dur) var(--morph-close-ease),
     background-color var(--duration-quick) var(--ease-smooth-out),
     box-shadow var(--duration-quick) var(--ease-smooth-out);
+  will-change: width;
 }
 
 .floating-upload-shell.expanded .floating-upload-control {
   width: 100%;
-  border: 1px solid var(--border);
   background: var(--surface);
-  box-shadow: 0 4px 8px rgba(15, 23, 34, 0.18);
+  box-shadow: inset 0 0 0 1px var(--border);
+  transition:
+    width var(--morph-open-dur) var(--morph-ease),
+    background-color var(--duration-quick) var(--ease-smooth-out),
+    box-shadow var(--duration-quick) var(--ease-smooth-out);
 }
 
 .floating-upload-shell.dock-right .floating-upload-control {
@@ -275,7 +302,6 @@ html.floating-window #app {
   border-radius: 50%;
   color: #fff;
   background: var(--primary);
-  box-shadow: 0 4px 8px rgba(15, 23, 34, 0.24);
   cursor: grab;
   touch-action: none;
 }
@@ -322,6 +348,9 @@ html.floating-window #app {
   font-size: 12px;
   font-variant-numeric: tabular-nums;
   line-height: 16px;
+  transition:
+    opacity var(--duration-quick) var(--ease-smooth-out),
+    transform var(--duration-fast) var(--ease-smooth-out);
 }
 
 .floating-target strong,
@@ -349,6 +378,26 @@ html.floating-window #app {
   place-items: center;
   border-left: 1px solid var(--border);
   color: var(--muted);
+  transition:
+    opacity var(--duration-quick) var(--ease-smooth-out),
+    transform var(--duration-fast) var(--ease-smooth-out);
+}
+
+.floating-upload-shell.expanded .floating-target,
+.floating-upload-shell.expanded .floating-status-icon {
+  transition-delay: 70ms;
+}
+
+.floating-upload-shell:not(.expanded) .floating-target,
+.floating-upload-shell:not(.expanded) .floating-status-icon {
+  opacity: 0;
+  transform: translateX(16px);
+  pointer-events: none;
+}
+
+.floating-upload-shell.dock-right:not(.expanded) .floating-target,
+.floating-upload-shell.dock-right:not(.expanded) .floating-status-icon {
+  transform: translateX(-16px);
 }
 
 .dock-right .floating-status-icon {
@@ -397,6 +446,8 @@ html.floating-window #app {
 
 @media (prefers-reduced-motion: reduce) {
   .floating-upload-control,
+  .floating-target,
+  .floating-status-icon,
   .floating-progress .floating-progress-value {
     transition: none;
   }
