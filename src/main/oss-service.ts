@@ -450,12 +450,25 @@ export class OssService {
 
   async copyObject(bucket: string, source: string, target: string): Promise<void> {
     const client = this.bucketClient(bucket)
-    if (!source.endsWith('/')) {
-      await client.copy(target, source)
-      return
+    if (source === target) throw new Error('源路径和目标路径不能相同')
+
+    try {
+      if (!source.endsWith('/')) {
+        await client.copy(target, source, {
+          headers: { 'x-oss-forbid-overwrite': 'true' }
+        })
+        return
+      }
+      const names = await this.listAllObjectNames(client, source)
+      for (const name of names)
+        await client.copy(`${target}${name.slice(source.length)}`, name, {
+          headers: { 'x-oss-forbid-overwrite': 'true' }
+        })
+    } catch (error) {
+      if ((error as { code?: string }).code === 'FileAlreadyExists')
+        throw new Error('目标对象已存在，不能覆盖')
+      throw error
     }
-    const names = await this.listAllObjectNames(client, source)
-    for (const name of names) await client.copy(`${target}${name.slice(source.length)}`, name)
   }
 
   async transferObjects(
