@@ -20,6 +20,7 @@ import { app, nativeImage } from 'electron'
 import { createHash, randomUUID } from 'node:crypto'
 import { mkdir, open, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises'
 import { basename, isAbsolute, join, relative, sep } from 'node:path'
+import { DEFAULT_APP_SETTINGS, validateAppSettings } from '../shared/app-settings'
 import type {
   AppSettings,
   AuthConfig,
@@ -87,18 +88,7 @@ type ActiveTransfer = Omit<TransferItem, 'batchId' | 'batchTotal' | 'batchDone'>
 
 export class OssService {
   private auth: AuthConfig | null = null
-  private settings: AppSettings = {
-    maxUploadJobs: 3,
-    maxDownloadJobs: 3,
-    multipartParallel: 5,
-    partSizeMb: 10,
-    timeoutSeconds: 60,
-    retryTimes: 5,
-    listPageSize: 500,
-    showImagePreview: true,
-    showImageResolution: false,
-    uploadConflictPolicy: 'ask'
-  }
+  private settings: AppSettings = { ...DEFAULT_APP_SETTINGS }
   private readonly activeTransfers = new Map<string, ActiveTransfer>()
   private readonly transferBatches = new Map<string, TransferBatch>()
   private readonly retryTransfers = new Map<
@@ -157,7 +147,7 @@ export class OssService {
   }
 
   updateSettings(settings: AppSettings): void {
-    this.settings = settings
+    this.settings = validateAppSettings(settings)
   }
 
   getUploadConflictPolicy(): AppSettings['uploadConflictPolicy'] {

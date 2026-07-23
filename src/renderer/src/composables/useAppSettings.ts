@@ -1,20 +1,10 @@
 import { reactive, ref, watch, type Ref } from 'vue'
+import { DEFAULT_APP_SETTINGS, validateAppSettings } from '../../../shared/app-settings'
 import type { AppSettings, AuthConfig, SavedProfile } from '../../../shared/types'
 
 export type ThemeMode = 'system' | 'light' | 'dark'
 
-const defaultSettings: AppSettings = {
-  maxUploadJobs: 3,
-  maxDownloadJobs: 3,
-  multipartParallel: 5,
-  partSizeMb: 10,
-  timeoutSeconds: 60,
-  retryTimes: 5,
-  listPageSize: 500,
-  showImagePreview: true,
-  showImageResolution: false,
-  uploadConflictPolicy: 'ask'
-}
+const defaultSettings: AppSettings = { ...DEFAULT_APP_SETTINGS }
 
 const legacyDefaultSettings: AppSettings = {
   ...defaultSettings,
@@ -123,6 +113,12 @@ export function useAppSettings(options: {
   async function initializeSettings(): Promise<void> {
     darkModeQuery.addEventListener('change', applyTheme)
     Object.assign(settings, loadSettingsOverrides())
+    try {
+      Object.assign(settings, validateAppSettings(settings))
+    } catch {
+      Object.assign(settings, defaultSettings)
+      localStorage.removeItem(settingsStorageKey)
+    }
     storeSettingsOverrides(settings)
     try {
       await window.ossBrowser.settings.update({ ...settings })
@@ -140,8 +136,14 @@ export function useAppSettings(options: {
     settings,
     async (nextVal) => {
       if (initializingSettings) return
-      await window.ossBrowser.settings.update({ ...nextVal })
-      storeSettingsOverrides(nextVal)
+      try {
+        const validated = validateAppSettings(nextVal)
+        await window.ossBrowser.settings.update(validated)
+        storeSettingsOverrides(validated)
+        options.taskError.value = ''
+      } catch (error) {
+        options.taskError.value = error instanceof Error ? error.message : String(error)
+      }
     },
     { deep: true }
   )
