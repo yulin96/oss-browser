@@ -867,12 +867,17 @@ export class OssService {
   async download(bucket: string, items: ObjectInfo[], destination: string): Promise<boolean> {
     const listClient = this.bucketClient(bucket)
     const objects: Array<{ name: string; relativePath: string }> = []
+    const directories = new Set<string>()
     for (const item of items) {
       if (item.isDirectory) {
         const folderName = item.displayName.replace(/\/$/, '')
+        directories.add(folderName)
         for (const name of await this.listAllObjectNames(listClient, item.name)) {
-          if (!name.endsWith('/')) {
-            const subPath = name.slice(item.name.length)
+          const subPath = name.slice(item.name.length)
+          if (name.endsWith('/')) {
+            const directoryPath = subPath.replace(/\/$/, '')
+            if (directoryPath) directories.add(`${folderName}/${directoryPath}`)
+          } else {
             objects.push({ name, relativePath: `${folderName}/${subPath}` })
           }
         }
@@ -880,18 +885,13 @@ export class OssService {
         objects.push({ name: item.name, relativePath: item.displayName })
       }
     }
+    for (const directory of [...directories].sort((left, right) => left.length - right.length)) {
+      await mkdir(this.resolveDownloadPath(destination, directory), { recursive: true })
+    }
     const batch = this.newTransferBatch('download', objects.length)
 
     await this.runPool(objects, this.settings.maxDownloadJobs, async (object) => {
-      const localPath = join(destination, ...object.relativePath.split('/'))
-      const pathFromDestination = relative(destination, localPath)
-      if (
-        pathFromDestination === '..' ||
-        pathFromDestination.startsWith(`..${sep}`) ||
-        isAbsolute(pathFromDestination)
-      ) {
-        throw new Error('下载文件路径无效，检测到越界穿越风险')
-      }
+      const localPath = this.resolveDownloadPath(destination, object.relativePath)
       const partialPath = `${localPath}.ossbrowser.part`
       const checkpointPath = `${partialPath}.json`
       const transfer = this.newTransfer('download', object.name, batch)
@@ -1158,6 +1158,19 @@ export class OssService {
     const match = /^oss:\/\/([^/]+)\/?(.*)$/.exec(path.trim())
     if (!match) throw new Error('预设 OSS 路径格式不正确')
     return { bucket: match[1], prefix: match[2] }
+  }
+
+  private resolveDownloadPath(destination: string, relativePath: string): string {
+    const localPath = join(destination, ...relativePath.split('/'))
+    const pathFromDestination = relative(destination, localPath)
+    if (
+      pathFromDestination === '..' ||
+      pathFromDestination.startsWith(`..${sep}`) ||
+      isAbsolute(pathFromDestination)
+    ) {
+      throw new Error('下载文件路径无效，检测到越界穿越风险')
+    }
+    return localPath
   }
 
   private bucketClient(bucket: string): OssClient {
