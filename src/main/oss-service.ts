@@ -503,21 +503,30 @@ export class OssService {
     const sourceClient = this.bucketClient(sourceBucket)
     const targetClient = this.bucketClient(targetBucket)
 
-    for (const item of items) {
-      const sourceNames = item.isDirectory
-        ? await this.listAllObjectNames(sourceClient, item.name)
-        : [item.name]
-      const baseName = item.displayName.replace(/\/$/, '')
-      for (const sourceName of sourceNames) {
-        const suffix = item.isDirectory ? sourceName.slice(item.name.length) : ''
-        const targetName = item.isDirectory
-          ? `${targetPrefix}${baseName}/${suffix}`
-          : `${targetPrefix}${baseName}`
-        if (sourceBucket === targetBucket && sourceName === targetName) {
-          throw new Error('源路径和目标路径不能相同')
+    try {
+      for (const item of items) {
+        const sourceNames = item.isDirectory
+          ? await this.listAllObjectNames(sourceClient, item.name)
+          : [item.name]
+        const baseName = item.displayName.replace(/\/$/, '')
+        for (const sourceName of sourceNames) {
+          const suffix = item.isDirectory ? sourceName.slice(item.name.length) : ''
+          const targetName = item.isDirectory
+            ? `${targetPrefix}${baseName}/${suffix}`
+            : `${targetPrefix}${baseName}`
+          if (sourceBucket === targetBucket && sourceName === targetName) {
+            throw new Error('源路径和目标路径不能相同')
+          }
+          await targetClient.copy(targetName, sourceName, sourceBucket, {
+            headers: { 'x-oss-forbid-overwrite': 'true' }
+          })
         }
-        await targetClient.copy(targetName, sourceName, sourceBucket)
       }
+    } catch (error) {
+      if ((error as { code?: string }).code === 'FileAlreadyExists') {
+        throw new Error('目标对象已存在，不能覆盖')
+      }
+      throw error
     }
 
     if (move)
