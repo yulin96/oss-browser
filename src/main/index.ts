@@ -4,7 +4,7 @@ import {
   BrowserWindow,
   clipboard,
   dialog,
-  ipcMain,
+  ipcMain as electronIpcMain,
   net,
   protocol,
   type IpcMainInvokeEvent,
@@ -29,6 +29,7 @@ import { FloatingUploadManager } from './floating-upload-manager'
 import { FloatingUploadStore } from './floating-upload-store'
 import { ProfileStore } from './profile-store'
 import { UpdateService } from './update-service'
+import { assertTrustedIpcSender, configureRendererWindow, openExternalUrl } from './window-security'
 
 app.setPath('userData', join(app.getPath('appData'), is.dev ? 'oss-browser-dev' : 'oss-browser'))
 app.setName('OSS Browser')
@@ -51,6 +52,14 @@ const floatingUploadStore = new FloatingUploadStore()
 const updates = new UpdateService(() => mainWindow)
 let lastUploadDirectory: string | undefined
 let lastDownloadDirectory: string | undefined
+const ipcMain = {
+  handle(channel: string, listener: Parameters<typeof electronIpcMain.handle>[1]): void {
+    electronIpcMain.handle(channel, (event, ...args) => {
+      assertTrustedIpcSender(event)
+      return listener(event, ...args)
+    })
+  }
+}
 
 function showMainWindow(): void {
   if (!mainWindow || mainWindow.isDestroyed()) {
@@ -107,7 +116,7 @@ function createWindow(): void {
     ...(process.platform === 'linux' ? { icon } : {}),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
-      sandbox: false,
+      sandbox: true,
       contextIsolation: true,
       nodeIntegration: false,
       spellcheck: false
@@ -133,10 +142,7 @@ function createWindow(): void {
   mainWindow.on('closed', () => {
     mainWindow = null
   })
-  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    void shell.openExternal(url)
-    return { action: 'deny' }
-  })
+  configureRendererWindow(mainWindow)
 
   if (is.dev && process.env.ELECTRON_RENDERER_URL) {
     void mainWindow.loadURL(process.env.ELECTRON_RENDERER_URL)
@@ -338,7 +344,7 @@ function registerIpc(): void {
   )
 
   ipcMain.handle('system:getVersion', () => app.getVersion())
-  ipcMain.handle('system:openExternal', (_event, url: string) => shell.openExternal(url))
+  ipcMain.handle('system:openExternal', (_event, url: string) => openExternalUrl(url))
   ipcMain.handle('system:revealFile', (_event, path: string) => shell.showItemInFolder(path))
   ipcMain.handle('system:writeClipboard', (_event, text: string) => clipboard.writeText(text))
   ipcMain.handle('window:minimize', (event) => senderWindow(event)?.minimize())

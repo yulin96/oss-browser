@@ -154,6 +154,8 @@ const {
           <iframe
             v-else-if="previewType === 'pdf' || previewType === 'document'"
             :src="previewUrl"
+            sandbox="allow-downloads allow-forms allow-scripts"
+            referrerpolicy="no-referrer"
           />
           <div v-else-if="previewType === 'text'" class="text-preview">
             <textarea v-model="previewText" spellcheck="false" />

@@ -18,6 +18,7 @@ import type {
 } from '../shared/types'
 import { FloatingUploadStore } from './floating-upload-store'
 import type { OssService } from './oss-service'
+import { configureRendererWindow } from './window-security'
 
 const controlSize = 64
 const expandedControlWidth = 280
@@ -374,7 +375,7 @@ export class FloatingUploadManager {
       focusable: true,
       webPreferences: {
         preload: join(__dirname, '../preload/index.js'),
-        sandbox: false,
+        sandbox: true,
         contextIsolation: true,
         nodeIntegration: false,
         spellcheck: false
@@ -391,7 +392,7 @@ export class FloatingUploadManager {
       this.state.expanded = false
       this.emitState()
     })
-    this.window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
+    configureRendererWindow(this.window)
     if (is.dev && process.env.ELECTRON_RENDERER_URL) {
       void this.window.loadURL(`${process.env.ELECTRON_RENDERER_URL}?window=floating-upload`)
     } else {
