@@ -18,6 +18,7 @@ import StsClient, { AssumeRoleRequest } from '@alicloud/sts20150401'
 import OSS from 'ali-oss'
 import { app, nativeImage } from 'electron'
 import { createHash, randomUUID } from 'node:crypto'
+import type { Dirent } from 'node:fs'
 import { mkdir, open, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises'
 import { basename, isAbsolute, join, relative, sep } from 'node:path'
 import { DEFAULT_APP_SETTINGS, validateAppSettings } from '../shared/app-settings'
@@ -68,6 +69,10 @@ interface DownloadCheckpoint {
   etag: string
   partSize: number
   completed: DownloadRange[]
+}
+interface DownloadDiscovery {
+  objects: Array<{ name: string; relativePath: string }>
+  directories: string[]
 }
 type TransferBatch = {
   id: string
@@ -858,22 +863,32 @@ export class OssService {
     const listClient = this.bucketClient(bucket)
     const objects: Array<{ name: string; relativePath: string }> = []
     const directories = new Set<string>()
-    for (const item of items) {
-      if (item.isDirectory) {
-        const folderName = item.displayName.replace(/\/$/, '')
-        directories.add(folderName)
-        for (const name of await this.listAllObjectNames(listClient, item.name)) {
-          const subPath = name.slice(item.name.length)
-          if (name.endsWith('/')) {
-            const directoryPath = subPath.replace(/\/$/, '')
-            if (directoryPath) directories.add(`${folderName}/${directoryPath}`)
-          } else {
-            objects.push({ name, relativePath: `${folderName}/${subPath}` })
+    const discoveries: DownloadDiscovery[] = items.map(() => ({ objects: [], directories: [] }))
+    await this.runPool(
+      items.map((item, index) => ({ item, index })),
+      Math.min(this.settings.maxDownloadJobs, 4),
+      async ({ item, index }) => {
+        const discovery = discoveries[index]
+        if (item.isDirectory) {
+          const folderName = item.displayName.replace(/\/$/, '')
+          discovery.directories.push(folderName)
+          for (const name of await this.listAllObjectNames(listClient, item.name)) {
+            const subPath = name.slice(item.name.length)
+            if (name.endsWith('/')) {
+              const directoryPath = subPath.replace(/\/$/, '')
+              if (directoryPath) discovery.directories.push(`${folderName}/${directoryPath}`)
+            } else {
+              discovery.objects.push({ name, relativePath: `${folderName}/${subPath}` })
+            }
           }
+        } else {
+          discovery.objects.push({ name: item.name, relativePath: item.displayName })
         }
-      } else {
-        objects.push({ name: item.name, relativePath: item.displayName })
       }
+    )
+    for (const discovery of discoveries) {
+      objects.push(...discovery.objects)
+      for (const directory of discovery.directories) directories.add(directory)
     }
     for (const directory of [...directories].sort((left, right) => left.length - right.length)) {
       await mkdir(this.resolveDownloadPath(destination, directory), { recursive: true })
@@ -1214,20 +1229,51 @@ export class OssService {
   }
 
   private async prepareUploadEntries(prefix: string, paths: string[]): Promise<UploadEntry[]> {
-    return (await this.expandLocalPaths(paths)).map((file) => ({
+    const entries = (await this.expandLocalPaths([...new Set(paths)])).map((file) => ({
       ...file,
       name: `${prefix}${file.relativePath.split(sep).join('/')}${file.isDirectory ? '/' : ''}`
     }))
+    const targetPaths = new Map<string, string>()
+    return entries.filter((entry) => {
+      const existingPath = targetPaths.get(entry.name)
+      if (existingPath === entry.localPath) return false
+      if (existingPath) {
+        throw new Error(`上传内容包含相同的目标路径：${entry.name}`)
+      }
+      targetPaths.set(entry.name, entry.localPath)
+      return true
+    })
   }
 
   private async walk(directory: string): Promise<Array<{ path: string; isDirectory: boolean }>> {
-    const entries = await readdir(directory, { withFileTypes: true })
-    if (!entries.length) return [{ path: directory, isDirectory: true }]
     const files: Array<{ path: string; isDirectory: boolean }> = []
-    for (const entry of entries) {
-      const path = join(directory, entry.name)
-      if (entry.isDirectory()) files.push(...(await this.walk(path)))
-      else if (entry.isFile()) files.push({ path, isDirectory: false })
+    let pendingDirectories = [directory]
+    while (pendingDirectories.length) {
+      const listings = new Array<Dirent<string>[]>(pendingDirectories.length)
+      await this.runPool(
+        pendingDirectories.map((path, index) => ({ path, index })),
+        16,
+        async ({ path, index }) => {
+          listings[index] = await readdir(path, { withFileTypes: true })
+        }
+      )
+      const nextDirectories: string[] = []
+      for (let index = 0; index < pendingDirectories.length; index += 1) {
+        const currentDirectory = pendingDirectories[index]
+        const entries = listings[index]
+          .filter((entry) => entry.isDirectory() || entry.isFile())
+          .sort((left, right) => left.name.localeCompare(right.name))
+        if (!entries.length) {
+          files.push({ path: currentDirectory, isDirectory: true })
+          continue
+        }
+        for (const entry of entries) {
+          const path = join(currentDirectory, entry.name)
+          if (entry.isDirectory()) nextDirectories.push(path)
+          else files.push({ path, isDirectory: false })
+        }
+      }
+      pendingDirectories = nextDirectories
     }
     return files
   }
@@ -1238,16 +1284,24 @@ export class OssService {
     worker: (item: T) => Promise<void>
   ): Promise<void> {
     const queue = [...items]
+    let firstError: unknown
     const workers = Array.from(
       { length: Math.min(Math.max(concurrency, 1), queue.length) },
       async () => {
-        while (queue.length) {
+        while (queue.length && firstError === undefined) {
           const item = queue.shift()
-          if (item !== undefined) await worker(item)
+          if (item === undefined) continue
+          try {
+            await worker(item)
+          } catch (error) {
+            firstError = error
+            queue.length = 0
+          }
         }
       }
     )
     await Promise.all(workers)
+    if (firstError !== undefined) throw firstError
   }
 
   cancelTransfer(id: string): void {

@@ -1,4 +1,4 @@
-import { mkdtemp, rm, stat } from 'node:fs/promises'
+import { mkdtemp, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -72,5 +72,44 @@ describe('OssService object operations', () => {
     )
     expect((await stat(join(destination, 'empty'))).isDirectory()).toBe(true)
     expect((await stat(join(destination, 'empty/nested'))).isDirectory()).toBe(true)
+  })
+
+  it('enumerates multiple download folders concurrently', async () => {
+    let activeListings = 0
+    let maximumActiveListings = 0
+    const list = vi.fn().mockImplementation(async ({ prefix }: { prefix: string }) => {
+      activeListings += 1
+      maximumActiveListings = Math.max(maximumActiveListings, activeListings)
+      await new Promise((resolve) => setTimeout(resolve, 5))
+      activeListings -= 1
+      return { objects: [{ name: prefix }], isTruncated: false }
+    })
+    const service = new OssService(vi.fn())
+    useClients(service, { bucket: { list, copy: vi.fn() } })
+    const destination = await mkdtemp(join(tmpdir(), 'oss-browser-download-'))
+    temporaryDirectories.push(destination)
+
+    await service.download('bucket', [object('first/', true), object('second/', true)], destination)
+
+    expect(maximumActiveListings).toBe(2)
+  })
+
+  it('rejects local inputs that map to the same upload target', async () => {
+    const firstDirectory = await mkdtemp(join(tmpdir(), 'oss-browser-upload-first-'))
+    const secondDirectory = await mkdtemp(join(tmpdir(), 'oss-browser-upload-second-'))
+    temporaryDirectories.push(firstDirectory, secondDirectory)
+    const firstPath = join(firstDirectory, 'same.txt')
+    const secondPath = join(secondDirectory, 'same.txt')
+    await Promise.all([writeFile(firstPath, 'first'), writeFile(secondPath, 'second')])
+    const service = new OssService(vi.fn())
+    const prepareUploadEntries = (
+      service as unknown as {
+        prepareUploadEntries: (prefix: string, paths: string[]) => Promise<unknown>
+      }
+    ).prepareUploadEntries.bind(service)
+
+    await expect(prepareUploadEntries('', [firstPath, secondPath])).rejects.toThrow(
+      '上传内容包含相同的目标路径：same.txt'
+    )
   })
 })
