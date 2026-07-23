@@ -4,6 +4,8 @@ import type { TransferItem } from '../../../shared/types'
 import type { ConfirmationRequest } from './useConfirmation'
 import { t } from '../i18n'
 
+const MAX_TRANSFER_RECORDS = 200
+
 export interface TransferSummary {
   done: number
   total: number
@@ -44,6 +46,7 @@ export function useTransfers(requestConfirmation: (request: ConfirmationRequest)
   )
   const showTransfers = ref(false)
   const activeTransferTab = ref<TransferItem['direction']>('upload')
+  const ignoredBatchIds = new Set<string>()
   let removeTransferListener: (() => void) | undefined
 
   const transferSummaries = computed<Record<TransferItem['direction'], TransferSummary>>(() => {
@@ -71,10 +74,8 @@ export function useTransfers(requestConfirmation: (request: ConfirmationRequest)
   const visibleTransfers = computed(() =>
     transfers.value.filter((transfer) => transfer.direction === activeTransferTab.value)
   )
-  const hasCompletedTransfers = computed(() =>
-    visibleTransfers.value.some((transfer) => transfer.status === 'done')
-  )
-  const hasVisibleTransfers = computed(() => visibleTransfers.value.length > 0)
+  const hasCompletedTransfers = computed(() => activeTransferSummary.value.done > 0)
+  const hasVisibleTransfers = computed(() => activeTransferSummary.value.total > 0)
   const canResumeTransfers = computed(() =>
     visibleTransfers.value.some(
       (transfer) => transfer.status === 'paused' || transfer.status === 'error'
@@ -87,6 +88,8 @@ export function useTransfers(requestConfirmation: (request: ConfirmationRequest)
   function initializeTransfers(): void {
     removeTransferListener?.()
     removeTransferListener = window.ossBrowser.onTransfer((item) => {
+      if (ignoredBatchIds.has(item.batchId)) return
+      const isNewBatch = !batches.has(item.batchId)
       const index = transfers.value.findIndex((transfer) => transfer.id === item.id)
       if (index === -1) transfers.value.unshift(item)
       else transfers.value[index] = item
@@ -106,8 +109,16 @@ export function useTransfers(requestConfirmation: (request: ConfirmationRequest)
           batchTotal: item.batchTotal
         })
       }
-      activeTransferTab.value = item.direction
-      showTransfers.value = true
+      if (transfers.value.length > MAX_TRANSFER_RECORDS) {
+        const removableIndex = transfers.value.findLastIndex(
+          (transfer) => transfer.status === 'done' || transfer.status === 'cancelled'
+        )
+        if (removableIndex !== -1) transfers.value.splice(removableIndex, 1)
+      }
+      if (isNewBatch) {
+        activeTransferTab.value = item.direction
+        showTransfers.value = true
+      }
     })
   }
 
@@ -119,23 +130,19 @@ export function useTransfers(requestConfirmation: (request: ConfirmationRequest)
   function resetTransfers(): void {
     transfers.value = []
     batches.clear()
+    ignoredBatchIds.clear()
     showTransfers.value = false
     activeTransferTab.value = 'upload'
   }
 
   function clearCompletedTransferRecords(): void {
-    const removedByBatch = new Map<string, number>()
     transfers.value = transfers.value.filter((transfer) => {
-      const remove = transfer.direction === activeTransferTab.value && transfer.status === 'done'
-      if (remove)
-        removedByBatch.set(transfer.batchId, (removedByBatch.get(transfer.batchId) || 0) + 1)
-      return !remove
+      return transfer.direction !== activeTransferTab.value || transfer.status !== 'done'
     })
-    for (const [batchId, count] of removedByBatch) {
-      const batch = batches.get(batchId)
-      if (!batch) continue
-      batch.removedDone += count
-      if (batch.removedDone >= batch.rawTotal) batches.delete(batchId)
+    for (const [batchId, batch] of batches) {
+      if (batch.direction !== activeTransferTab.value) continue
+      batch.removedDone = batch.rawDone
+      if (batch.rawDone >= batch.rawTotal) batches.delete(batchId)
     }
   }
 
@@ -161,6 +168,9 @@ export function useTransfers(requestConfirmation: (request: ConfirmationRequest)
   }
 
   async function deleteAllTransfers(direction: TransferItem['direction']): Promise<void> {
+    for (const [batchId, batch] of batches) {
+      if (batch.direction === direction) ignoredBatchIds.add(batchId)
+    }
     await window.ossBrowser.transfers.cancelAll(direction)
     transfers.value = transfers.value.filter((transfer) => transfer.direction !== direction)
     for (const [batchId, batch] of batches) {

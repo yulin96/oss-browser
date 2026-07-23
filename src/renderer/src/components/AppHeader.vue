@@ -92,12 +92,7 @@ function changeLocale(event: Event): void {
         @click="emit('transfers')"
       >
         <ListTodo :size="16" /> {{ t('传输任务') }}
-        <span
-          v-if="transferCount"
-          :key="transferCount"
-          class="transfer-count-badge t-badge"
-          data-open="true"
-        >
+        <span v-if="transferCount" class="transfer-count-badge t-badge" data-open="true">
           <span class="badge t-badge-dot">{{ transferCount }}</span>
         </span>
       </div>

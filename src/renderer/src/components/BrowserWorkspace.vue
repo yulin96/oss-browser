@@ -16,7 +16,7 @@ const { controller } = props
 const {
   appVersion,
   auth,
-  transfers,
+  transferSummaries,
   updateState,
   modal,
   openCacheRefresh,
@@ -56,7 +56,7 @@ const {
     :app-version="appVersion"
     :locale="locale"
     :account-label="auth.alias?.trim() || auth.accessKeyId"
-    :transfer-count="transfers.length"
+    :transfer-count="transferSummaries.upload.total + transferSummaries.download.total"
     :update-status="updateState.status"
     @locale-change="setLocale($event as AppLocale)"
     @favorites="modal = 'favorites'"

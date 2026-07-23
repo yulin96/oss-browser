@@ -9,11 +9,15 @@ vi.mock('electron', () => ({
 }))
 
 import { OssService } from '../src/main/oss-service'
+import { DEFAULT_APP_SETTINGS } from '../src/shared/app-settings'
 import type { ObjectInfo } from '../src/shared/types'
 
 interface OssClientStub {
   list: ReturnType<typeof vi.fn>
   copy: ReturnType<typeof vi.fn>
+  put?: ReturnType<typeof vi.fn>
+  putStream?: ReturnType<typeof vi.fn>
+  cancel?: ReturnType<typeof vi.fn>
 }
 
 const temporaryDirectories: string[] = []
@@ -111,5 +115,103 @@ describe('OssService object operations', () => {
     await expect(prepareUploadEntries('', [firstPath, secondPath])).rejects.toThrow(
       '上传内容包含相同的目标路径：same.txt'
     )
+  })
+
+  it('reports queued uploads as paused and resumes them', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'oss-browser-upload-pause-'))
+    temporaryDirectories.push(directory)
+    const localPath = join(directory, 'example.txt')
+    await writeFile(localPath, 'example')
+    const statuses: string[] = []
+    const service = new OssService((item) => statuses.push(item.status))
+    let attempts = 0
+    const putStream = vi
+      .fn()
+      .mockImplementation(
+        (
+          _name: string,
+          stream: { once: (event: string, listener: (error: Error) => void) => void }
+        ) => {
+          attempts += 1
+          if (attempts === 1) {
+            return new Promise((_resolve, reject) => {
+              stream.once('error', reject)
+              setTimeout(() => {
+                service.pauseAllTransfers('upload')
+                setTimeout(() => service.resumeAllTransfers('upload'), 0)
+              }, 0)
+            })
+          }
+          return Promise.resolve()
+        }
+      )
+    useClients(service, {
+      bucket: { list: vi.fn(), copy: vi.fn(), putStream, cancel: vi.fn() }
+    })
+
+    await expect(service.upload('bucket', '', [localPath])).resolves.toBe(true)
+    expect(statuses).toContain('paused')
+    expect(statuses.at(-1)).toBe('done')
+    expect(putStream).toHaveBeenCalledTimes(2)
+  })
+
+  it('stops taking queued uploads after deleting the batch', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'oss-browser-upload-cancel-'))
+    temporaryDirectories.push(directory)
+    const paths = await Promise.all(
+      ['first.txt', 'second.txt', 'third.txt'].map(async (name) => {
+        const path = join(directory, name)
+        await writeFile(path, name)
+        return path
+      })
+    )
+    const service = new OssService(vi.fn())
+    service.updateSettings({ ...DEFAULT_APP_SETTINGS, maxUploadJobs: 1 })
+    const putStream = vi.fn().mockImplementation(
+      (
+        _name: string,
+        stream: { once: (event: string, listener: (error: Error) => void) => void }
+      ) =>
+        new Promise((_resolve, reject) => {
+          stream.once('error', reject)
+          setTimeout(() => service.cancelAllTransfers('upload'), 0)
+        })
+    )
+    useClients(service, {
+      bucket: { list: vi.fn(), copy: vi.fn(), putStream, cancel: vi.fn() }
+    })
+
+    await expect(service.upload('bucket', '', paths)).resolves.toBe(false)
+    expect(putStream).toHaveBeenCalledOnce()
+  })
+
+  it('destroys a small-file upload stream when cancelling one task', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'oss-browser-upload-single-cancel-'))
+    temporaryDirectories.push(directory)
+    const localPath = join(directory, 'example.txt')
+    await writeFile(localPath, 'example')
+    let transferId = ''
+    const statuses: string[] = []
+    const service = new OssService((item) => {
+      transferId = item.id
+      statuses.push(item.status)
+    })
+    const putStream = vi.fn().mockImplementation(
+      (
+        _name: string,
+        stream: { once: (event: string, listener: (error: Error) => void) => void }
+      ) =>
+        new Promise((_resolve, reject) => {
+          stream.once('error', reject)
+          setTimeout(() => service.cancelTransfer(transferId), 0)
+        })
+    )
+    useClients(service, {
+      bucket: { list: vi.fn(), copy: vi.fn(), putStream, cancel: vi.fn() }
+    })
+
+    await expect(service.upload('bucket', '', [localPath])).resolves.toBe(false)
+    expect(statuses.at(-1)).toBe('cancelled')
+    expect(putStream).toHaveBeenCalledOnce()
   })
 })

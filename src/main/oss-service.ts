@@ -17,8 +17,9 @@ import RamClient, {
 import StsClient, { AssumeRoleRequest } from '@alicloud/sts20150401'
 import OSS from 'ali-oss'
 import { app, nativeImage } from 'electron'
+import mime from 'mime'
 import { createHash, randomUUID } from 'node:crypto'
-import type { Dirent } from 'node:fs'
+import { createReadStream, type Dirent } from 'node:fs'
 import { mkdir, open, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises'
 import { basename, isAbsolute, join, relative, sep } from 'node:path'
 import { DEFAULT_APP_SETTINGS, validateAppSettings } from '../shared/app-settings'
@@ -820,43 +821,62 @@ export class OssService {
     const batch = this.newTransferBatch('upload', files.length)
     onBatchCreated?.(batch.id)
 
-    await this.runPool(
-      files,
-      this.settings.maxUploadJobs,
-      async ({ localPath, isDirectory, name }) => {
-        const transfer = this.newTransfer('upload', name, batch)
-        const client = this.bucketClient(bucket)
-        if (isDirectory) {
-          await this.runControlledTransfer(transfer, client, async () => {
-            await client.put(name, Buffer.alloc(0))
-          })
+    const uploadEntry = async ({ localPath, isDirectory, name }: UploadEntry): Promise<void> => {
+      const transfer = this.newTransfer('upload', name, batch)
+      const client = this.bucketClient(bucket)
+      if (isDirectory) {
+        await this.runControlledTransfer(transfer, client, async () => {
+          await client.put(name, Buffer.alloc(0))
+        })
+        return
+      }
+      const checkpointPath = this.checkpointPath(bucket, name, localPath)
+      await this.runControlledTransfer(transfer, client, async () => {
+        const fileSize = (await stat(localPath)).size
+        if (fileSize <= this.settings.partSizeMb * 1024 * 1024) {
+          for (let attempt = 0; ; attempt += 1) {
+            const stream = createReadStream(localPath)
+            transfer.cancelOperation = () => {
+              const error = new Error('cancel')
+              error.name = 'CancelError'
+              stream.destroy(error)
+            }
+            try {
+              await client.putStream(name, stream, {
+                contentLength: fileSize,
+                mime: mime.getType(localPath) || undefined
+              })
+              break
+            } catch (error) {
+              if (
+                transfer.cancelRequested ||
+                transfer.batch.cancelled ||
+                this.pausedDirections.has(transfer.direction) ||
+                attempt >= this.settings.retryTimes ||
+                !this.isRetryableRequestError(error)
+              ) {
+                throw error
+              }
+            }
+          }
+          await rm(checkpointPath, { force: true })
           return
         }
-        const checkpointPath = this.checkpointPath(bucket, name, localPath)
-        await this.runControlledTransfer(transfer, client, async () => {
-          const fileSize = (await stat(localPath)).size
-          if (fileSize <= this.settings.partSizeMb * 1024 * 1024) {
-            await client.put(name, localPath)
-            await rm(checkpointPath, { force: true })
-            return
+        const checkpoint = await this.readCheckpoint(checkpointPath)
+        await client.multipartUpload(name, localPath, {
+          checkpoint,
+          parallel: this.settings.multipartParallel,
+          partSize: this.settings.partSizeMb * 1024 * 1024,
+          progress: async (progress: number, nextCheckpoint: unknown) => {
+            this.updateTransfer(transfer, progress, 'running')
+            if (nextCheckpoint) await writeFile(checkpointPath, JSON.stringify(nextCheckpoint))
           }
-          const checkpoint = await this.readCheckpoint(checkpointPath)
-          await client.multipartUpload(name, localPath, {
-            checkpoint,
-            parallel: this.settings.multipartParallel,
-            partSize: this.settings.partSizeMb * 1024 * 1024,
-            progress: async (progress: number, nextCheckpoint: unknown) => {
-              this.updateTransfer(transfer, progress, 'running')
-              if (nextCheckpoint) await writeFile(checkpointPath, JSON.stringify(nextCheckpoint))
-            }
-          })
-          await rm(checkpointPath, { force: true })
         })
-      }
-    )
-    if (batch.cancelled) return false
-    if (batch.failed.size) return false
-    return true
+        await rm(checkpointPath, { force: true })
+      })
+    }
+    await this.runPool(files, this.settings.maxUploadJobs, uploadEntry, () => batch.cancelled)
+    return !batch.cancelled && !batch.failed.size && batch.done === batch.total
   }
 
   async download(bucket: string, items: ObjectInfo[], destination: string): Promise<boolean> {
@@ -895,7 +915,10 @@ export class OssService {
     }
     const batch = this.newTransferBatch('download', objects.length)
 
-    await this.runPool(objects, this.settings.maxDownloadJobs, async (object) => {
+    const downloadObject = async (object: {
+      name: string
+      relativePath: string
+    }): Promise<void> => {
       const localPath = this.resolveDownloadPath(destination, object.relativePath)
       const partialPath = `${localPath}.ossbrowser.part`
       const checkpointPath = `${partialPath}.json`
@@ -1110,10 +1133,14 @@ export class OssService {
         await rm(localPath, { force: true })
         await rename(partialPath, localPath)
       })
-    })
-    if (batch.cancelled) return false
-    if (batch.failed.size) return false
-    return true
+    }
+    await this.runPool(
+      objects,
+      this.settings.maxDownloadJobs,
+      downloadObject,
+      () => batch.cancelled
+    )
+    return !batch.cancelled && !batch.failed.size && batch.done === batch.total
   }
 
   private client(bucket?: string): OssClient {
@@ -1281,14 +1308,15 @@ export class OssService {
   private async runPool<T>(
     items: T[],
     concurrency: number,
-    worker: (item: T) => Promise<void>
+    worker: (item: T) => Promise<void>,
+    shouldStop: () => boolean = () => false
   ): Promise<void> {
     const queue = [...items]
     let firstError: unknown
     const workers = Array.from(
       { length: Math.min(Math.max(concurrency, 1), queue.length) },
       async () => {
-        while (queue.length && firstError === undefined) {
+        while (queue.length && firstError === undefined && !shouldStop()) {
           const item = queue.shift()
           if (item === undefined) continue
           try {
@@ -1308,13 +1336,16 @@ export class OssService {
     const transfer = this.activeTransfers.get(id)
     if (!transfer) return
     transfer.cancelRequested = true
+    this.updateTransfer(transfer, transfer.progress, 'cancelled')
     transfer.cancelOperation()
   }
 
   pauseAllTransfers(direction: TransferDirection): void {
     this.pausedDirections.add(direction)
     for (const transfer of this.activeTransfers.values()) {
-      if (transfer.direction === direction) transfer.cancelOperation()
+      if (transfer.direction !== direction) continue
+      this.updateTransfer(transfer, transfer.progress, 'paused')
+      transfer.cancelOperation()
     }
   }
 
@@ -1368,6 +1399,15 @@ export class OssService {
     return join(app.getPath('userData'), 'upload-checkpoints', `${hash}.json`)
   }
 
+  private isRetryableRequestError(error: unknown): boolean {
+    return Boolean(
+      error &&
+      typeof error === 'object' &&
+      'status' in error &&
+      (error.status === -1 || error.status === -2)
+    )
+  }
+
   private async readCheckpoint(path: string): Promise<unknown> {
     await mkdir(join(path, '..'), { recursive: true })
     try {
@@ -1375,15 +1415,6 @@ export class OssService {
     } catch {
       return undefined
     }
-  }
-
-  private isCancelError(error: unknown): boolean {
-    return Boolean(
-      error &&
-      typeof error === 'object' &&
-      'name' in error &&
-      (error.name === 'CancelError' || error.name === 'cancel')
-    )
   }
 
   private newTransferBatch(direction: TransferDirection, total: number): TransferBatch {
@@ -1406,8 +1437,15 @@ export class OssService {
     operation: () => Promise<void>
   ): Promise<void> {
     while (!transfer.batch.cancelled) {
+      if (this.pausedDirections.has(transfer.direction)) {
+        this.updateTransfer(transfer, transfer.progress, 'paused')
+      }
       await this.waitWhilePaused(transfer.direction)
       if (transfer.batch.cancelled) return
+      if (transfer.cancelRequested) {
+        this.updateTransfer(transfer, transfer.progress, 'cancelled')
+        return
+      }
       transfer.cancelRequested = false
       transfer.error = undefined
       if (transfer.status !== 'running') {
@@ -1417,21 +1455,20 @@ export class OssService {
       this.activeTransfers.set(transfer.id, transfer)
       try {
         await operation()
+        if (transfer.batch.cancelled || transfer.cancelRequested) return
         transfer.batch.failed.delete(transfer.id)
         this.retryTransfers.delete(transfer.id)
         this.updateTransfer(transfer, 1, 'done')
         return
       } catch (error) {
-        if (this.isCancelError(error)) {
-          if (transfer.batch.cancelled) return
-          if (transfer.cancelRequested) {
-            this.updateTransfer(transfer, transfer.progress, 'cancelled')
-            return
-          }
-          if (this.pausedDirections.has(transfer.direction)) {
-            this.updateTransfer(transfer, transfer.progress, 'paused')
-            continue
-          }
+        if (transfer.batch.cancelled) return
+        if (transfer.cancelRequested) {
+          this.updateTransfer(transfer, transfer.progress, 'cancelled')
+          return
+        }
+        if (this.pausedDirections.has(transfer.direction)) {
+          this.updateTransfer(transfer, transfer.progress, 'paused')
+          continue
         }
         this.failTransfer(transfer, error)
         this.retryTransfers.set(transfer.id, {

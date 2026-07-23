@@ -775,6 +775,7 @@ input[type='checkbox']:checked::after {
 }
 .transfer-count-badge .badge {
   display: block;
+  font-variant-numeric: tabular-nums;
 }
 .account-action {
   display: flex;
