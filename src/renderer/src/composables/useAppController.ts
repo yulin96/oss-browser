@@ -1156,18 +1156,21 @@ export function useAppController() {
   }
 
   function updateCacheDomain(): void {
-    if (!cacheForm.objectPath.trim()) return
     try {
-      cacheForm.objectPath = cacheForm.objectPath
+      const objectPath = cacheForm.objectPath
         .split(/\r?\n/)
+        .map((path) => path.trim())
+        .filter(Boolean)
         .map((path) => {
-          const url = new URL(path.trim())
+          const url = new URL(path)
           if (url.protocol !== 'http:' && url.protocol !== 'https:') throw new TypeError()
           url.hostname = selectedCdnDomain.value
           return url.toString()
         })
         .join('\n')
+      cacheForm.objectPath = objectPath
     } catch {
+      selectedCdnDomain.value = cacheForm.domainName
       errorMessage.value = t('请输入完整有效的刷新 URL')
       return
     }
