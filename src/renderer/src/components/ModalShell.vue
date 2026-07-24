@@ -50,10 +50,7 @@ function handleKeydown(event: KeyboardEvent): void {
       :style="size === 'large' ? undefined : { width: width || '480px' }"
     >
       <div class="modal-head">
-        <div class="modal-head-main">
-          <div class="modal-title">{{ title }}</div>
-          <slot name="header" />
-        </div>
+        <div class="modal-title">{{ title }}</div>
         <div class="icon-button" role="button" tabindex="0" @click="handleClose">
           <X :size="18" />
         </div>

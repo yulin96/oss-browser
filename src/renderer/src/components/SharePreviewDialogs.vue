@@ -69,31 +69,6 @@ function cacheTaskStatusClass(status: string): string {
         width="720px"
         @close="modal = null"
       >
-        <template #header>
-          <div class="cache-header-tabs">
-            <div
-              class="cache-tab"
-              :class="{ active: cachePanel === 'refresh' }"
-              role="button"
-              tabindex="0"
-              @click="showCachePanel('refresh')"
-              @keydown.enter="showCachePanel('refresh')"
-            >
-              {{ t('提交刷新') }}
-            </div>
-            <div
-              class="cache-tab"
-              :class="{ active: cachePanel === 'history' }"
-              role="button"
-              tabindex="0"
-              @click="showCachePanel('history')"
-              @keydown.enter="showCachePanel('history')"
-            >
-              {{ t('刷新记录') }}
-            </div>
-          </div>
-        </template>
-
         <label class="field-label">{{ t('CDN 加速域名') }}</label>
         <div class="select-wrap">
           <select
@@ -116,6 +91,29 @@ function cacheTaskStatusClass(status: string): string {
               }}
             </option>
           </select>
+        </div>
+
+        <div class="cache-header-tabs">
+          <div
+            class="cache-tab"
+            :class="{ active: cachePanel === 'refresh' }"
+            role="button"
+            tabindex="0"
+            @click="showCachePanel('refresh')"
+            @keydown.enter="showCachePanel('refresh')"
+          >
+            {{ t('提交刷新') }}
+          </div>
+          <div
+            class="cache-tab"
+            :class="{ active: cachePanel === 'history' }"
+            role="button"
+            tabindex="0"
+            @click="showCachePanel('history')"
+            @keydown.enter="showCachePanel('history')"
+          >
+            {{ t('刷新记录') }}
+          </div>
         </div>
 
         <div class="cache-panel-content">

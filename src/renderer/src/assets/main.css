@@ -1991,13 +1991,6 @@ input[type='checkbox']:checked::after {
   padding: 0 17px 0 21px;
   border-bottom: 1px solid var(--border);
 }
-.modal-head-main {
-  display: flex;
-  min-width: 0;
-  flex: 1;
-  align-items: center;
-  gap: 20px;
-}
 .modal-title {
   flex: 0 0 auto;
   font-weight: 720;
@@ -2088,11 +2081,10 @@ input[type='checkbox']:checked::after {
 }
 .cache-header-tabs {
   display: grid;
-  width: 300px;
-  max-width: 52%;
-  flex: 0 1 300px;
+  width: 100%;
   grid-template-columns: repeat(2, 1fr);
   gap: 4px;
+  margin-top: 16px;
   padding: 4px;
   border-radius: 8px;
   background: var(--background);
@@ -2115,12 +2107,12 @@ input[type='checkbox']:checked::after {
   box-shadow: 0 1px 3px rgba(20, 38, 63, 0.12);
 }
 .cache-panel-content {
-  height: 280px;
-  min-height: 280px;
+  height: 340px;
+  min-height: 340px;
   overflow: hidden;
 }
 .cache-panel-content .textarea-wrap textarea {
-  height: 132px;
+  height: 172px;
   resize: none;
 }
 .cache-history {
