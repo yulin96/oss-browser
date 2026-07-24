@@ -3,6 +3,10 @@ import { rm } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { SavedProfile } from '../shared/types'
 import { readJsonFile, writeJsonFileAtomic } from './atomic-json-file'
+import {
+  decryptLegacyMacSafeStorage,
+  readLegacyMacSafeStoragePassword
+} from './macos-legacy-safe-storage'
 
 interface StoredProfile {
   id: string
@@ -11,7 +15,7 @@ interface StoredProfile {
 }
 
 export class ProfileStore {
-  private mutationQueue: Promise<void> = Promise.resolve()
+  private mutationQueue: Promise<unknown> = Promise.resolve()
 
   private get path(): string {
     return join(app.getPath('userData'), 'profiles.json')
@@ -19,22 +23,52 @@ export class ProfileStore {
 
   async list(): Promise<SavedProfile[]> {
     if (!safeStorage.isEncryptionAvailable()) throw new Error('系统安全存储当前不可用')
-    const stored = await this.read()
-    const profiles: SavedProfile[] = []
-    for (const profile of stored) {
-      try {
-        profiles.push({
-          id: profile.id,
-          label: profile.label,
-          config: JSON.parse(
-            safeStorage.decryptString(Buffer.from(profile.encryptedConfig, 'base64'))
-          )
-        })
-      } catch (error) {
-        throw new Error(`已保存账号“${profile.label}”无法解密`, { cause: error })
+    return this.mutate(async () => {
+      const stored = await this.read()
+      const profiles: SavedProfile[] = []
+      let legacyPassword: string | undefined
+      let legacyPasswordLoaded = false
+      let migrated = false
+
+      for (const profile of stored) {
+        const encrypted = Buffer.from(profile.encryptedConfig, 'base64')
+        let serialized: string
+        try {
+          serialized = safeStorage.decryptString(encrypted)
+        } catch (error) {
+          if (process.platform !== 'darwin') {
+            throw new Error(`已保存账号“${profile.label}”无法解密`, { cause: error })
+          }
+          if (!legacyPasswordLoaded) {
+            legacyPassword = await readLegacyMacSafeStoragePassword()
+            legacyPasswordLoaded = true
+          }
+          if (!legacyPassword) {
+            throw new Error(`已保存账号“${profile.label}”无法解密`, { cause: error })
+          }
+          try {
+            serialized = decryptLegacyMacSafeStorage(encrypted, legacyPassword)
+            profile.encryptedConfig = safeStorage.encryptString(serialized).toString('base64')
+            migrated = true
+          } catch (legacyError) {
+            throw new Error(`已保存账号“${profile.label}”无法解密`, { cause: legacyError })
+          }
+        }
+
+        try {
+          profiles.push({
+            id: profile.id,
+            label: profile.label,
+            config: JSON.parse(serialized)
+          })
+        } catch (error) {
+          throw new Error(`已保存账号“${profile.label}”内容无效`, { cause: error })
+        }
       }
-    }
-    return profiles
+
+      if (migrated) await writeJsonFileAtomic(this.path, stored)
+      return profiles
+    })
   }
 
   async save(profile: SavedProfile): Promise<void> {
@@ -88,9 +122,12 @@ export class ProfileStore {
     return parsed as StoredProfile[]
   }
 
-  private mutate(task: () => Promise<void>): Promise<void> {
+  private mutate<T>(task: () => Promise<T>): Promise<T> {
     const result = this.mutationQueue.then(task, task)
-    this.mutationQueue = result.catch(() => undefined)
+    this.mutationQueue = result.then(
+      () => undefined,
+      () => undefined
+    )
     return result
   }
 }

@@ -898,8 +898,8 @@ export function useAppController() {
         config
       }
       await window.ossBrowser.profiles.save(profile)
-      savedProfiles.value = await window.ossBrowser.profiles.list()
       saveSession()
+      savedProfiles.value = await window.ossBrowser.profiles.list()
     } else {
       localStorage.removeItem('oss-browser-session')
     }
