@@ -23,6 +23,9 @@ interface OssClientStub {
 interface CdnClientStub {
   describeUserDomains: ReturnType<typeof vi.fn>
   refreshObjectCaches: ReturnType<typeof vi.fn>
+  describeRefreshQuota: ReturnType<typeof vi.fn>
+  describeRefreshTaskById: ReturnType<typeof vi.fn>
+  describeRefreshTasks: ReturnType<typeof vi.fn>
 }
 
 const temporaryDirectories: string[] = []
@@ -86,7 +89,12 @@ function cdnClient(domains: string[]): CdnClientStub {
         }
       }
     }),
-    refreshObjectCaches: vi.fn()
+    refreshObjectCaches: vi.fn(),
+    describeRefreshQuota: vi.fn().mockResolvedValue({ body: {} }),
+    describeRefreshTaskById: vi.fn().mockResolvedValue({ body: { tasks: [] } }),
+    describeRefreshTasks: vi.fn().mockResolvedValue({
+      body: { tasks: { CDNTask: [] } }
+    })
   }
 }
 
@@ -148,8 +156,7 @@ describe('OssService CDN credentials', () => {
       service.refreshCdnCache({
         domainName: 'shared.example.com',
         objectPath: 'https://shared.example.com/image.png',
-        objectType: 'File',
-        force: false
+        objectType: 'File'
       })
     ).resolves.toBe('primary-task')
     expect(dedicated.refreshObjectCaches).toHaveBeenCalledOnce()
@@ -167,20 +174,34 @@ describe('OssService CDN credentials', () => {
       service.refreshCdnCache({
         domainName: 'primary.example.com',
         objectPath: '/image.png',
-        objectType: 'File',
-        force: false
+        objectType: 'File'
       })
     ).rejects.toThrow('不是有效的完整 URL')
     await expect(
       service.refreshCdnCache({
         domainName: 'primary.example.com',
         objectPath: 'https://other.example.com/image.png',
-        objectType: 'File',
-        force: false
+        objectType: 'File'
       })
     ).rejects.toThrow('与所选 CDN 域名')
     expect(primary.describeUserDomains).not.toHaveBeenCalled()
     expect(dedicated.describeUserDomains).not.toHaveBeenCalled()
+  })
+
+  it('does not treat a request ID as a refresh task ID', async () => {
+    const service = new OssService(vi.fn())
+    setAuth(service, false)
+    const primary = cdnClient(['primary.example.com'])
+    primary.refreshObjectCaches.mockResolvedValue({ body: { requestId: 'request-only' } })
+    useCdnClients(service, { primary, dedicated: cdnClient([]) })
+
+    await expect(
+      service.refreshCdnCache({
+        domainName: 'primary.example.com',
+        objectPath: 'https://primary.example.com/image.png',
+        objectType: 'File'
+      })
+    ).rejects.toThrow('未返回任务 ID')
   })
 
   it('uses one lightweight request per credential for CDN permission probing', async () => {
@@ -200,6 +221,123 @@ describe('OssService CDN credentials', () => {
     expect(primary.describeUserDomains).toHaveBeenCalledWith({ pageNumber: 1, pageSize: 1 })
     expect(dedicated.describeUserDomains).toHaveBeenCalledOnce()
     expect(dedicated.describeUserDomains).toHaveBeenCalledWith({ pageNumber: 1, pageSize: 1 })
+  })
+
+  it('lists file, directory, and regex refresh tasks for the selected domain', async () => {
+    const service = new OssService(vi.fn())
+    setAuth(service)
+    const primary = cdnClient([])
+    const dedicated = cdnClient(['dedicated.example.com'])
+    dedicated.describeRefreshTasks.mockImplementation(({ objectType }: { objectType: string }) =>
+      Promise.resolve({
+        body: {
+          tasks: {
+            CDNTask: [
+              {
+                taskId: `${objectType}-task`,
+                objectPath: `https://dedicated.example.com/${objectType}`,
+                objectType,
+                status: objectType === 'file' ? 'Complete' : 'Refreshing',
+                process: objectType === 'file' ? '100%' : '50%',
+                creationTime: `2026-07-2${objectType === 'file' ? '4' : '3'}T12:00:00Z`
+              }
+            ]
+          }
+        }
+      })
+    )
+    useCdnClients(service, { primary, dedicated })
+
+    await expect(service.listCdnRefreshTasks('dedicated.example.com')).resolves.toEqual([
+      expect.objectContaining({ taskId: 'file-task', objectType: 'File', status: 'Complete' }),
+      expect.objectContaining({
+        taskId: 'directory-task',
+        objectType: 'Directory',
+        status: 'Refreshing'
+      }),
+      expect.objectContaining({ taskId: 'regex-task', objectType: 'Regex' })
+    ])
+    expect(dedicated.describeRefreshTasks).toHaveBeenCalledTimes(3)
+    expect(dedicated.describeRefreshTasks).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        domainName: 'dedicated.example.com',
+        objectType: 'file',
+        pageNumber: 1,
+        pageSize: 100
+      })
+    )
+    expect(primary.describeRefreshTasks).not.toHaveBeenCalled()
+  })
+
+  it('falls back to primary credentials when querying a submitted task is denied', async () => {
+    const service = new OssService(vi.fn())
+    setAuth(service)
+    const primary = cdnClient(['shared.example.com'])
+    const dedicated = cdnClient(['shared.example.com'])
+    dedicated.describeRefreshTaskById.mockRejectedValue({ code: 'AccessDenied' })
+    primary.describeRefreshTaskById.mockResolvedValue({
+      body: {
+        tasks: [
+          {
+            taskId: 'primary-task',
+            objectPath: 'https://shared.example.com/image.png',
+            objectType: 'file',
+            status: 'Pending',
+            creationTime: '2026-07-24T12:00:00Z'
+          }
+        ]
+      }
+    })
+    useCdnClients(service, { primary, dedicated })
+
+    await expect(
+      service.listCdnRefreshTasks('shared.example.com', 'primary-task')
+    ).resolves.toEqual([
+      {
+        taskId: 'primary-task',
+        domainName: 'shared.example.com',
+        objectPath: 'https://shared.example.com/image.png',
+        objectType: 'File',
+        status: 'Pending',
+        process: '',
+        creationTime: '2026-07-24T12:00:00Z',
+        description: ''
+      }
+    ])
+    expect(dedicated.describeRefreshTaskById).toHaveBeenCalledWith(
+      expect.objectContaining({ taskId: 'primary-task' })
+    )
+    expect(primary.describeRefreshTaskById).toHaveBeenCalledOnce()
+  })
+
+  it('queries the refresh quota with the credentials selected for the domain', async () => {
+    const service = new OssService(vi.fn())
+    setAuth(service)
+    const primary = cdnClient(['primary.example.com'])
+    const dedicated = cdnClient(['dedicated.example.com'])
+    dedicated.describeRefreshQuota.mockResolvedValue({
+      body: {
+        urlQuota: '2000',
+        urlRemain: '1996',
+        dirQuota: '100',
+        dirRemain: '99',
+        regexQuota: '20',
+        regexRemain: '10'
+      }
+    })
+    useCdnClients(service, { primary, dedicated })
+
+    await expect(service.getCdnRefreshQuota('dedicated.example.com')).resolves.toEqual({
+      fileQuota: '2000',
+      fileRemain: '1996',
+      directoryQuota: '100',
+      directoryRemain: '99',
+      regexQuota: '20',
+      regexRemain: '10'
+    })
+    expect(dedicated.describeRefreshQuota).toHaveBeenCalledOnce()
+    expect(primary.describeRefreshQuota).not.toHaveBeenCalled()
   })
 })
 

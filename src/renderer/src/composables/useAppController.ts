@@ -26,6 +26,8 @@ import {
 import type {
   AuthConfig,
   BucketInfo,
+  CacheRefreshQuota,
+  CacheRefreshTask,
   CacheRefreshType,
   CdnCredentials,
   CdnDomainInfo,
@@ -47,43 +49,43 @@ import { useTransfers } from './useTransfers'
 import { useUploadConflict } from './useUploadConflict'
 import { setLocale, t, type AppLocale } from '../i18n'
 
+export type ModalName =
+  | 'create-bucket'
+  | 'create-folder'
+  | 'bucket-acl'
+  | 'rename'
+  | 'paste-copy'
+  | 'move'
+  | 'acl'
+  | 'headers'
+  | 'share'
+  | 'preview'
+  | 'multipart'
+  | 'symlink'
+  | 'restore'
+  | 'details'
+  | 'grant'
+  | 'ram-users'
+  | 'ram-user'
+  | 'ram-keys'
+  | 'favorites'
+  | 'profiles'
+  | 'cdn-credentials'
+  | 'cache'
+  | 'settings'
+  | null
+
+export interface CopyBuffer {
+  bucket: string
+  prefix: string
+  items: ObjectInfo[]
+}
+
 // The inferred return type is the renderer's typed controller contract.
 // eslint-disable-next-line @typescript-eslint/explicit-function-return-type
 export function useAppController() {
-  type ModalName =
-    | 'create-bucket'
-    | 'create-folder'
-    | 'bucket-acl'
-    | 'rename'
-    | 'paste-copy'
-    | 'move'
-    | 'acl'
-    | 'headers'
-    | 'share'
-    | 'preview'
-    | 'multipart'
-    | 'symlink'
-    | 'restore'
-    | 'details'
-    | 'grant'
-    | 'ram-users'
-    | 'ram-user'
-    | 'ram-keys'
-    | 'favorites'
-    | 'profiles'
-    | 'cdn-credentials'
-    | 'cache'
-    | 'settings'
-    | null
-
   interface SessionState {
     profileId: string
-  }
-
-  interface CopyBuffer {
-    bucket: string
-    prefix: string
-    items: ObjectInfo[]
   }
 
   const objectIconRules = [
@@ -156,6 +158,12 @@ export function useAppController() {
   const selectedDomain = ref('')
   const cdnDomains = ref<CdnDomainInfo[]>([])
   const selectedCdnDomain = ref('')
+  const cachePanel = ref<'refresh' | 'history'>('refresh')
+  const cacheRefreshTasks = ref<CacheRefreshTask[]>([])
+  const cacheTasksLoading = ref(false)
+  const cacheRefreshQuota = ref<CacheRefreshQuota | null>(null)
+  const cacheQuotaLoading = ref(false)
+  const cacheQuotaError = ref('')
   const cdnCredentialTargetId = ref<string | null>(null)
 
   const {
@@ -319,8 +327,7 @@ export function useAppController() {
   const cacheForm = reactive({
     domainName: '',
     objectType: 'File' as CacheRefreshType,
-    objectPath: '',
-    force: false
+    objectPath: ''
   })
   const selectedMediaProcesses = ref<string[]>([])
   const mediaProcessOptions = computed(() =>
@@ -706,6 +713,12 @@ export function useAppController() {
     selectedDomain.value = ''
     cdnDomains.value = []
     selectedCdnDomain.value = ''
+    cachePanel.value = 'refresh'
+    cacheRefreshTasks.value = []
+    cacheTasksLoading.value = false
+    cacheRefreshQuota.value = null
+    cacheQuotaLoading.value = false
+    cacheQuotaError.value = ''
     resetConfirmation()
     cancelUploadConflicts()
     resetCloudOperations()
@@ -732,7 +745,7 @@ export function useAppController() {
       ramDisplayName: '',
       ramComments: ''
     })
-    Object.assign(cacheForm, { domainName: '', objectType: 'File', objectPath: '', force: false })
+    Object.assign(cacheForm, { domainName: '', objectType: 'File', objectPath: '' })
     Object.assign(cdnCredentialForm, { accessKeyId: '', accessKeySecret: '' })
     cdnCredentialTargetId.value = null
     selectedMediaProcesses.value = []
@@ -1162,7 +1175,12 @@ export function useAppController() {
         : cdnDomains.value[0].domainName)
     cacheForm.domainName = selectedCdnDomain.value
     prepareCacheRefresh(item)
+    cachePanel.value = 'refresh'
+    cacheRefreshTasks.value = []
+    cacheRefreshQuota.value = null
+    cacheQuotaError.value = ''
     modal.value = 'cache'
+    void loadCacheRefreshQuota()
   }
 
   function updateCacheDomain(): void {
@@ -1188,12 +1206,69 @@ export function useAppController() {
     localStorage.setItem(`oss-browser-cdn-domain:${profileId()}`, selectedCdnDomain.value)
   }
 
+  async function loadCacheRefreshTasks(taskId?: string): Promise<void> {
+    if (!selectedCdnDomain.value || cacheTasksLoading.value) return
+    cacheTasksLoading.value = true
+    try {
+      const tasks = await cloudTask.run(() =>
+        window.ossBrowser.cache.tasks(selectedCdnDomain.value, taskId)
+      )
+      if (tasks && (!taskId || tasks.length)) cacheRefreshTasks.value = tasks
+    } finally {
+      cacheTasksLoading.value = false
+    }
+  }
+
+  async function loadCacheRefreshQuota(): Promise<void> {
+    if (!selectedCdnDomain.value || cacheQuotaLoading.value) return
+    const domainName = selectedCdnDomain.value
+    cacheQuotaLoading.value = true
+    cacheQuotaError.value = ''
+    try {
+      const quota = await window.ossBrowser.cache.quota(domainName)
+      if (selectedCdnDomain.value === domainName) cacheRefreshQuota.value = quota
+    } catch (reason) {
+      if (selectedCdnDomain.value !== domainName) return
+      cacheRefreshQuota.value = null
+      cacheQuotaError.value = reason instanceof Error ? reason.message : String(reason)
+    } finally {
+      cacheQuotaLoading.value = false
+    }
+  }
+
+  async function showCachePanel(panel: 'refresh' | 'history'): Promise<void> {
+    cachePanel.value = panel
+    if (panel === 'history') await loadCacheRefreshTasks()
+  }
+
+  async function handleCacheDomainChange(): Promise<void> {
+    updateCacheDomain()
+    cacheRefreshQuota.value = null
+    await Promise.all([
+      loadCacheRefreshQuota(),
+      cachePanel.value === 'history' ? loadCacheRefreshTasks() : Promise.resolve()
+    ])
+  }
+
   async function submitCacheRefresh(): Promise<void> {
     cacheForm.domainName = selectedCdnDomain.value
     const taskId = await cloudTask.run(() => window.ossBrowser.cache.refresh({ ...cacheForm }))
     if (!taskId) return
-    modal.value = null
     showToast(t('缓存刷新任务已提交：{id}', { id: taskId }))
+    cachePanel.value = 'history'
+    cacheRefreshTasks.value = [
+      {
+        taskId,
+        domainName: cacheForm.domainName,
+        objectPath: cacheForm.objectPath,
+        objectType: cacheForm.objectType,
+        status: 'Pending',
+        process: '',
+        creationTime: new Date().toISOString(),
+        description: ''
+      }
+    ]
+    await Promise.all([loadCacheRefreshTasks(taskId), loadCacheRefreshQuota()])
   }
 
   function confirmCacheRefresh(): void {
@@ -1760,6 +1835,12 @@ export function useAppController() {
     selectedDomain,
     cdnDomains,
     selectedCdnDomain,
+    cachePanel,
+    cacheRefreshTasks,
+    cacheTasksLoading,
+    cacheRefreshQuota,
+    cacheQuotaLoading,
+    cacheQuotaError,
     cdnCredentialForm,
     cdnCredentialTargetId,
     permissionResults,
@@ -1929,6 +2010,10 @@ export function useAppController() {
     prepareCacheRefresh,
     openCacheRefresh,
     updateCacheDomain,
+    handleCacheDomainChange,
+    showCachePanel,
+    loadCacheRefreshTasks,
+    loadCacheRefreshQuota,
     submitCacheRefresh,
     confirmCacheRefresh,
     createBucket,

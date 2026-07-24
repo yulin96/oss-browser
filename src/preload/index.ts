@@ -74,7 +74,9 @@ const api: OssBrowserApi = {
   },
   cache: {
     domains: () => ipcRenderer.invoke('cache:domains'),
-    refresh: (request) => ipcRenderer.invoke('cache:refresh', request)
+    refresh: (request) => ipcRenderer.invoke('cache:refresh', request),
+    tasks: (domainName, taskId) => ipcRenderer.invoke('cache:tasks', domainName, taskId),
+    quota: (domainName) => ipcRenderer.invoke('cache:quota', domainName)
   },
   files: {
     getPathForFile: (file) => webUtils.getPathForFile(file),

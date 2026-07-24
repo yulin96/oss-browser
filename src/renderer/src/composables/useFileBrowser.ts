@@ -8,12 +8,12 @@ import type {
 } from '../../../shared/types'
 import { t } from '../i18n'
 
-interface Favorite {
+export interface Favorite {
   bucket: string
   prefix: string
 }
 
-interface HomeLocation {
+export interface HomeLocation {
   bucket?: string
   prefix?: string
 }

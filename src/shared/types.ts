@@ -69,7 +69,26 @@ export interface CacheRefreshRequest {
   domainName: string
   objectPath: string
   objectType: CacheRefreshType
-  force: boolean
+}
+
+export interface CacheRefreshTask {
+  taskId: string
+  domainName: string
+  objectPath: string
+  objectType: CacheRefreshType
+  status: string
+  process: string
+  creationTime: string
+  description: string
+}
+
+export interface CacheRefreshQuota {
+  fileQuota: string
+  fileRemain: string
+  directoryQuota: string
+  directoryRemain: string
+  regexQuota: string
+  regexRemain: string
 }
 
 export interface CdnDomainInfo {
@@ -299,6 +318,8 @@ export interface OssBrowserApi {
   cache: {
     domains: () => Promise<CdnDomainInfo[]>
     refresh: (request: CacheRefreshRequest) => Promise<string>
+    tasks: (domainName: string, taskId?: string) => Promise<CacheRefreshTask[]>
+    quota: (domainName: string) => Promise<CacheRefreshQuota>
   }
   files: {
     getPathForFile: (file: File) => string

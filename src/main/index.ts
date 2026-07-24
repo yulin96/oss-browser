@@ -273,6 +273,10 @@ function registerIpc(): void {
   ipcMain.handle('cache:refresh', (_event, request: CacheRefreshRequest) =>
     oss.refreshCdnCache(request)
   )
+  ipcMain.handle('cache:tasks', (_event, domainName: string, taskId?: string) =>
+    oss.listCdnRefreshTasks(domainName, taskId)
+  )
+  ipcMain.handle('cache:quota', (_event, domainName: string) => oss.getCdnRefreshQuota(domainName))
 
   ipcMain.handle('files:pickUpload', async (_event, kind: 'files' | 'folder') => {
     const properties: Electron.OpenDialogOptions['properties'] =

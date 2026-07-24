@@ -1991,7 +1991,15 @@ input[type='checkbox']:checked::after {
   padding: 0 17px 0 21px;
   border-bottom: 1px solid var(--border);
 }
+.modal-head-main {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  align-items: center;
+  gap: 20px;
+}
 .modal-title {
+  flex: 0 0 auto;
   font-weight: 720;
 }
 .modal-body {
@@ -2044,6 +2052,157 @@ input[type='checkbox']:checked::after {
 .check-row {
   gap: 8px;
   margin-top: 16px;
+}
+.cache-header-tabs {
+  display: grid;
+  width: 300px;
+  max-width: 52%;
+  flex: 0 1 300px;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 4px;
+  padding: 4px;
+  border-radius: 8px;
+  background: var(--background);
+}
+.cache-tab {
+  padding: 6px 12px;
+  border-radius: 6px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 650;
+  text-align: center;
+  cursor: pointer;
+}
+.cache-tab:hover {
+  color: var(--text);
+}
+.cache-tab.active {
+  color: var(--primary);
+  background: var(--surface);
+  box-shadow: 0 1px 3px rgba(20, 38, 63, 0.12);
+}
+.cache-panel-content {
+  height: 280px;
+  min-height: 280px;
+  overflow: hidden;
+}
+.cache-panel-content .textarea-wrap textarea {
+  height: 132px;
+  resize: none;
+}
+.cache-history {
+  display: flex;
+  height: 100%;
+  min-height: 0;
+  flex-direction: column;
+  padding-top: 16px;
+}
+.cache-history-head,
+.cache-task-primary,
+.cache-task-meta {
+  display: flex;
+  align-items: center;
+}
+.cache-history-head {
+  justify-content: space-between;
+  margin-bottom: 12px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.cache-history-empty {
+  display: grid;
+  min-height: 0;
+  place-items: center;
+  flex: 1;
+  color: var(--muted);
+  font-size: 13px;
+}
+.cache-task-list {
+  display: grid;
+  min-height: 0;
+  flex: 1;
+  align-content: start;
+  gap: 8px;
+  overflow: auto;
+}
+.cache-task {
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--background);
+}
+.cache-task-primary {
+  min-width: 0;
+  gap: 12px;
+}
+.cache-task-type {
+  flex: 0 0 auto;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 680;
+}
+.cache-task-status {
+  flex: 0 0 auto;
+  padding: 4px 8px;
+  border-radius: 999px;
+  color: var(--muted);
+  background: rgba(116, 130, 148, 0.12);
+  font-size: 11px;
+  font-weight: 650;
+}
+.cache-task-status.complete {
+  color: #23804a;
+  background: #e8f7ee;
+}
+.cache-task-status.pending,
+.cache-task-status.refreshing {
+  color: #1769b0;
+  background: #e8f3ff;
+}
+.cache-task-status.failed,
+.cache-task-status.timeout,
+.cache-task-status.canceled {
+  color: #b33b43;
+  background: #fdecee;
+}
+.cache-task-path {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  font-family: 'SFMono-Regular', Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cache-task-meta {
+  min-width: 0;
+  gap: 12px;
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 11px;
+}
+.cache-task-meta > span:nth-child(2) {
+  margin-left: auto;
+}
+.cache-task-error {
+  max-width: 180px;
+  overflow: hidden;
+  color: #b33b43;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cache-quota {
+  min-width: 0;
+  margin-right: auto;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cache-quota.error {
+  color: var(--danger);
 }
 .upload-conflict-description {
   margin: 0 0 14px;
@@ -2826,6 +2985,24 @@ html[data-theme='dark'] .modal-card {
 }
 html[data-theme='dark'] .modal-footer {
   background: #121b28;
+}
+html[data-theme='dark'] .cache-tab.active {
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+}
+html[data-theme='dark'] .cache-task-status.complete {
+  color: #79d8a5;
+  background: #173829;
+}
+html[data-theme='dark'] .cache-task-status.pending,
+html[data-theme='dark'] .cache-task-status.refreshing {
+  color: #7db7ff;
+  background: #192f49;
+}
+html[data-theme='dark'] .cache-task-status.failed,
+html[data-theme='dark'] .cache-task-status.timeout,
+html[data-theme='dark'] .cache-task-status.canceled {
+  color: #ff9295;
+  background: #3b2228;
 }
 html[data-theme='dark'] .share-copy-button.is-copied {
   color: #7bdc9b;

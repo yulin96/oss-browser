@@ -1,4 +1,7 @@
 import CdnModule, {
+  DescribeRefreshQuotaRequest,
+  DescribeRefreshTaskByIdRequest,
+  DescribeRefreshTasksRequest,
   DescribeUserDomainsRequest,
   RefreshObjectCachesRequest
 } from '@alicloud/cdn20180510'
@@ -29,6 +32,8 @@ import type {
   BucketInfo,
   BucketStorageStat,
   CacheRefreshRequest,
+  CacheRefreshQuota,
+  CacheRefreshTask,
   CdnDomainInfo,
   GrantOptions,
   GrantResult,
@@ -615,25 +620,78 @@ export class OssService {
       this.cdnClient(source).refreshObjectCaches(
         new RefreshObjectCachesRequest({
           objectPath: request.objectPath,
-          objectType: request.objectType,
-          force: request.force
+          objectType: request.objectType
         })
       )
-    const preferredSource = domainInfo.credentialSources.includes('dedicated')
-      ? 'dedicated'
-      : 'primary'
-    let response
-    try {
-      response = await refresh(preferredSource)
-    } catch (error) {
-      const canRetryPrimary =
-        preferredSource === 'dedicated' &&
-        domainInfo.credentialSources.includes('primary') &&
-        this.isPermissionDenied(error)
-      if (!canRetryPrimary) throw error
-      response = await refresh('primary')
+    const response = await this.runCdnDomainAction(domainInfo, refresh)
+    const taskId = response.body?.refreshTaskId
+    if (!taskId) throw new Error('CDN 刷新请求未返回任务 ID')
+    return taskId
+  }
+
+  async listCdnRefreshTasks(domainName: string, taskId?: string): Promise<CacheRefreshTask[]> {
+    const domain = domainName.trim().toLowerCase()
+    if (!domain) throw new Error('请选择 CDN 加速域名')
+    const domainInfo = (await this.listCdnDomains()).find(
+      (item) => item.domainName.toLowerCase() === domain
+    )
+    if (!domainInfo) throw new Error(`当前凭证无法管理 CDN 域名“${domainName}”`)
+
+    return this.runCdnDomainAction(domainInfo, async (source) => {
+      const client = this.cdnClient(source)
+      if (taskId) {
+        const response = await client.describeRefreshTaskById(
+          new DescribeRefreshTaskByIdRequest({ taskId })
+        )
+        return (response.body?.tasks || []).map((task) =>
+          this.toCacheRefreshTask(domainInfo.domainName, task)
+        )
+      }
+
+      const tasks: CacheRefreshTask[] = []
+      for (const objectType of ['file', 'directory', 'regex']) {
+        const response = await client.describeRefreshTasks(
+          new DescribeRefreshTasksRequest({
+            domainName: domainInfo.domainName,
+            objectType,
+            pageNumber: 1,
+            pageSize: 100
+          })
+        )
+        tasks.push(
+          ...(response.body?.tasks?.CDNTask || []).map((task) =>
+            this.toCacheRefreshTask(domainInfo.domainName, task)
+          )
+        )
+      }
+      const unique = new Map<string, CacheRefreshTask>()
+      for (const task of tasks) {
+        unique.set(`${task.taskId}\n${task.objectType}\n${task.objectPath}`, task)
+      }
+      return [...unique.values()].sort((a, b) => b.creationTime.localeCompare(a.creationTime))
+    })
+  }
+
+  async getCdnRefreshQuota(domainName: string): Promise<CacheRefreshQuota> {
+    const domain = domainName.trim().toLowerCase()
+    if (!domain) throw new Error('请选择 CDN 加速域名')
+    const domainInfo = (await this.listCdnDomains()).find(
+      (item) => item.domainName.toLowerCase() === domain
+    )
+    if (!domainInfo) throw new Error(`当前凭证无法管理 CDN 域名“${domainName}”`)
+
+    const response = await this.runCdnDomainAction(domainInfo, (source) =>
+      this.cdnClient(source).describeRefreshQuota(new DescribeRefreshQuotaRequest({}))
+    )
+    const quota = response.body
+    return {
+      fileQuota: quota?.urlQuota || '',
+      fileRemain: quota?.urlRemain || '',
+      directoryQuota: quota?.dirQuota || '',
+      directoryRemain: quota?.dirRemain || '',
+      regexQuota: quota?.regexQuota || '',
+      regexRemain: quota?.regexRemain || ''
     }
-    return response.body?.refreshTaskId || response.body?.requestId || ''
   }
 
   async listCdnDomains(): Promise<CdnDomainInfo[]> {
@@ -680,6 +738,51 @@ export class OssService {
       }
     }
     return [...domains.values()].sort((a, b) => a.domainName.localeCompare(b.domainName))
+  }
+
+  private async runCdnDomainAction<T>(
+    domainInfo: CdnDomainInfo,
+    action: (source: 'primary' | 'dedicated') => Promise<T>
+  ): Promise<T> {
+    const preferredSource = domainInfo.credentialSources.includes('dedicated')
+      ? 'dedicated'
+      : 'primary'
+    try {
+      return await action(preferredSource)
+    } catch (error) {
+      const canRetryPrimary =
+        preferredSource === 'dedicated' &&
+        domainInfo.credentialSources.includes('primary') &&
+        this.isPermissionDenied(error)
+      if (!canRetryPrimary) throw error
+      return action('primary')
+    }
+  }
+
+  private toCacheRefreshTask(
+    domainName: string,
+    task: {
+      taskId?: string
+      objectPath?: string
+      objectType?: string
+      status?: string
+      process?: string
+      creationTime?: string
+      description?: string
+    }
+  ): CacheRefreshTask {
+    const objectType = task.objectType?.toLowerCase()
+    return {
+      taskId: task.taskId || '',
+      domainName,
+      objectPath: task.objectPath || '',
+      objectType:
+        objectType === 'directory' ? 'Directory' : objectType === 'regex' ? 'Regex' : 'File',
+      status: task.status || 'Pending',
+      process: task.process || '',
+      creationTime: task.creationTime || '',
+      description: task.description || ''
+    }
   }
 
   private async probeCdnDomains(): Promise<string | undefined> {
