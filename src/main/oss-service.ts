@@ -89,6 +89,7 @@ type ActiveTransfer = Omit<TransferItem, 'batchId' | 'batchTotal' | 'batchDone'>
   generation: number
   batch: TransferBatch
   cancelRequested: boolean
+  pauseRequested: boolean
   cancelOperation: () => void
   lastProgressReportAt: number
 }
@@ -1471,6 +1472,7 @@ export class OssService {
     this.pausedDirections.add(direction)
     for (const transfer of this.activeTransfers.values()) {
       if (transfer.direction !== direction) continue
+      transfer.pauseRequested = true
       this.updateTransfer(transfer, transfer.progress, 'paused')
       transfer.cancelOperation()
     }
@@ -1582,6 +1584,10 @@ export class OssService {
       this.activeTransfers.set(transfer.id, transfer)
       try {
         await operation()
+        if (transfer.pauseRequested) {
+          transfer.pauseRequested = false
+          continue
+        }
         if (transfer.batch.cancelled || transfer.cancelRequested) return
         transfer.batch.failed.delete(transfer.id)
         this.retryTransfers.delete(transfer.id)
@@ -1589,6 +1595,13 @@ export class OssService {
         return
       } catch (error) {
         if (transfer.batch.cancelled) return
+        if (transfer.pauseRequested) {
+          transfer.pauseRequested = false
+          if (this.pausedDirections.has(transfer.direction)) {
+            this.updateTransfer(transfer, transfer.progress, 'paused')
+          }
+          continue
+        }
         if (transfer.cancelRequested) {
           this.updateTransfer(transfer, transfer.progress, 'cancelled')
           return
@@ -1633,6 +1646,7 @@ export class OssService {
       generation: this.transferGeneration,
       batch,
       cancelRequested: false,
+      pauseRequested: false,
       cancelOperation: () => undefined,
       lastProgressReportAt: Date.now()
     }
