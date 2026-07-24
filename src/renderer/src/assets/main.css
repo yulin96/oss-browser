@@ -2032,6 +2032,9 @@ input[type='checkbox']:checked::after {
   padding: 14px 10px;
   border-bottom: 1px solid var(--border);
 }
+.profile-row + .profile-row {
+  margin-top: 4px;
+}
 .profile-row.current {
   border-bottom-color: transparent;
   border-radius: 8px;
