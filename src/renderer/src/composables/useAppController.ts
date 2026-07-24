@@ -1145,11 +1145,21 @@ export function useAppController() {
       errorMessage.value = t('当前账号没有可用的 CDN 加速域名')
       return
     }
-    const remembered = localStorage.getItem(`oss-browser-cdn-domain:${profileId()}`)
+    const addressDomain =
+      item && currentBucket.value
+        ? localStorage.getItem(`oss-browser-domain:${profileId()}:${currentBucket.value.name}`)
+        : null
+    const matchedAddressDomain = addressDomain
+      ? cdnDomains.value.find(
+          (domain) => domain.domainName.toLowerCase() === addressDomain.toLowerCase()
+        )
+      : undefined
+    const remembered = item ? null : localStorage.getItem(`oss-browser-cdn-domain:${profileId()}`)
     selectedCdnDomain.value =
-      remembered && cdnDomains.value.some((item) => item.domainName === remembered)
+      matchedAddressDomain?.domainName ||
+      (remembered && cdnDomains.value.some((item) => item.domainName === remembered)
         ? remembered
-        : cdnDomains.value[0].domainName
+        : cdnDomains.value[0].domainName)
     cacheForm.domainName = selectedCdnDomain.value
     prepareCacheRefresh(item)
     modal.value = 'cache'
@@ -1472,6 +1482,16 @@ export function useAppController() {
         selectedDomain.value
       )
     }
+  }
+
+  function updateAddressDomain(): void {
+    if (selectedDomain.value && currentBucket.value) {
+      localStorage.setItem(
+        `oss-browser-domain:${profileId()}:${currentBucket.value.name}`,
+        selectedDomain.value
+      )
+    }
+    if (previewUrl.value) void createShareLink()
   }
 
   function buildMediaProcess(): string {
@@ -1939,6 +1959,7 @@ export function useAppController() {
     applyAcl,
     applyHeaders,
     createShareLink,
+    updateAddressDomain,
     buildMediaProcess,
     toggleMediaProcess,
     copyShareUrl,

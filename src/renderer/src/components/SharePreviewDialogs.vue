@@ -26,6 +26,7 @@ const {
   updateCacheDomain,
   confirmCacheRefresh,
   createShareLink,
+  updateAddressDomain,
   toggleMediaProcess,
   copyShareUrl,
   savePreviewText,
@@ -99,7 +100,7 @@ const {
         <template v-else>
           <label class="field-label">{{ t('访问域名') }}</label>
           <div class="select-wrap">
-            <select v-model="selectedDomain" @change="previewUrl && createShareLink()">
+            <select v-model="selectedDomain" @change="updateAddressDomain">
               <option v-for="domain in domainOptions" :key="domain" :value="domain">
                 {{ domain }}
               </option>
