@@ -295,6 +295,9 @@ const {
               <span>{{
                 profile.config.endpointMode === 'public' ? t('公共云') : profile.config.endpoint
               }}</span>
+              <span v-if="profile.config.cdnCredentials" class="profile-cdn-status">
+                {{ t('CDN 已配置') }}
+              </span>
               <span v-if="loggedIn && profile.id === profileId()" class="profile-current-label">
                 {{ t('当前使用') }}
               </span>

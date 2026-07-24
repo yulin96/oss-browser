@@ -929,7 +929,7 @@ export function useAppController() {
       const session = JSON.parse(raw) as SessionState
       const profile = savedProfiles.value.find((item) => item.id === session.profileId)
       if (!profile) return
-      Object.assign(auth, profile.config)
+      Object.assign(auth, authSnapshot(profile.config))
       const result = await window.ossBrowser.auth.connect(authSnapshot(profile.config))
       resetAccountRuntimeState()
       buckets.value = result
@@ -1713,7 +1713,7 @@ export function useAppController() {
 
   function openCdnCredentials(profile?: SavedProfile): void {
     cdnCredentialTargetId.value = profile?.id || null
-    const credentials = profile?.config.cdnCredentials || auth.cdnCredentials
+    const credentials = profile ? profile.config.cdnCredentials : auth.cdnCredentials
     Object.assign(cdnCredentialForm, {
       accessKeyId: credentials?.accessKeyId || '',
       accessKeySecret: credentials?.accessKeySecret || ''
@@ -1777,7 +1777,7 @@ export function useAppController() {
       } else {
         resetAccountRuntimeState()
         auth.alias = profile.config.alias || ''
-        Object.assign(auth, profile.config)
+        Object.assign(auth, authSnapshot(profile.config))
         buckets.value = result
         loadAccountPreferences()
         saveSession()
@@ -1789,7 +1789,7 @@ export function useAppController() {
     }
     resetCloudOperations()
     auth.alias = profile.config.alias || ''
-    Object.assign(auth, profile.config)
+    Object.assign(auth, authSnapshot(profile.config))
     showProfilesModal.value = false
     modal.value = null
   }

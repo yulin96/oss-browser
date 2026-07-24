@@ -2062,6 +2062,7 @@ input[type='checkbox']:checked::after {
   display: flex;
   min-width: 0;
   align-items: center;
+  flex-wrap: wrap;
   gap: 8px;
 }
 .profile-row span {
@@ -2073,6 +2074,17 @@ input[type='checkbox']:checked::after {
   color: var(--primary);
   font-size: 11px;
   font-weight: 650;
+}
+.profile-row .profile-cdn-status {
+  flex: 0 0 auto;
+  padding: 2px 6px;
+  border: 1px solid #b9e3ca;
+  border-radius: 5px;
+  color: #167447;
+  background: #eaf8f0;
+  font-size: 11px;
+  font-weight: 650;
+  line-height: 1.4;
 }
 .row-actions {
   flex: 0 0 auto;
@@ -3052,6 +3064,11 @@ html[data-theme='dark'] .new-access-key {
 }
 html[data-theme='dark'] .permission-status.accessible {
   color: #79d8a5 !important;
+  background: #173829;
+}
+html[data-theme='dark'] .profile-row .profile-cdn-status {
+  color: #79d8a5;
+  border-color: #285a3e;
   background: #173829;
 }
 html[data-theme='dark'] .permission-status.denied {
