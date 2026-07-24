@@ -49,6 +49,7 @@ const translations: Record<Exclude<AppLocale, 'zh-CN'>, Record<string, string>> 
     收藏夹: 'Favorite folders',
     传输任务: 'Transfers',
     设置: 'Settings',
+    当前使用: 'Current',
     通用设置: 'General',
     上传下载设置: 'Transfers',
     账号与权限: 'Account and permissions',
@@ -77,6 +78,8 @@ const translations: Record<Exclude<AppLocale, 'zh-CN'>, Record<string, string>> 
       'Enter both the CDN AccessKey ID and AccessKey Secret.',
     未找到要更新的已保存账号: 'The saved account to update was not found.',
     '当前账号没有可用的 CDN 加速域名': 'No available CDN domain was found for this account',
+    '可在“设置 → 账号管理”中为当前账号配置单独的 CDN AccessKey，用于 CDN 域名查询和缓存刷新。':
+      'Configure a dedicated CDN AccessKey for this account in Settings → Manage accounts to list CDN domains and refresh cache.',
     '刷新 CDN 缓存': 'Refresh CDN cache',
     刷新记录: 'Refresh history',
     仅显示最近三天的刷新任务: 'Only refresh tasks from the last three days are shown.',
@@ -472,6 +475,7 @@ const translations: Record<Exclude<AppLocale, 'zh-CN'>, Record<string, string>> 
     收藏夹: 'お気に入りフォルダー',
     传输任务: '転送タスク',
     设置: '設定',
+    当前使用: '使用中',
     通用设置: '一般設定',
     上传下载设置: 'アップロードとダウンロード',
     账号与权限: 'アカウントと権限',
@@ -499,6 +503,8 @@ const translations: Record<Exclude<AppLocale, 'zh-CN'>, Record<string, string>> 
       'CDN AccessKey ID と AccessKey Secret の両方を入力してください。',
     未找到要更新的已保存账号: '更新する保存済みアカウントが見つかりません。',
     '当前账号没有可用的 CDN 加速域名': 'このアカウントには利用可能な CDN ドメインがありません',
+    '可在“设置 → 账号管理”中为当前账号配置单独的 CDN AccessKey，用于 CDN 域名查询和缓存刷新。':
+      '「設定 → アカウント管理」でこのアカウント専用の CDN AccessKey を設定すると、CDN ドメインの照会とキャッシュ更新に使用できます。',
     '刷新 CDN 缓存': 'CDN キャッシュ更新',
     刷新记录: '更新履歴',
     仅显示最近三天的刷新任务: '直近3日間の更新タスクのみ表示します。',

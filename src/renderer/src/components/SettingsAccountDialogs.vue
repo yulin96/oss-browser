@@ -16,6 +16,7 @@ const {
   cdnCredentialForm,
   cdnCredentialTargetId,
   auth,
+  loggedIn,
   settings,
   themeMode,
   favorites,
@@ -27,6 +28,7 @@ const {
   handleUpdateAction,
   openProjectPage,
   clearSavedProfile,
+  profileId,
   useProfile,
   removeProfile,
   openCdnCredentials,
@@ -280,20 +282,23 @@ const {
         @close="showProfilesModal = false"
       >
         <div v-if="!savedProfiles.length" class="modal-empty">{{ t('暂无已保存账号') }}</div>
-        <div v-for="profile in savedProfiles" :key="profile.id" class="profile-row">
+        <div
+          v-for="profile in savedProfiles"
+          :key="profile.id"
+          class="profile-row"
+          :class="{ current: loggedIn && profile.id === profileId() }"
+        >
           <div>
-            <strong>
-              {{ profile.label }}
-              <span
-                v-if="profile.label !== profile.config.accessKeyId"
-                class="text-xs font-normal text-muted-foreground ml-1"
-              >
-                ({{ profile.config.accessKeyId }})
+            <strong>{{ profile.label }}</strong>
+            <span class="profile-access-key">{{ profile.config.accessKeyId }}</span>
+            <div class="profile-meta">
+              <span>{{
+                profile.config.endpointMode === 'public' ? t('公共云') : profile.config.endpoint
+              }}</span>
+              <span v-if="loggedIn && profile.id === profileId()" class="profile-current-label">
+                {{ t('当前使用') }}
               </span>
-            </strong>
-            <span>{{
-              profile.config.endpointMode === 'public' ? t('公共云') : profile.config.endpoint
-            }}</span>
+            </div>
           </div>
           <div class="row-actions">
             <AppButton

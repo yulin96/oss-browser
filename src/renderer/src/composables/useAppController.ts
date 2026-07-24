@@ -669,6 +669,20 @@ export function useAppController() {
     }, 3000)
   }
 
+  function showCdnCredentialReminder(): void {
+    requestConfirmation({
+      title: t('当前账号没有可用的 CDN 加速域名'),
+      description: t(
+        '可在“设置 → 账号管理”中为当前账号配置单独的 CDN AccessKey，用于 CDN 域名查询和缓存刷新。'
+      ),
+      confirmLabel: t('管理账号'),
+      action: () => {
+        modal.value = 'settings'
+        showProfilesModal.value = true
+      }
+    })
+  }
+
   function handleDragEnter(event: DragEvent): void {
     if (!event.dataTransfer?.types.includes('Files')) return
     dragDepth += 1
@@ -1152,10 +1166,16 @@ export function useAppController() {
   async function openCacheRefresh(item?: ObjectInfo): Promise<void> {
     if (item) selectedNames.value = new Set([item.name])
     const domains = await cloudTask.run(() => window.ossBrowser.cache.domains())
-    if (!domains) return
+    if (!domains) {
+      if (/AccessDenied|Forbidden|NoPermission|Unauthorized/i.test(cloudTask.error.value)) {
+        cloudTask.clearError()
+        showCdnCredentialReminder()
+      }
+      return
+    }
     cdnDomains.value = domains
     if (!cdnDomains.value.length) {
-      errorMessage.value = t('当前账号没有可用的 CDN 加速域名')
+      showCdnCredentialReminder()
       return
     }
     const addressDomain =
@@ -1208,11 +1228,11 @@ export function useAppController() {
 
   async function loadCacheRefreshTasks(taskId?: string): Promise<void> {
     if (!selectedCdnDomain.value || cacheTasksLoading.value) return
+    const domainName = selectedCdnDomain.value
     cacheTasksLoading.value = true
     try {
-      const tasks = await cloudTask.run(() =>
-        window.ossBrowser.cache.tasks(selectedCdnDomain.value, taskId)
-      )
+      const tasks = await cloudTask.run(() => window.ossBrowser.cache.tasks(domainName, taskId))
+      if (selectedCdnDomain.value !== domainName) return
       if (tasks && (!taskId || tasks.length)) cacheRefreshTasks.value = tasks
     } finally {
       cacheTasksLoading.value = false
@@ -1251,17 +1271,18 @@ export function useAppController() {
   }
 
   async function submitCacheRefresh(): Promise<void> {
-    cacheForm.domainName = selectedCdnDomain.value
-    const taskId = await cloudTask.run(() => window.ossBrowser.cache.refresh({ ...cacheForm }))
+    const request = { ...cacheForm, domainName: selectedCdnDomain.value }
+    const taskId = await cloudTask.run(() => window.ossBrowser.cache.refresh(request))
     if (!taskId) return
     showToast(t('缓存刷新任务已提交：{id}', { id: taskId }))
+    if (selectedCdnDomain.value !== request.domainName) return
     cachePanel.value = 'history'
     cacheRefreshTasks.value = [
       {
         taskId,
-        domainName: cacheForm.domainName,
-        objectPath: cacheForm.objectPath,
-        objectType: cacheForm.objectType,
+        domainName: request.domainName,
+        objectPath: request.objectPath,
+        objectType: request.objectType,
         status: 'Pending',
         process: '',
         creationTime: new Date().toISOString(),
