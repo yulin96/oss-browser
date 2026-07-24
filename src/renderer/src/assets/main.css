@@ -387,7 +387,7 @@ input[type='checkbox']:checked::after {
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  height: 450px;
+  min-height: 450px;
 }
 .token-form {
   display: flex;
@@ -412,12 +412,21 @@ input[type='checkbox']:checked::after {
   margin: 7px 0 28px;
   color: var(--muted);
 }
+.login-auth-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: stretch;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+.login-auth-row > .app-button {
+  min-height: 44px;
+}
 .auth-tabs {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 4px;
   padding: 4px;
-  margin-bottom: 20px;
   border-radius: 8px;
   background: var(--tab-bg);
 }
@@ -673,24 +682,17 @@ input[type='checkbox']:checked::after {
   min-height: 44px;
   font-size: 15px;
 }
-.login-form-body > .token-connect-button {
-  margin-top: auto;
-}
-.saved-profile-entry {
+.login-actions {
   display: flex;
-  width: fit-content;
-  align-items: center;
-  gap: 6px;
-  margin: 14px auto 0;
-  padding: 5px 8px;
-  color: var(--muted);
-  font-size: 13px;
-  cursor: pointer;
+  gap: 12px;
 }
-.saved-profile-entry:hover {
-  color: var(--primary);
+.login-actions > .app-button {
+  min-height: 44px;
 }
-
+.login-actions > .login-connect-button {
+  flex: 1;
+  font-size: 15px;
+}
 .topbar {
   height: 52px;
   display: flex;
@@ -2000,6 +2002,12 @@ input[type='checkbox']:checked::after {
 }
 .modal-body > .field-label:first-child {
   margin-top: 0;
+}
+.modal-description {
+  margin: 0 0 10px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.55;
 }
 .modal-footer {
   display: flex;

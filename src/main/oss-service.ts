@@ -29,6 +29,7 @@ import type {
   BucketInfo,
   BucketStorageStat,
   CacheRefreshRequest,
+  CdnDomainInfo,
   GrantOptions,
   GrantResult,
   ImageDimensions,
@@ -152,6 +153,11 @@ export class OssService {
     this.auth.secure = secure
   }
 
+  setCdnCredentials(credentials?: AuthConfig['cdnCredentials']): void {
+    if (!this.auth) throw new Error('请先登录')
+    this.auth.cdnCredentials = credentials
+  }
+
   updateSettings(settings: AppSettings): void {
     this.settings = validateAppSettings(settings)
   }
@@ -183,10 +189,7 @@ export class OssService {
         return `${result.buckets?.length || 0}`
       }),
       probe('CDN', 'cdn:DescribeUserDomains', async () => {
-        const result = await this.cdnClient().describeUserDomains(
-          new DescribeUserDomainsRequest({ pageNumber: 1, pageSize: 1 })
-        )
-        return `${result.body?.totalCount || 0}`
+        return this.probeCdnDomains()
       }),
       probe('RAM', 'ram:ListUsers', async () => {
         const result = await this.ramClient().listUsers(new ListUsersRequest({ maxItems: 1 }))
@@ -578,23 +581,136 @@ export class OssService {
   }
 
   async refreshCdnCache(request: CacheRefreshRequest): Promise<string> {
-    const response = await this.cdnClient().refreshObjectCaches(
-      new RefreshObjectCachesRequest({
-        objectPath: request.objectPath,
-        objectType: request.objectType,
-        force: request.force
-      })
+    const domain = request.domainName.trim().toLowerCase()
+    if (!domain) throw new Error('请选择 CDN 加速域名')
+    const paths = request.objectPath
+      .split(/\r?\n/)
+      .map((item) => item.trim())
+      .filter(Boolean)
+    if (!paths.length) throw new Error('请输入要刷新的完整 URL')
+    for (const path of paths) {
+      let url: URL
+      try {
+        url = new URL(path)
+      } catch {
+        throw new Error(`刷新地址不是有效的完整 URL：“${path}”`)
+      }
+      if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+        throw new Error(`刷新地址仅支持 HTTP 或 HTTPS URL：“${path}”`)
+      }
+      const hostname = url.hostname.toLowerCase()
+      if (hostname !== domain) {
+        throw new Error(`刷新地址域名“${hostname}”与所选 CDN 域名“${request.domainName}”不一致`)
+      }
+    }
+    const domainInfo = (await this.listCdnDomains()).find(
+      (item) => item.domainName.toLowerCase() === domain
     )
+    if (!domainInfo) throw new Error(`当前凭证无法管理 CDN 域名“${request.domainName}”`)
+
+    const refresh = (
+      source: 'primary' | 'dedicated'
+    ): ReturnType<CdnModule['refreshObjectCaches']> =>
+      this.cdnClient(source).refreshObjectCaches(
+        new RefreshObjectCachesRequest({
+          objectPath: request.objectPath,
+          objectType: request.objectType,
+          force: request.force
+        })
+      )
+    const preferredSource = domainInfo.credentialSources.includes('dedicated')
+      ? 'dedicated'
+      : 'primary'
+    let response
+    try {
+      response = await refresh(preferredSource)
+    } catch (error) {
+      const canRetryPrimary =
+        preferredSource === 'dedicated' &&
+        domainInfo.credentialSources.includes('primary') &&
+        this.isPermissionDenied(error)
+      if (!canRetryPrimary) throw error
+      response = await refresh('primary')
+    }
     return response.body?.refreshTaskId || response.body?.requestId || ''
   }
 
-  async listCdnDomains(): Promise<string[]> {
+  async listCdnDomains(): Promise<CdnDomainInfo[]> {
+    const sources: Array<'primary' | 'dedicated'> = ['primary']
+    if (this.auth?.cdnCredentials) sources.push('dedicated')
+    const results = await Promise.allSettled(
+      sources.map(async (source) => ({ source, domains: await this.listCdnDomainsFor(source) }))
+    )
+    const primaryResult = results[0]
+    const dedicatedResult = results[1]
+    if (dedicatedResult?.status === 'rejected') throw dedicatedResult.reason
+    if (
+      primaryResult.status === 'rejected' &&
+      (!dedicatedResult || !this.isPermissionDenied(primaryResult.reason))
+    ) {
+      throw primaryResult.reason
+    }
+    const successful = results.filter(
+      (
+        result
+      ): result is PromiseFulfilledResult<{
+        source: 'primary' | 'dedicated'
+        domains: string[]
+      }> => result.status === 'fulfilled'
+    )
+    if (!successful.length) {
+      const messages = results
+        .filter((result): result is PromiseRejectedResult => result.status === 'rejected')
+        .map((result) => this.errorMessage(result.reason))
+      throw new Error(messages.join('；') || '无法读取 CDN 加速域名')
+    }
+    const domains = new Map<string, CdnDomainInfo>()
+    for (const result of successful) {
+      for (const domainName of result.value.domains) {
+        const key = domainName.toLowerCase()
+        const existing = domains.get(key)
+        if (existing) existing.credentialSources.push(result.value.source)
+        else {
+          domains.set(key, {
+            domainName,
+            credentialSources: [result.value.source]
+          })
+        }
+      }
+    }
+    return [...domains.values()].sort((a, b) => a.domainName.localeCompare(b.domainName))
+  }
+
+  private async probeCdnDomains(): Promise<string | undefined> {
+    const sources: Array<'primary' | 'dedicated'> = ['primary']
+    if (this.auth?.cdnCredentials) sources.push('dedicated')
+    const results = await Promise.allSettled(
+      sources.map(async (source) => {
+        const response = await this.cdnClient(source).describeUserDomains(
+          new DescribeUserDomainsRequest({ pageNumber: 1, pageSize: 1 })
+        )
+        return response.body?.totalCount || 0
+      })
+    )
+    const primaryResult = results[0]
+    const dedicatedResult = results[1]
+    if (dedicatedResult?.status === 'rejected') throw dedicatedResult.reason
+    if (
+      primaryResult.status === 'rejected' &&
+      (!dedicatedResult || !this.isPermissionDenied(primaryResult.reason))
+    ) {
+      throw primaryResult.reason
+    }
+    return undefined
+  }
+
+  private async listCdnDomainsFor(source: 'primary' | 'dedicated'): Promise<string[]> {
     const domains: string[] = []
     let pageNumber = 1
     let totalCount = 0
     let fetchedCount = 0
     do {
-      const response = await this.cdnClient().describeUserDomains(
+      const response = await this.cdnClient(source).describeUserDomains(
         new DescribeUserDomainsRequest({ pageNumber, pageSize: 50 })
       )
       const body = response.body
@@ -612,17 +728,28 @@ export class OssService {
     return domains
   }
 
-  private cdnClient(): CdnModule {
+  private cdnClient(source: 'primary' | 'dedicated' = 'primary'): CdnModule {
     if (!this.auth) throw new Error('请先登录')
+    const credentials = source === 'dedicated' ? this.auth.cdnCredentials : this.auth
+    if (!credentials) throw new Error('未配置 CDN 凭证')
     const CdnClient = (CdnModule as unknown as { default: typeof CdnModule }).default
     return new CdnClient(
       new $OpenApiUtil.Config({
-        accessKeyId: this.auth.accessKeyId,
-        accessKeySecret: this.auth.accessKeySecret,
-        securityToken: this.auth.stsToken,
+        accessKeyId: credentials.accessKeyId,
+        accessKeySecret: credentials.accessKeySecret,
+        securityToken: source === 'primary' ? this.auth.stsToken : undefined,
         endpoint: 'cdn.aliyuncs.com'
       })
     )
+  }
+
+  private errorMessage(error: unknown): string {
+    const value = error as { code?: string; name?: string; message?: string }
+    return value.code || value.name || value.message || String(error)
+  }
+
+  private isPermissionDenied(error: unknown): boolean {
+    return /AccessDenied|Forbidden|NoPermission|Unauthorized/i.test(this.errorMessage(error))
   }
 
   async setObjectAcl(bucket: string, name: string, acl: string): Promise<void> {

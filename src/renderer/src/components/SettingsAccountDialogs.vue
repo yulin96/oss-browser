@@ -13,6 +13,8 @@ const {
   savedProfiles,
   permissionResults,
   permissionChecking,
+  cdnCredentialForm,
+  cdnCredentialTargetId,
   auth,
   settings,
   themeMode,
@@ -27,6 +29,9 @@ const {
   clearSavedProfile,
   useProfile,
   removeProfile,
+  openCdnCredentials,
+  clearCdnCredentialForm,
+  saveCdnCredentials,
   checkPermissions
 } = props.controller
 </script>
@@ -291,6 +296,10 @@ const {
             }}</span>
           </div>
           <div class="row-actions">
+            <AppButton
+              :label="profile.config.cdnCredentials ? t('修改 CDN 凭证') : t('配置 CDN 凭证')"
+              @click="openCdnCredentials(profile)"
+            />
             <AppButton :label="t('使用')" tone="primary" @click="useProfile(profile)" />
             <AppButton :label="t('删除')" tone="danger" @click="removeProfile(profile)" />
           </div>
@@ -298,6 +307,55 @@ const {
         <template #footer>
           <AppButton :label="t('清空全部')" tone="danger" @click="clearSavedProfile" />
           <!-- <AppButton :label="t('关闭')" @click="showProfilesModal = false" /> -->
+        </template>
+      </ModalShell>
+    </Transition>
+
+    <Transition name="modal" appear>
+      <ModalShell
+        v-if="modal === 'cdn-credentials'"
+        :title="t('配置 CDN 凭证')"
+        width="540px"
+        @close="modal = null"
+      >
+        <p class="modal-description">
+          {{
+            cdnCredentialTargetId
+              ? t('该凭证仅用于此已保存账号的 CDN 域名查询和缓存刷新。')
+              : t('该凭证仅用于 CDN 域名查询和缓存刷新，不影响 OSS 登录。')
+          }}
+        </p>
+        <p class="modal-description">
+          {{ t('未配置或域名不属于该凭证时，将使用 OSS 登录凭证。') }}
+        </p>
+        <label class="field-label">CDN AccessKey ID</label>
+        <div class="input-wrap">
+          <input v-model.trim="cdnCredentialForm.accessKeyId" autocomplete="username" />
+        </div>
+        <label class="field-label">CDN AccessKey Secret</label>
+        <div class="input-wrap">
+          <input
+            v-model="cdnCredentialForm.accessKeySecret"
+            type="password"
+            autocomplete="current-password"
+          />
+        </div>
+        <template #footer>
+          <AppButton
+            v-if="cdnCredentialForm.accessKeyId || cdnCredentialForm.accessKeySecret"
+            :label="t('清空输入')"
+            tone="danger"
+            @click="clearCdnCredentialForm"
+          />
+          <AppButton :label="t('取消')" @click="modal = null" />
+          <AppButton
+            :label="t('保存')"
+            tone="primary"
+            :disabled="
+              Boolean(cdnCredentialForm.accessKeyId) !== Boolean(cdnCredentialForm.accessKeySecret)
+            "
+            @click="saveCdnCredentials"
+          />
         </template>
       </ModalShell>
     </Transition>

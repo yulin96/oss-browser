@@ -27,6 +27,8 @@ import type {
   AuthConfig,
   BucketInfo,
   CacheRefreshType,
+  CdnCredentials,
+  CdnDomainInfo,
   FloatingUploadRequest,
   FloatingUploadState,
   FloatingUploadTarget,
@@ -69,6 +71,7 @@ export function useAppController() {
     | 'ram-keys'
     | 'favorites'
     | 'profiles'
+    | 'cdn-credentials'
     | 'cache'
     | 'settings'
     | null
@@ -151,8 +154,9 @@ export function useAppController() {
   const copyBuffer = shallowRef<CopyBuffer | null>(null)
   const domainOptions = ref<string[]>([])
   const selectedDomain = ref('')
-  const cdnDomains = ref<string[]>([])
+  const cdnDomains = ref<CdnDomainInfo[]>([])
   const selectedCdnDomain = ref('')
+  const cdnCredentialTargetId = ref<string | null>(null)
 
   const {
     confirmation,
@@ -207,6 +211,10 @@ export function useAppController() {
     secure: true,
     remember: true,
     presetPath: ''
+  })
+  const cdnCredentialForm = reactive<CdnCredentials>({
+    accessKeyId: '',
+    accessKeySecret: ''
   })
   const authTask = useAsyncTask(clearAsyncErrors)
   const browserTask = useAsyncTask(clearAsyncErrors)
@@ -309,6 +317,7 @@ export function useAppController() {
     ramComments: ''
   })
   const cacheForm = reactive({
+    domainName: '',
     objectType: 'File' as CacheRefreshType,
     objectPath: '',
     force: false
@@ -327,6 +336,7 @@ export function useAppController() {
       loggedIn,
       savedProfiles,
       profileId,
+      authSnapshot,
       run: settingsTask.run,
       taskError: settingsTask.error,
       openModal: () => {
@@ -722,7 +732,9 @@ export function useAppController() {
       ramDisplayName: '',
       ramComments: ''
     })
-    Object.assign(cacheForm, { objectType: 'File', objectPath: '', force: false })
+    Object.assign(cacheForm, { domainName: '', objectType: 'File', objectPath: '', force: false })
+    Object.assign(cdnCredentialForm, { accessKeyId: '', accessKeySecret: '' })
+    cdnCredentialTargetId.value = null
     selectedMediaProcesses.value = []
   }
 
@@ -845,7 +857,8 @@ export function useAppController() {
 
   async function login(): Promise<void> {
     if (auth.endpointMode === 'public') auth.endpoint = 'oss-cn-hangzhou.aliyuncs.com'
-    const result = await authTask.run(() => window.ossBrowser.auth.connect({ ...auth }))
+    const config = authSnapshot()
+    const result = await authTask.run(() => window.ossBrowser.auth.connect(config))
     if (!result) return
     resetAccountRuntimeState()
     buckets.value = result
@@ -855,7 +868,7 @@ export function useAppController() {
       const profile: SavedProfile = {
         id: `${auth.endpoint}|${auth.accessKeyId}`,
         label: auth.alias?.trim() || auth.accessKeyId,
-        config: { ...auth }
+        config
       }
       await window.ossBrowser.profiles.save(profile)
       savedProfiles.value = await window.ossBrowser.profiles.list()
@@ -866,6 +879,22 @@ export function useAppController() {
     await openInitialLocation(result, auth.presetPath || '')
   }
 
+  function clearLoginForm(): void {
+    Object.assign(auth, {
+      alias: '',
+      endpoint: 'oss-cn-hangzhou.aliyuncs.com',
+      endpointMode: 'public',
+      accessKeyId: '',
+      accessKeySecret: '',
+      stsToken: '',
+      presetPath: '',
+      cdnCredentials: undefined
+    })
+    Object.assign(cdnCredentialForm, { accessKeyId: '', accessKeySecret: '' })
+    authToken.value = ''
+    errorMessage.value = ''
+  }
+
   async function restoreSession(): Promise<void> {
     const raw = localStorage.getItem('oss-browser-session')
     if (!raw) return
@@ -874,7 +903,7 @@ export function useAppController() {
       const profile = savedProfiles.value.find((item) => item.id === session.profileId)
       if (!profile) return
       Object.assign(auth, profile.config)
-      const result = await window.ossBrowser.auth.connect({ ...profile.config })
+      const result = await window.ossBrowser.auth.connect(authSnapshot(profile.config))
       resetAccountRuntimeState()
       buckets.value = result
       loggedIn.value = true
@@ -897,6 +926,18 @@ export function useAppController() {
 
   function profileId(): string {
     return `${auth.endpoint}|${auth.accessKeyId}`
+  }
+
+  function authSnapshot(config: AuthConfig = auth): AuthConfig {
+    return {
+      ...config,
+      cdnCredentials: config.cdnCredentials
+        ? {
+            accessKeyId: config.cdnCredentials.accessKeyId,
+            accessKeySecret: config.cdnCredentials.accessKeySecret
+          }
+        : undefined
+    }
   }
 
   async function loginWithToken(): Promise<void> {
@@ -1106,20 +1147,36 @@ export function useAppController() {
     }
     const remembered = localStorage.getItem(`oss-browser-cdn-domain:${profileId()}`)
     selectedCdnDomain.value =
-      remembered && cdnDomains.value.includes(remembered) ? remembered : cdnDomains.value[0]
+      remembered && cdnDomains.value.some((item) => item.domainName === remembered)
+        ? remembered
+        : cdnDomains.value[0].domainName
+    cacheForm.domainName = selectedCdnDomain.value
     prepareCacheRefresh(item)
     modal.value = 'cache'
   }
 
   function updateCacheDomain(): void {
     if (!cacheForm.objectPath.trim()) return
-    const url = new URL(cacheForm.objectPath)
-    url.hostname = selectedCdnDomain.value
-    cacheForm.objectPath = url.toString()
+    try {
+      cacheForm.objectPath = cacheForm.objectPath
+        .split(/\r?\n/)
+        .map((path) => {
+          const url = new URL(path.trim())
+          if (url.protocol !== 'http:' && url.protocol !== 'https:') throw new TypeError()
+          url.hostname = selectedCdnDomain.value
+          return url.toString()
+        })
+        .join('\n')
+    } catch {
+      errorMessage.value = t('请输入完整有效的刷新 URL')
+      return
+    }
+    cacheForm.domainName = selectedCdnDomain.value
     localStorage.setItem(`oss-browser-cdn-domain:${profileId()}`, selectedCdnDomain.value)
   }
 
   async function submitCacheRefresh(): Promise<void> {
+    cacheForm.domainName = selectedCdnDomain.value
     const taskId = await cloudTask.run(() => window.ossBrowser.cache.refresh({ ...cacheForm }))
     if (!taskId) return
     modal.value = null
@@ -1535,9 +1592,63 @@ export function useAppController() {
     localStorage.removeItem('oss-browser-session')
   }
 
+  function openCdnCredentials(profile?: SavedProfile): void {
+    cdnCredentialTargetId.value = profile?.id || null
+    const credentials = profile?.config.cdnCredentials || auth.cdnCredentials
+    Object.assign(cdnCredentialForm, {
+      accessKeyId: credentials?.accessKeyId || '',
+      accessKeySecret: credentials?.accessKeySecret || ''
+    })
+    showProfilesModal.value = false
+    modal.value = 'cdn-credentials'
+  }
+
+  function clearCdnCredentialForm(): void {
+    Object.assign(cdnCredentialForm, { accessKeyId: '', accessKeySecret: '' })
+  }
+
+  async function saveCdnCredentials(): Promise<void> {
+    const accessKeyId = cdnCredentialForm.accessKeyId.trim()
+    const accessKeySecret = cdnCredentialForm.accessKeySecret
+    if (Boolean(accessKeyId) !== Boolean(accessKeySecret)) {
+      errorMessage.value = t('请同时填写 CDN AccessKey ID 和 AccessKey Secret')
+      return
+    }
+    const credentials = accessKeyId ? { accessKeyId, accessKeySecret } : undefined
+    const targetId = cdnCredentialTargetId.value
+    if (!targetId) {
+      auth.cdnCredentials = credentials
+      modal.value = null
+      return
+    }
+    const profile = savedProfiles.value.find((item) => item.id === targetId)
+    if (!profile) {
+      errorMessage.value = t('未找到要更新的已保存账号')
+      return
+    }
+    const updatedProfile: SavedProfile = {
+      ...profile,
+      config: { ...profile.config, cdnCredentials: credentials }
+    }
+    const nextProfiles = await settingsTask.run(async () => {
+      await window.ossBrowser.profiles.save(updatedProfile)
+      const profiles = await window.ossBrowser.profiles.list()
+      if (loggedIn.value && targetId === profileId()) {
+        await window.ossBrowser.auth.setCdnCredentials(credentials)
+      }
+      return profiles
+    })
+    if (!nextProfiles) return
+    savedProfiles.value = nextProfiles
+    if (loggedIn.value && targetId === profileId()) auth.cdnCredentials = credentials
+    modal.value = null
+  }
+
   async function useProfile(profile: SavedProfile): Promise<void> {
     if (loggedIn.value) {
-      const result = await authTask.run(() => window.ossBrowser.auth.connect({ ...profile.config }))
+      const result = await authTask.run(() =>
+        window.ossBrowser.auth.connect(authSnapshot(profile.config))
+      )
       if (!result) {
         const message = errorMessage.value
         loggedIn.value = false
@@ -1626,6 +1737,8 @@ export function useAppController() {
     selectedDomain,
     cdnDomains,
     selectedCdnDomain,
+    cdnCredentialForm,
+    cdnCredentialTargetId,
     permissionResults,
     permissionChecking,
     confirmation,
@@ -1838,6 +1951,10 @@ export function useAppController() {
     openProjectPage,
     openPreviewExternally,
     clearSavedProfile,
+    clearLoginForm,
+    openCdnCredentials,
+    clearCdnCredentialForm,
+    saveCdnCredentials,
     performClearSavedProfile,
     useProfile,
     changeLocale,

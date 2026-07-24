@@ -24,6 +24,7 @@ export function useAppSettings(options: {
   loggedIn: Ref<boolean>
   savedProfiles: Ref<SavedProfile[]>
   profileId: () => string
+  authSnapshot: (config?: AuthConfig) => AuthConfig
   run: <T>(task: () => Promise<T>) => Promise<T | undefined>
   taskError: Ref<string>
   openModal: () => void
@@ -164,7 +165,7 @@ export function useAppSettings(options: {
         await window.ossBrowser.profiles.save({
           id: options.profileId(),
           label: options.auth.alias?.trim() || options.auth.accessKeyId,
-          config: { ...options.auth }
+          config: options.authSnapshot()
         })
         options.savedProfiles.value = await window.ossBrowser.profiles.list()
       }

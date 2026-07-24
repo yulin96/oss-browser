@@ -1,5 +1,10 @@
 export type EndpointMode = 'public' | 'custom' | 'cname' | 'private'
 
+export interface CdnCredentials {
+  accessKeyId: string
+  accessKeySecret: string
+}
+
 export interface AuthConfig {
   alias?: string
   endpoint: string
@@ -10,6 +15,7 @@ export interface AuthConfig {
   secure: boolean
   remember: boolean
   presetPath?: string
+  cdnCredentials?: CdnCredentials
 }
 
 export interface BucketInfo {
@@ -60,9 +66,15 @@ export type UploadConflictPolicy = 'ask' | 'replace' | 'skip'
 export type CacheRefreshType = 'File' | 'Directory' | 'Regex'
 
 export interface CacheRefreshRequest {
+  domainName: string
   objectPath: string
   objectType: CacheRefreshType
   force: boolean
+}
+
+export interface CdnDomainInfo {
+  domainName: string
+  credentialSources: Array<'primary' | 'dedicated'>
 }
 
 export interface GrantOptions {
@@ -223,6 +235,7 @@ export interface OssBrowserApi {
     connect: (config: AuthConfig) => Promise<BucketInfo[]>
     disconnect: () => Promise<void>
     setSecure: (secure: boolean) => Promise<void>
+    setCdnCredentials: (credentials?: CdnCredentials) => Promise<void>
     probePermissions: () => Promise<PermissionProbeItem[]>
   }
   profiles: {
@@ -284,7 +297,7 @@ export interface OssBrowserApi {
     domains: (bucket: string) => Promise<string[]>
   }
   cache: {
-    domains: () => Promise<string[]>
+    domains: () => Promise<CdnDomainInfo[]>
     refresh: (request: CacheRefreshRequest) => Promise<string>
   }
   files: {

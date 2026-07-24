@@ -1,5 +1,15 @@
 <script setup lang="ts">
-import { ChevronDown, CircleCheck, Globe2, KeyRound, Monitor, Moon, Sun, X } from '@lucide/vue'
+import {
+  ChevronDown,
+  CircleCheck,
+  Eraser,
+  Globe2,
+  KeyRound,
+  Monitor,
+  Moon,
+  Sun,
+  X
+} from '@lucide/vue'
 import appIcon from '../assets/icon.png'
 import type { AppController } from '../composables/useAppController'
 import { locale, localeLabel, localeOptions, t } from '../i18n'
@@ -19,6 +29,8 @@ const {
   themeMode,
   login,
   loginWithToken,
+  clearLoginForm,
+  openCdnCredentials,
   changeLocale
 } = props.controller
 </script>
@@ -92,27 +104,35 @@ const {
     <div class="login-card">
       <!-- <div class="login-title">{{ t('连接 OSS') }}</div>
         <div class="login-subtitle">{{ t('使用 AccessKey、STS 凭证或授权码登录') }}</div> -->
-      <div
-        class="auth-tabs t-tabs"
-        data-count="2"
-        :data-active="authMode === 'access-key' ? '0' : '1'"
-      >
+      <div class="login-auth-row">
         <div
-          :class="{ active: authMode === 'access-key' }"
-          role="button"
-          tabindex="0"
-          @click="authMode = 'access-key'"
+          class="auth-tabs t-tabs"
+          data-count="2"
+          :data-active="authMode === 'access-key' ? '0' : '1'"
         >
-          AccessKey
+          <div
+            :class="{ active: authMode === 'access-key' }"
+            role="button"
+            tabindex="0"
+            @click="authMode = 'access-key'"
+          >
+            AccessKey
+          </div>
+          <div
+            :class="{ active: authMode === 'token' }"
+            role="button"
+            tabindex="0"
+            @click="authMode = 'token'"
+          >
+            {{ t('授权码') }}
+          </div>
         </div>
-        <div
-          :class="{ active: authMode === 'token' }"
-          role="button"
-          tabindex="0"
-          @click="authMode = 'token'"
-        >
-          {{ t('授权码') }}
-        </div>
+        <AppButton
+          v-if="savedProfiles.length"
+          :label="t('已保存账号')"
+          :icon="KeyRound"
+          @click="showProfilesModal = true"
+        />
       </div>
 
       <div class="login-form-body">
@@ -139,13 +159,16 @@ const {
               </AppTooltip>
             </div>
           </div>
-          <AppButton
-            class="token-connect-button"
-            :label="t('使用授权码连接')"
-            tone="primary"
-            :disabled="!authToken || authTask.pending.value"
-            @click="loginWithToken"
-          />
+          <div class="login-actions">
+            <AppButton :label="t('清空')" :icon="Eraser" @click="clearLoginForm" />
+            <AppButton
+              class="login-connect-button"
+              :label="t('使用授权码连接')"
+              tone="primary"
+              :disabled="!authToken || authTask.pending.value"
+              @click="loginWithToken"
+            />
+          </div>
         </template>
 
         <template v-else>
@@ -220,27 +243,27 @@ const {
               </AppTooltip>
             </div>
           </div>
-          <AppButton
-            :label="t('连接')"
-            tone="primary"
-            :disabled="
-              (auth.endpointMode !== 'public' && !auth.endpoint) ||
-              !auth.accessKeyId ||
-              !auth.accessKeySecret ||
-              authTask.pending.value
-            "
-            @click="login"
-          />
+          <div class="login-actions">
+            <AppButton
+              :label="auth.cdnCredentials ? t('CDN 已配置') : t('CDN 凭证')"
+              :icon="KeyRound"
+              @click="openCdnCredentials()"
+            />
+            <AppButton :label="t('清空')" :icon="Eraser" @click="clearLoginForm" />
+            <AppButton
+              class="login-connect-button"
+              :label="t('连接')"
+              tone="primary"
+              :disabled="
+                (auth.endpointMode !== 'public' && !auth.endpoint) ||
+                !auth.accessKeyId ||
+                !auth.accessKeySecret ||
+                authTask.pending.value
+              "
+              @click="login"
+            />
+          </div>
         </template>
-      </div>
-      <div
-        v-if="savedProfiles.length"
-        class="saved-profile-entry"
-        role="button"
-        tabindex="0"
-        @click="showProfilesModal = true"
-      >
-        <KeyRound :size="15" />{{ t('使用已保存账号') }}
       </div>
     </div>
   </section>

@@ -13,6 +13,7 @@ const api: OssBrowserApi = {
     connect: (config) => ipcRenderer.invoke('auth:connect', config),
     disconnect: () => ipcRenderer.invoke('auth:disconnect'),
     setSecure: (secure) => ipcRenderer.invoke('auth:setSecure', secure),
+    setCdnCredentials: (credentials) => ipcRenderer.invoke('auth:setCdnCredentials', credentials),
     probePermissions: () => ipcRenderer.invoke('auth:probePermissions')
   },
   profiles: {

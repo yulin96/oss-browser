@@ -10,7 +10,7 @@ vi.mock('electron', () => ({
 
 import { OssService } from '../src/main/oss-service'
 import { DEFAULT_APP_SETTINGS } from '../src/shared/app-settings'
-import type { ObjectInfo } from '../src/shared/types'
+import type { AuthConfig, ObjectInfo } from '../src/shared/types'
 
 interface OssClientStub {
   list: ReturnType<typeof vi.fn>
@@ -18,6 +18,11 @@ interface OssClientStub {
   put?: ReturnType<typeof vi.fn>
   putStream?: ReturnType<typeof vi.fn>
   cancel?: ReturnType<typeof vi.fn>
+}
+
+interface CdnClientStub {
+  describeUserDomains: ReturnType<typeof vi.fn>
+  refreshObjectCaches: ReturnType<typeof vi.fn>
 }
 
 const temporaryDirectories: string[] = []
@@ -38,10 +43,164 @@ function useClients(service: OssService, clients: Record<string, OssClientStub>)
   ).mockImplementation((bucket) => clients[bucket])
 }
 
+function useCdnClients(
+  service: OssService,
+  clients: Record<'primary' | 'dedicated', CdnClientStub>
+): void {
+  vi.spyOn(
+    service as unknown as {
+      cdnClient: (source?: 'primary' | 'dedicated') => CdnClientStub
+    },
+    'cdnClient'
+  ).mockImplementation((source = 'primary') => clients[source])
+}
+
+function setAuth(service: OssService, cdnCredentials = true): void {
+  const config: AuthConfig = {
+    endpoint: 'oss-cn-hangzhou.aliyuncs.com',
+    endpointMode: 'public',
+    accessKeyId: 'primary-id',
+    accessKeySecret: 'primary-secret',
+    secure: true,
+    remember: true,
+    ...(cdnCredentials
+      ? {
+          cdnCredentials: {
+            accessKeyId: 'dedicated-id',
+            accessKeySecret: 'dedicated-secret'
+          }
+        }
+      : {})
+  }
+  const target = service as unknown as { auth: AuthConfig | null }
+  target.auth = config
+}
+
+function cdnClient(domains: string[]): CdnClientStub {
+  return {
+    describeUserDomains: vi.fn().mockResolvedValue({
+      body: {
+        totalCount: domains.length,
+        domains: {
+          pageData: domains.map((domainName) => ({ domainName, domainStatus: 'online' }))
+        }
+      }
+    }),
+    refreshObjectCaches: vi.fn()
+  }
+}
+
 afterEach(async () => {
   await Promise.all(
     temporaryDirectories.splice(0).map((directory) => rm(directory, { recursive: true }))
   )
+})
+
+describe('OssService CDN credentials', () => {
+  it('merges domains and records which credentials can manage each domain', async () => {
+    const service = new OssService(vi.fn())
+    setAuth(service)
+    const primary = cdnClient(['primary.example.com', 'shared.example.com'])
+    const dedicated = cdnClient(['dedicated.example.com', 'shared.example.com'])
+    useCdnClients(service, { primary, dedicated })
+
+    await expect(service.listCdnDomains()).resolves.toEqual([
+      { domainName: 'dedicated.example.com', credentialSources: ['dedicated'] },
+      { domainName: 'primary.example.com', credentialSources: ['primary'] },
+      { domainName: 'shared.example.com', credentialSources: ['primary', 'dedicated'] }
+    ])
+  })
+
+  it('uses dedicated domains when the primary credentials lack CDN permission', async () => {
+    const service = new OssService(vi.fn())
+    setAuth(service)
+    const primary = cdnClient([])
+    primary.describeUserDomains.mockRejectedValue({ code: 'AccessDenied' })
+    const dedicated = cdnClient(['dedicated.example.com'])
+    useCdnClients(service, { primary, dedicated })
+
+    await expect(service.listCdnDomains()).resolves.toEqual([
+      { domainName: 'dedicated.example.com', credentialSources: ['dedicated'] }
+    ])
+  })
+
+  it('does not silently hide dedicated domains when dedicated credentials fail', async () => {
+    const service = new OssService(vi.fn())
+    setAuth(service)
+    const primary = cdnClient(['primary.example.com'])
+    const dedicated = cdnClient([])
+    dedicated.describeUserDomains.mockRejectedValue(new Error('InvalidAccessKeyId'))
+    useCdnClients(service, { primary, dedicated })
+
+    await expect(service.listCdnDomains()).rejects.toThrow('InvalidAccessKeyId')
+  })
+
+  it('prefers dedicated credentials and retries the primary credentials on permission denial', async () => {
+    const service = new OssService(vi.fn())
+    setAuth(service)
+    const primary = cdnClient(['shared.example.com'])
+    const dedicated = cdnClient(['shared.example.com'])
+    dedicated.refreshObjectCaches.mockRejectedValue({ code: 'AccessDenied' })
+    primary.refreshObjectCaches.mockResolvedValue({ body: { refreshTaskId: 'primary-task' } })
+    useCdnClients(service, { primary, dedicated })
+
+    await expect(
+      service.refreshCdnCache({
+        domainName: 'shared.example.com',
+        objectPath: 'https://shared.example.com/image.png',
+        objectType: 'File',
+        force: false
+      })
+    ).resolves.toBe('primary-task')
+    expect(dedicated.refreshObjectCaches).toHaveBeenCalledOnce()
+    expect(primary.refreshObjectCaches).toHaveBeenCalledOnce()
+  })
+
+  it('rejects incomplete URLs and URLs for another domain before calling CDN', async () => {
+    const service = new OssService(vi.fn())
+    setAuth(service)
+    const primary = cdnClient(['primary.example.com'])
+    const dedicated = cdnClient(['dedicated.example.com'])
+    useCdnClients(service, { primary, dedicated })
+
+    await expect(
+      service.refreshCdnCache({
+        domainName: 'primary.example.com',
+        objectPath: '/image.png',
+        objectType: 'File',
+        force: false
+      })
+    ).rejects.toThrow('不是有效的完整 URL')
+    await expect(
+      service.refreshCdnCache({
+        domainName: 'primary.example.com',
+        objectPath: 'https://other.example.com/image.png',
+        objectType: 'File',
+        force: false
+      })
+    ).rejects.toThrow('与所选 CDN 域名')
+    expect(primary.describeUserDomains).not.toHaveBeenCalled()
+    expect(dedicated.describeUserDomains).not.toHaveBeenCalled()
+  })
+
+  it('uses one lightweight request per credential for CDN permission probing', async () => {
+    const service = new OssService(vi.fn())
+    setAuth(service)
+    const primary = cdnClient(['primary.example.com'])
+    const dedicated = cdnClient(['dedicated.example.com'])
+    useCdnClients(service, { primary, dedicated })
+    const probeCdnDomains = (
+      service as unknown as {
+        probeCdnDomains: () => Promise<string | undefined>
+      }
+    ).probeCdnDomains.bind(service)
+
+    await expect(probeCdnDomains()).resolves.toBeUndefined()
+    expect(primary.describeUserDomains).toHaveBeenCalledOnce()
+    expect(primary.describeUserDomains).toHaveBeenCalledWith({ pageNumber: 1, pageSize: 1 })
+    expect(dedicated.describeUserDomains).toHaveBeenCalledOnce()
+    expect(dedicated.describeUserDomains).toHaveBeenCalledWith({ pageNumber: 1, pageSize: 1 })
+  })
 })
 
 describe('OssService object operations', () => {

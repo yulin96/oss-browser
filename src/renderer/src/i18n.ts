@@ -30,6 +30,7 @@ const translations: Record<Exclude<AppLocale, 'zh-CN'>, Record<string, string>> 
     暂无已保存账号: 'No saved accounts',
     使用: 'Use',
     清空全部: 'Clear all',
+    清空: 'Clear',
     清空已保存账号: 'Clear saved accounts',
     '确定清空全部已保存账号吗？此操作无法撤销。':
       'Clear all saved accounts? This action cannot be undone.',
@@ -53,6 +54,28 @@ const translations: Record<Exclude<AppLocale, 'zh-CN'>, Record<string, string>> 
     账号与权限: 'Account and permissions',
     刷新缓存: 'Refresh cache',
     'CDN 加速域名': 'CDN domain',
+    'CDN 专用凭证': 'Dedicated CDN credentials',
+    'CDN 凭证': 'CDN credentials',
+    'CDN 已配置': 'CDN configured',
+    主凭证: 'Primary credentials',
+    '主凭证 / CDN 凭证': 'Primary / CDN credentials',
+    '配置 CDN 凭证': 'Configure CDN credentials',
+    '修改 CDN 凭证': 'Edit CDN credentials',
+    修改配置: 'Edit',
+    清空输入: 'Clear fields',
+    '请输入完整有效的刷新 URL': 'Enter a complete and valid refresh URL.',
+    '已配置，将按域名自动选择 CDN 凭证':
+      'Configured. Credentials will be selected automatically by domain.',
+    '可选，用于 CDN 域名查询和缓存刷新': 'Optional. Used to list CDN domains and refresh cache.',
+    '该凭证仅用于此已保存账号的 CDN 域名查询和缓存刷新。':
+      'These credentials are used only for CDN domain listing and cache refresh for this saved account.',
+    '该凭证仅用于 CDN 域名查询和缓存刷新，不影响 OSS 登录。':
+      'These credentials are used only for CDN domain listing and cache refresh and do not affect OSS sign-in.',
+    '未配置或域名不属于该凭证时，将使用 OSS 登录凭证。':
+      'The OSS sign-in credentials are used when these are not configured or do not own the domain.',
+    '请同时填写 CDN AccessKey ID 和 AccessKey Secret':
+      'Enter both the CDN AccessKey ID and AccessKey Secret.',
+    未找到要更新的已保存账号: 'The saved account to update was not found.',
     '当前账号没有可用的 CDN 加速域名': 'No available CDN domain was found for this account',
     '刷新 CDN 缓存': 'Refresh CDN cache',
     退出登录: 'Sign out',
@@ -418,6 +441,7 @@ const translations: Record<Exclude<AppLocale, 'zh-CN'>, Record<string, string>> 
     暂无已保存账号: '保存済みアカウントはありません',
     使用: '使用',
     清空全部: 'すべて消去',
+    清空: 'クリア',
     清空已保存账号: '保存済みアカウントをすべて消去',
     '确定清空全部已保存账号吗？此操作无法撤销。':
       '保存済みアカウントをすべて消去しますか？この操作は取り消せません。',
@@ -441,6 +465,27 @@ const translations: Record<Exclude<AppLocale, 'zh-CN'>, Record<string, string>> 
     账号与权限: 'アカウントと権限',
     刷新缓存: 'キャッシュ更新',
     'CDN 加速域名': 'CDN アクセラレーションドメイン',
+    'CDN 专用凭证': 'CDN 専用認証情報',
+    'CDN 凭证': 'CDN 認証情報',
+    'CDN 已配置': 'CDN 設定済み',
+    主凭证: 'メイン認証情報',
+    '主凭证 / CDN 凭证': 'メイン / CDN 認証情報',
+    '配置 CDN 凭证': 'CDN 認証情報を設定',
+    '修改 CDN 凭证': 'CDN 認証情報を変更',
+    修改配置: '設定を変更',
+    清空输入: '入力をクリア',
+    '请输入完整有效的刷新 URL': '有効な完全 URL を入力してください。',
+    '已配置，将按域名自动选择 CDN 凭证': '設定済み。ドメインごとに認証情報を自動選択します。',
+    '可选，用于 CDN 域名查询和缓存刷新': '任意。CDN ドメインの照会とキャッシュ更新に使用します。',
+    '该凭证仅用于此已保存账号的 CDN 域名查询和缓存刷新。':
+      'この認証情報は、保存済みアカウントの CDN ドメイン照会とキャッシュ更新にのみ使用します。',
+    '该凭证仅用于 CDN 域名查询和缓存刷新，不影响 OSS 登录。':
+      'この認証情報は CDN ドメイン照会とキャッシュ更新にのみ使用され、OSS ログインには影響しません。',
+    '未配置或域名不属于该凭证时，将使用 OSS 登录凭证。':
+      '未設定の場合、またはドメインがこの認証情報に属さない場合は OSS ログイン認証情報を使用します。',
+    '请同时填写 CDN AccessKey ID 和 AccessKey Secret':
+      'CDN AccessKey ID と AccessKey Secret の両方を入力してください。',
+    未找到要更新的已保存账号: '更新する保存済みアカウントが見つかりません。',
     '当前账号没有可用的 CDN 加速域名': 'このアカウントには利用可能な CDN ドメインがありません',
     '刷新 CDN 缓存': 'CDN キャッシュ更新',
     退出登录: 'ログアウト',

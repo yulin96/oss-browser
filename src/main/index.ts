@@ -18,6 +18,7 @@ import type {
   AppSettings,
   AuthConfig,
   CacheRefreshRequest,
+  CdnCredentials,
   GrantOptions,
   ObjectInfo,
   SavedProfile,
@@ -170,6 +171,9 @@ function registerIpc(): void {
     await floatingUpload.setAccount(null)
   })
   ipcMain.handle('auth:setSecure', (_event, secure: boolean) => oss.setSecure(secure))
+  ipcMain.handle('auth:setCdnCredentials', (_event, credentials?: CdnCredentials) =>
+    oss.setCdnCredentials(credentials)
+  )
   ipcMain.handle('auth:probePermissions', () => oss.probePermissions())
   ipcMain.handle('profiles:list', () => profiles.list())
   ipcMain.handle('profiles:save', (_event, profile: SavedProfile) => profiles.save(profile))

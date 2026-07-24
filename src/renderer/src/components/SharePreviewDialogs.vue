@@ -40,7 +40,20 @@ const {
         <label class="field-label">{{ t('CDN 加速域名') }}</label>
         <div class="select-wrap">
           <select v-model="selectedCdnDomain" @change="updateCacheDomain">
-            <option v-for="domain in cdnDomains" :key="domain" :value="domain">{{ domain }}</option>
+            <option
+              v-for="domain in cdnDomains"
+              :key="domain.domainName"
+              :value="domain.domainName"
+            >
+              {{ domain.domainName }} ·
+              {{
+                domain.credentialSources.length === 2
+                  ? t('主凭证 / CDN 凭证')
+                  : domain.credentialSources[0] === 'dedicated'
+                    ? t('CDN 凭证')
+                    : t('主凭证')
+              }}
+            </option>
           </select>
         </div>
         <label class="field-label">{{ t('刷新类型') }}</label>
