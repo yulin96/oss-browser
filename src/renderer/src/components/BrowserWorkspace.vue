@@ -63,6 +63,7 @@ const {
     @cache-refresh="openCacheRefresh()"
     @transfers="showTransfers = !showTransfers"
     @settings="openSettings"
+    @release-notes="modal = 'release-notes'"
     @logout="confirmLogout"
   />
 

@@ -145,5 +145,5 @@ jobs:
           release-assets/*
           --repo "${GITHUB_REPOSITORY}"
           --title "OSS Browser ${GITHUB_REF_NAME}"
-          --generate-notes
+          --notes-file release-notes.md
           --verify-tag

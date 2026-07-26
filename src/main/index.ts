@@ -13,6 +13,7 @@ import {
   Menu,
   shell
 } from 'electron'
+import { readFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import icon from '../../resources/icon.png?asset'
@@ -409,6 +410,17 @@ function registerIpc(): void {
   )
 
   ipcMain.handle('system:getVersion', () => app.getVersion())
+  ipcMain.handle('system:getReleaseNotes', async () => {
+    const path = app.isPackaged
+      ? join(process.resourcesPath, 'release-notes.md')
+      : join(app.getAppPath(), 'release-notes.md')
+    try {
+      return (await readFile(path, 'utf8')).trim()
+    } catch (error) {
+      console.error('读取更新日志失败，将使用空内容', error)
+      return ''
+    }
+  })
   ipcMain.handle('system:openExternal', (_event, url: string) => openExternalUrl(url))
   ipcMain.handle('system:revealFile', (_event, path: string) => shell.showItemInFolder(path))
   ipcMain.handle('system:writeClipboard', (_event, text: string) => clipboard.writeText(text))

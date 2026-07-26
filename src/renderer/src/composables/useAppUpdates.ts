@@ -5,6 +5,7 @@ import type { ConfirmationRequest } from './useConfirmation'
 
 export function useAppUpdates(requestConfirmation: (request: ConfirmationRequest) => void): {
   appVersion: Ref<string>
+  currentReleaseNotes: Ref<string>
   updateState: Ref<UpdateState>
   updateDescription: ComputedRef<string>
   updateButtonLabel: ComputedRef<string>
@@ -13,6 +14,7 @@ export function useAppUpdates(requestConfirmation: (request: ConfirmationRequest
   handleUpdateAction: () => Promise<void>
 } {
   const appVersion = ref('')
+  const currentReleaseNotes = ref('')
   const updateState = ref<UpdateState>({ status: 'idle' })
   const isMac = /macintosh|mac os x/i.test(navigator.userAgent)
   let promptedAvailableVersion = ''
@@ -46,19 +48,22 @@ export function useAppUpdates(requestConfirmation: (request: ConfirmationRequest
   })
 
   function requestAvailableUpdate(): void {
-    if (isMac) {
-      void window.ossBrowser.system.openExternal(
-        'https://github.com/yulin96/oss-browser/releases/latest'
-      )
-      return
-    }
     requestConfirmation({
       title: t('发现新版本'),
-      description: t('新版本 {version} 已发布，是否现在下载？', {
-        version: updateState.value.version || ''
-      }),
-      confirmLabel: t('下载更新'),
-      action: () => window.ossBrowser.updates.download()
+      description: t(
+        isMac
+          ? '发现新版本 {version}，请前往 GitHub 下载'
+          : '新版本 {version} 已发布，是否现在下载？',
+        { version: updateState.value.version || '' }
+      ),
+      details: updateState.value.releaseNotes,
+      confirmLabel: t(isMac ? '前往 GitHub' : '下载更新'),
+      action: () =>
+        isMac
+          ? window.ossBrowser.system.openExternal(
+              'https://github.com/yulin96/oss-browser/releases/latest'
+            )
+          : window.ossBrowser.updates.download()
     })
   }
 
@@ -85,7 +90,12 @@ export function useAppUpdates(requestConfirmation: (request: ConfirmationRequest
   }
 
   async function initializeUpdates(): Promise<void> {
-    appVersion.value = await window.ossBrowser.system.getVersion()
+    const [version, releaseNotes] = await Promise.all([
+      window.ossBrowser.system.getVersion(),
+      window.ossBrowser.system.getReleaseNotes()
+    ])
+    appVersion.value = version
+    currentReleaseNotes.value = releaseNotes
     removeUpdateListener = window.ossBrowser.onUpdate(handleUpdateState)
     updateState.value = await window.ossBrowser.updates.getState()
     handleUpdateState(updateState.value)
@@ -105,6 +115,7 @@ export function useAppUpdates(requestConfirmation: (request: ConfirmationRequest
 
   return {
     appVersion,
+    currentReleaseNotes,
     updateState,
     updateDescription,
     updateButtonLabel,

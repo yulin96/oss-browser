@@ -4,6 +4,7 @@ import { ref, shallowRef } from 'vue'
 export interface ConfirmationRequest {
   title: string
   description: string
+  details?: string
   confirmLabel: string
   destructive?: boolean
   action: () => void | Promise<void>

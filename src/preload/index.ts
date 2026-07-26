@@ -125,6 +125,7 @@ const api: OssBrowserApi = {
   system: {
     platform: process.platform as AppPlatform,
     getVersion: () => ipcRenderer.invoke('system:getVersion'),
+    getReleaseNotes: () => ipcRenderer.invoke('system:getReleaseNotes'),
     openExternal: (url) => ipcRenderer.invoke('system:openExternal', url),
     revealFile: (path) => ipcRenderer.invoke('system:revealFile', path),
     writeClipboard: (text) => ipcRenderer.invoke('system:writeClipboard', text)

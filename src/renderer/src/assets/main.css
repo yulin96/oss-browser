@@ -304,9 +304,17 @@ input[type='checkbox']:checked::after {
   font-size: 10px;
   font-weight: 650;
   line-height: 1.4;
+  cursor: pointer;
+  -webkit-app-region: no-drag;
 }
 .app-version.has-update {
   box-shadow: inset 0 0 0 1px rgba(245, 158, 11, 0.6);
+}
+.app-version:hover,
+.app-version:focus-visible {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.12);
+  outline: none;
 }
 .app-version i {
   position: absolute;
@@ -2521,6 +2529,38 @@ input[type='checkbox']:checked::after {
   border-radius: inherit;
   background: var(--primary);
   transition: width var(--duration-quick) var(--ease-linear);
+}
+.release-notes-version {
+  margin-bottom: 12px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 650;
+}
+.release-notes-content,
+.update-release-notes {
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  background: var(--background);
+  font-size: 13px;
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+.release-notes-content {
+  min-height: 180px;
+  max-height: min(420px, calc(100vh - 210px));
+  padding: 16px;
+}
+.release-notes-content.is-empty {
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+}
+.update-release-notes {
+  max-height: 220px;
+  padding: 12px 14px;
 }
 .theme-select-buttons {
   display: flex !important;

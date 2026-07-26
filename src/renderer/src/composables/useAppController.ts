@@ -73,6 +73,7 @@ export type ModalName =
   | 'cdn-credentials'
   | 'cache'
   | 'settings'
+  | 'release-notes'
   | null
 
 export interface CopyBuffer {
@@ -575,6 +576,7 @@ export function useAppController() {
 
   const {
     appVersion,
+    currentReleaseNotes,
     updateState,
     updateDescription,
     updateButtonLabel,
@@ -1972,6 +1974,7 @@ export function useAppController() {
     showFileLoading,
     fileLoadingTimer,
     appVersion,
+    currentReleaseNotes,
     updateState,
     updateDescription,
     updateButtonLabel,

@@ -52,6 +52,7 @@ const {
       :open="confirmationOpen"
       :title="confirmation?.title || ''"
       :description="confirmation?.description || ''"
+      :details="confirmation?.details"
       :confirm-label="confirmation?.confirmLabel || ''"
       :destructive="confirmation?.destructive"
       @update:open="!$event && closeConfirmation()"

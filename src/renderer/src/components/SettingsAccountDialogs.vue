@@ -20,6 +20,8 @@ const {
   settings,
   themeMode,
   favorites,
+  appVersion,
+  currentReleaseNotes,
   openFavorite,
   removeFavorite,
   updateState,
@@ -40,6 +42,20 @@ const {
 
 <template>
   <div class="contents">
+    <Transition name="modal" appear>
+      <ModalShell
+        v-if="modal === 'release-notes'"
+        :title="t('更新日志')"
+        width="560px"
+        @close="modal = null"
+      >
+        <div class="release-notes-version">OSS Browser v{{ appVersion }}</div>
+        <div class="release-notes-content" :class="{ 'is-empty': !currentReleaseNotes }">
+          {{ currentReleaseNotes || t('暂无更新日志') }}
+        </div>
+      </ModalShell>
+    </Transition>
+
     <Transition name="modal" appear>
       <ModalShell
         v-if="modal === 'favorites'"

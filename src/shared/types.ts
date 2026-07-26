@@ -239,6 +239,7 @@ export interface UpdateState {
   version?: string
   percent?: number
   message?: string
+  releaseNotes?: string
 }
 
 export interface MultipartUploadInfo {
@@ -363,6 +364,7 @@ export interface OssBrowserApi {
   system: {
     platform: AppPlatform
     getVersion: () => Promise<string>
+    getReleaseNotes: () => Promise<string>
     openExternal: (url: string) => Promise<void>
     revealFile: (path: string) => Promise<void>
     writeClipboard: (text: string) => Promise<void>

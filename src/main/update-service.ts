@@ -1,8 +1,19 @@
 import { app, BrowserWindow } from 'electron'
 import electronUpdater from 'electron-updater'
+import type { UpdateInfo } from 'electron-updater'
 import type { UpdateState } from '../shared/types'
 
 const { autoUpdater } = electronUpdater
+
+function getReleaseNotes(info: UpdateInfo): string | undefined {
+  if (typeof info.releaseNotes === 'string') return info.releaseNotes.trim() || undefined
+  if (!Array.isArray(info.releaseNotes)) return undefined
+  const notes = info.releaseNotes
+    .map((release) => release.note?.trim())
+    .filter((note): note is string => Boolean(note))
+    .join('\n\n')
+  return notes || undefined
+}
 
 export class UpdateService {
   private state: UpdateState = { status: 'idle' }
@@ -18,7 +29,11 @@ export class UpdateService {
 
     autoUpdater.on('checking-for-update', () => this.setState({ status: 'checking' }))
     autoUpdater.on('update-available', (info) =>
-      this.setState({ status: 'available', version: info.version })
+      this.setState({
+        status: 'available',
+        version: info.version,
+        releaseNotes: getReleaseNotes(info)
+      })
     )
     autoUpdater.on('update-not-available', (info) =>
       this.setState({ status: 'not-available', version: info.version })
@@ -27,11 +42,17 @@ export class UpdateService {
       this.setState({
         status: 'downloading',
         version: this.state.version,
-        percent: Math.round(progress.percent)
+        percent: Math.round(progress.percent),
+        releaseNotes: this.state.releaseNotes
       })
     )
     autoUpdater.on('update-downloaded', (info) =>
-      this.setState({ status: 'downloaded', version: info.version, percent: 100 })
+      this.setState({
+        status: 'downloaded',
+        version: info.version,
+        percent: 100,
+        releaseNotes: getReleaseNotes(info)
+      })
     )
     autoUpdater.on('error', (error) => this.setState({ status: 'error', message: error.message }))
 

@@ -13,6 +13,7 @@ defineProps<{
   open: boolean
   title: string
   description: string
+  details?: string
   confirmLabel: string
   destructive?: boolean
 }>()
@@ -34,6 +35,7 @@ const emit = defineEmits<{
         <AlertDialogTitle>{{ title }}</AlertDialogTitle>
         <AlertDialogDescription>{{ description }}</AlertDialogDescription>
       </AlertDialogHeader>
+      <div v-if="details" class="update-release-notes">{{ details }}</div>
       <AlertDialogFooter>
         <div
           class="inline-flex h-9 items-center justify-center rounded-md border border-(--border) px-4 text-sm font-medium hover:bg-background"

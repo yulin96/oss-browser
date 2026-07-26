@@ -31,6 +31,7 @@ const emit = defineEmits<{
   cacheRefresh: []
   transfers: []
   settings: []
+  releaseNotes: []
   logout: []
 }>()
 
@@ -44,7 +45,7 @@ function changeLocale(event: Event): void {
     <div class="top-brand">
       <div class="small-mark"><img :src="appIcon" alt="" /></div>
       <strong>OSS Browser</strong>
-      <span
+      <div
         v-if="appVersion"
         class="app-version"
         :class="{
@@ -52,9 +53,14 @@ function changeLocale(event: Event): void {
         }"
         :title="
           ['available', 'downloading', 'downloaded'].includes(updateStatus)
-            ? t('发现新版本')
-            : undefined
+            ? `${t('发现新版本')} · ${t('更新日志')}`
+            : t('更新日志')
         "
+        role="button"
+        tabindex="0"
+        @click="emit('releaseNotes')"
+        @keydown.enter="emit('releaseNotes')"
+        @keydown.space.prevent="emit('releaseNotes')"
       >
         v{{ appVersion }}
         <i
@@ -66,7 +72,7 @@ function changeLocale(event: Event): void {
         >
           <span class="t-badge-dot"></span>
         </i>
-      </span>
+      </div>
     </div>
     <div class="top-actions">
       <div class="language-picker top-language">
