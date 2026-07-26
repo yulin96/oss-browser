@@ -89,6 +89,9 @@ jobs:
       - name: Compile application
         run: pnpm exec electron-vite build
 
+      - name: Prepare release notes
+        run: pnpm release-notes:prepare
+
       - name: Package application
         env:
           OSS_UPDATE_URL: ${{ vars.OSS_UPDATE_URL }}
@@ -137,6 +140,12 @@ jobs:
           OSS_RELEASE_PREFIX: ${{ vars.OSS_RELEASE_PREFIX }}
         run: node scripts/upload-release-to-oss.mjs
 
+      - name: Prepare release notes
+        run: >-
+          node scripts/extract-release-notes.mjs
+          --version "${GITHUB_REF_NAME}"
+          --output .release/release-notes.md
+
       - name: Create release and upload files
         env:
           GH_TOKEN: ${{ github.token }}
@@ -145,5 +154,5 @@ jobs:
           release-assets/*
           --repo "${GITHUB_REPOSITORY}"
           --title "OSS Browser ${GITHUB_REF_NAME}"
-          --notes-file release-notes.md
+          --notes-file .release/release-notes.md
           --verify-tag

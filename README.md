@@ -77,9 +77,10 @@ The workflow in [`.github/workflows/release.yml`](.github/workflows/release.yml)
 - Linux x64 AppImage and DEB packages
 
 After every platform finishes successfully, the workflow creates a GitHub Release and uploads all packages to it.
-Before pushing a version tag, write that version's user-facing changes in
-[`release-notes.md`](release-notes.md). The file may be empty; the same content is used by the
-in-app update prompt, the packaged application's changelog, and the GitHub Release.
+Add user-facing changes to the `未发布` section at the top of
+[`release-notes.md`](release-notes.md). Before pushing a version tag, move those entries into a
+version section such as `## v0.6.0`, matching both `package.json` and the Git tag. The release
+workflow extracts only that version for the in-app changelog, update metadata, and GitHub Release.
 
 ### Signing notice
 

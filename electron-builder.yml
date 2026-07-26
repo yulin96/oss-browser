@@ -3,10 +3,10 @@ productName: OSS Browser
 directories:
   buildResources: build
 extraResources:
-  - from: release-notes.md
+  - from: .release/release-notes.md
     to: release-notes.md
 releaseInfo:
-  releaseNotesFile: release-notes.md
+  releaseNotesFile: .release/release-notes.md
 files:
   - '!**/.vscode/*'
   - '!src/*'

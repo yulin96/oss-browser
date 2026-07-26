@@ -28,6 +28,7 @@ import type {
   TransferItem,
   UploadOptions
 } from '../shared/types'
+import { extractVersionReleaseNotes } from '../shared/release-notes.mjs'
 import { OssService } from './oss-service'
 import { FloatingUploadManager } from './floating-upload-manager'
 import { FloatingUploadStore } from './floating-upload-store'
@@ -481,7 +482,15 @@ function registerIpc(): void {
       ? join(process.resourcesPath, 'release-notes.md')
       : join(app.getAppPath(), 'release-notes.md')
     try {
-      return (await readFile(path, 'utf8')).trim()
+      const content = (await readFile(path, 'utf8')).trim()
+      if (app.isPackaged) return content
+
+      const releaseNotes = extractVersionReleaseNotes(content, app.getVersion())
+      if (releaseNotes === undefined) {
+        console.error(`更新日志中缺少 v${app.getVersion()} 版本`)
+        return ''
+      }
+      return releaseNotes
     } catch (error) {
       console.error('读取更新日志失败，将使用空内容', error)
       return ''
