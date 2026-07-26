@@ -476,13 +476,17 @@ export function useFileBrowser(options: {
   }
 
   function getPendingImageAssets(item: ObjectInfo): { preview: boolean; dimensions: boolean } {
+    const isImage = /\.(png|jpe?g|gif|webp|bmp)$/i.test(item.name)
+    const isVideo = /\.(mp4|mov|mkv|webm|avi|m4v|flv|wmv|mpeg|mpg)$/i.test(item.name)
     return {
       preview:
         options.settings.showImagePreview &&
+        (isImage || isVideo) &&
         !thumbnailUrls[item.name] &&
         !failedThumbnailNames.value.has(item.name),
       dimensions:
         options.settings.showImageResolution &&
+        isImage &&
         !imageDimensions[item.name] &&
         !failedImageDimensionNames.has(item.name)
     }
@@ -495,7 +499,7 @@ export function useFileBrowser(options: {
   function requestImageAssets(item: ObjectInfo): void {
     if (
       item.isDirectory ||
-      !/\.(png|jpe?g|gif|webp|bmp)$/i.test(item.name) ||
+      !/\.(png|jpe?g|gif|webp|bmp|mp4|mov|mkv|webm|avi|m4v|flv|wmv|mpeg|mpg)$/i.test(item.name) ||
       !currentBucket.value ||
       pendingImageGenerations.get(item.name) === imageGeneration
     )
@@ -516,14 +520,12 @@ export function useFileBrowser(options: {
       const tasks: Array<Promise<void>> = []
       const pending = getPendingImageAssets(job.item)
       if (pending.preview) {
+        const process = /\.(mp4|mov|mkv|webm|avi|m4v|flv|wmv|mpeg|mpg)$/i.test(job.item.name)
+          ? 'video/snapshot,t_0,f_jpg,w_320,h_0,m_fast,ar_auto'
+          : 'image/resize,m_lfit,w_320,h_200/quality,q_80'
         tasks.push(
           window.ossBrowser.objects
-            .signedUrl(
-              job.bucketName,
-              job.item.name,
-              3600,
-              'image/resize,m_lfit,w_320,h_200/quality,q_80'
-            )
+            .signedUrl(job.bucketName, job.item.name, 3600, process)
             .then((url) => {
               if (!isCurrentImageJob(job)) return
               thumbnailUrls[job.item.name] = url

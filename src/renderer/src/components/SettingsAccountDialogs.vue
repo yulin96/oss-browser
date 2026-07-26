@@ -163,12 +163,12 @@ const {
         </div>
         <div class="setting-row">
           <div>
-            <strong>{{ t('图片缩略图') }}</strong
-            ><span>{{ t('在文件列表中显示图片预览') }}</span>
+            <strong>{{ t('媒体缩略图') }}</strong
+            ><span>{{ t('在文件列表中显示图片和视频预览') }}</span>
           </div>
           <label class="setting-switch">
             <span>{{ t('显示') }}</span>
-            <Switch v-model="settings.showImagePreview" :aria-label="t('图片缩略图')" />
+            <Switch v-model="settings.showImagePreview" :aria-label="t('媒体缩略图')" />
           </label>
         </div>
         <div class="setting-row">

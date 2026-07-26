@@ -498,7 +498,11 @@ export function useAppController() {
   const vThumbnail: Directive<HTMLElement, ObjectInfo> = {
     mounted(element, binding) {
       const item = binding.value
-      if (item.isDirectory || !/\.(png|jpe?g|gif|webp|bmp)$/i.test(item.name)) return
+      if (
+        item.isDirectory ||
+        !/\.(png|jpe?g|gif|webp|bmp|mp4|mov|mkv|webm|avi|m4v|flv|wmv|mpeg|mpg)$/i.test(item.name)
+      )
+        return
       const root = element.closest('.file-table, .object-grid-scroll')
       if (!root) return
       let state = thumbnailObserverRoots.get(root)
