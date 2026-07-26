@@ -7,7 +7,9 @@ import {
   ipcMain as electronIpcMain,
   net,
   protocol,
+  screen,
   type IpcMainInvokeEvent,
+  type Rectangle,
   Menu,
   shell
 } from 'electron'
@@ -31,6 +33,7 @@ import { FloatingUploadStore } from './floating-upload-store'
 import { ProfileStore } from './profile-store'
 import { UpdateService } from './update-service'
 import { assertTrustedIpcSender, configureRendererWindow, openExternalUrl } from './window-security'
+import { WindowStateStore, type WindowState } from './window-state-store'
 
 app.setPath('userData', join(app.getPath('appData'), is.dev ? 'oss-browser-dev' : 'oss-browser'))
 app.setName('OSS Browser')
@@ -50,6 +53,7 @@ const oss = new OssService((item: TransferItem) => {
 })
 const profiles = new ProfileStore()
 const floatingUploadStore = new FloatingUploadStore()
+const windowStateStore = new WindowStateStore()
 const updates = new UpdateService(() => mainWindow)
 let lastUploadDirectory: string | undefined
 let lastDownloadDirectory: string | undefined
@@ -64,7 +68,7 @@ const ipcMain = {
 
 function showMainWindow(): void {
   if (!mainWindow || mainWindow.isDestroyed()) {
-    createWindow()
+    void createWindow()
     return
   }
   if (mainWindow.isMinimized()) mainWindow.restore()
@@ -72,8 +76,14 @@ function showMainWindow(): void {
   mainWindow.focus()
 }
 
-function quitApplication(): void {
+async function quitApplication(): Promise<void> {
+  if (isQuitting) return
   isQuitting = true
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    await windowStateStore.save(mainWindow).catch((error) => {
+      console.error('保存窗口状态失败', error)
+    })
+  }
   app.quit()
 }
 
@@ -82,7 +92,7 @@ const floatingUpload = new FloatingUploadManager(
   floatingUploadStore,
   () => mainWindow,
   showMainWindow,
-  quitApplication
+  () => void quitApplication()
 )
 
 function registerLocalMediaProtocol(): void {
@@ -103,10 +113,54 @@ function registerLocalMediaProtocol(): void {
   })
 }
 
-function createWindow(): void {
+function intersectArea(first: Rectangle, second: Rectangle): number {
+  const width = Math.max(
+    0,
+    Math.min(first.x + first.width, second.x + second.width) - Math.max(first.x, second.x)
+  )
+  const height = Math.max(
+    0,
+    Math.min(first.y + first.height, second.y + second.height) - Math.max(first.y, second.y)
+  )
+  return width * height
+}
+
+function restoreBounds(stored?: Rectangle): Rectangle | undefined {
+  if (!stored) return undefined
+  const display = screen
+    .getAllDisplays()
+    .map((item) => ({ display: item, area: intersectArea(stored, item.workArea) }))
+    .sort((left, right) => right.area - left.area)[0]
+
+  const workArea = display?.area ? display.display.workArea : screen.getPrimaryDisplay().workArea
+  const width = Math.min(Math.max(stored.width, 1024), workArea.width)
+  const height = Math.min(Math.max(stored.height, 680), workArea.height)
+  const centeredX = workArea.x + Math.round((workArea.width - width) / 2)
+  const centeredY = workArea.y + Math.round((workArea.height - height) / 2)
+
+  return {
+    x: display?.area
+      ? Math.min(Math.max(stored.x, workArea.x), workArea.x + workArea.width - width)
+      : centeredX,
+    y: display?.area
+      ? Math.min(Math.max(stored.y, workArea.y), workArea.y + workArea.height - height)
+      : centeredY,
+    width,
+    height
+  }
+}
+
+async function createWindow(): Promise<void> {
+  let storedState: WindowState | undefined
+  try {
+    storedState = await windowStateStore.load()
+  } catch (error) {
+    console.error('读取窗口状态失败，将使用默认窗口状态', error)
+  }
+  const restoredBounds = restoreBounds(storedState?.bounds)
+
   mainWindow = new BrowserWindow({
-    width: 1280,
-    height: 800,
+    ...(restoredBounds || { width: 1280, height: 800 }),
     minWidth: 1024,
     minHeight: 680,
     show: false,
@@ -128,7 +182,10 @@ function createWindow(): void {
     mainWindow.setWindowButtonPosition({ x: 14, y: 19 })
   }
 
-  mainWindow.on('ready-to-show', () => mainWindow?.show())
+  mainWindow.on('ready-to-show', () => {
+    if (storedState?.maximized) mainWindow?.maximize()
+    mainWindow?.show()
+  })
   mainWindow.on('maximize', () => mainWindow?.webContents.send('window:maximize-change', true))
   mainWindow.on('unmaximize', () => mainWindow?.webContents.send('window:maximize-change', false))
   mainWindow.on('close', (event) => {
@@ -138,7 +195,7 @@ function createWindow(): void {
       mainWindow?.hide()
       return
     }
-    quitApplication()
+    void quitApplication()
   })
   mainWindow.on('closed', () => {
     mainWindow = null
@@ -378,17 +435,19 @@ app.on('second-instance', () => {
   showMainWindow()
 })
 
-app.on('before-quit', () => {
-  isQuitting = true
+app.on('before-quit', (event) => {
+  if (isQuitting) return
+  event.preventDefault()
+  void quitApplication()
 })
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   electronApp.setAppUserModelId('com.yulin96.ossbrowser')
   Menu.setApplicationMenu(null)
   app.on('browser-window-created', (_, window) => optimizer.watchWindowShortcuts(window))
   registerLocalMediaProtocol()
   registerIpc()
-  createWindow()
+  await createWindow()
   updates.initialize()
 
   app.on('activate', () => {
