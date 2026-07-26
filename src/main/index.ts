@@ -42,7 +42,13 @@ app.setName('OSS Browser')
 protocol.registerSchemesAsPrivileged([
   {
     scheme: 'oss-browser-media',
-    privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true }
+    privileges: {
+      standard: true,
+      secure: true,
+      supportFetchAPI: true,
+      stream: true,
+      corsEnabled: true
+    }
   }
 ])
 
@@ -96,21 +102,71 @@ const floatingUpload = new FloatingUploadManager(
   () => void quitApplication()
 )
 
-function registerLocalMediaProtocol(): void {
-  protocol.handle('oss-browser-media', (request) => {
+function withPreviewCors(response: Response): Response {
+  const headers = new Headers(response.headers)
+  headers.set('Access-Control-Allow-Origin', '*')
+  headers.set('Access-Control-Expose-Headers', 'Accept-Ranges, Content-Length, Content-Range')
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers
+  })
+}
+
+function registerMediaProtocol(): void {
+  protocol.handle('oss-browser-media', async (request) => {
     const url = new URL(request.url)
-    const token = url.hostname === 'upload' ? url.pathname.slice(1) : ''
-    const localPath =
-      token && !token.includes('/') ? oss.resolveLocalMediaPreview(token) : undefined
-    if (!localPath) return new Response(null, { status: 404 })
-    if (request.method !== 'GET' && request.method !== 'HEAD') {
-      return new Response(null, { status: 405 })
+    const token = url.pathname.slice(1)
+    if (!token || token.includes('/')) return new Response(null, { status: 404 })
+    if (request.method === 'OPTIONS') {
+      return new Response(null, {
+        status: 204,
+        headers: {
+          'Access-Control-Allow-Headers': 'Range',
+          'Access-Control-Allow-Methods': 'GET, HEAD, OPTIONS',
+          'Access-Control-Allow-Origin': '*'
+        }
+      })
     }
+    if (request.method !== 'GET' && request.method !== 'HEAD')
+      return new Response(null, { status: 405 })
+
+    if (url.hostname === 'upload') {
+      const localPath = oss.resolveLocalMediaPreview(token)
+      if (!localPath) return new Response(null, { status: 404 })
+      const range = request.headers.get('range')
+      return net.fetch(pathToFileURL(localPath).toString(), {
+        method: request.method,
+        headers: range ? { range } : undefined
+      })
+    }
+
+    if (url.hostname !== 'object') return new Response(null, { status: 404 })
+    const previewUrl = oss.resolveObjectPreview(token)
+    if (!previewUrl) return new Response(null, { status: 404 })
+
     const range = request.headers.get('range')
-    return net.fetch(pathToFileURL(localPath).toString(), {
-      method: request.method,
-      headers: range ? { range } : undefined
-    })
+    try {
+      if (request.method === 'HEAD') {
+        const response = await net.fetch(previewUrl, {
+          headers: { range: range || 'bytes=0-0' }
+        })
+        return withPreviewCors(
+          new Response(null, {
+            status: response.ok ? 200 : response.status,
+            headers: response.headers
+          })
+        )
+      }
+      return withPreviewCors(
+        await net.fetch(previewUrl, {
+          headers: range ? { range } : undefined
+        })
+      )
+    } catch (error) {
+      console.error('读取预览对象失败', error)
+      return withPreviewCors(new Response(null, { status: 502 }))
+    }
   })
 }
 
@@ -308,6 +364,16 @@ function registerIpc(): void {
     (_event, bucket: string, name: string, expires: number, process?: string) =>
       oss.signedUrl(bucket, name, expires, process)
   )
+  ipcMain.handle('objects:preparePreview', (_event, bucket: string, name: string) =>
+    oss.prepareObjectPreview(bucket, name)
+  )
+  ipcMain.handle('objects:discardPreview', (_event, value: string) => {
+    if (!URL.canParse(value)) return
+    const url = new URL(value)
+    const token = url.hostname === 'object' ? url.pathname.slice(1) : ''
+    if (url.protocol !== 'oss-browser-media:' || !token || token.includes('/')) return
+    oss.discardObjectPreview(token)
+  })
   ipcMain.handle('objects:imageDimensions', (_event, bucket: string, name: string) =>
     oss.getImageDimensions(bucket, name)
   )
@@ -457,7 +523,7 @@ app.whenReady().then(async () => {
   electronApp.setAppUserModelId('com.yulin96.ossbrowser')
   Menu.setApplicationMenu(null)
   app.on('browser-window-created', (_, window) => optimizer.watchWindowShortcuts(window))
-  registerLocalMediaProtocol()
+  registerMediaProtocol()
   registerIpc()
   await createWindow()
   updates.initialize()

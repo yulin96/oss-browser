@@ -109,6 +109,7 @@ export class OssService {
     { direction: TransferDirection; run: () => Promise<void> }
   >()
   private readonly localMediaPreviews = new Map<string, { localPath: string; expiresAt: number }>()
+  private readonly remoteObjectPreviews = new Map<string, { url: string; expiresAt: number }>()
   private readonly preparedUploads = new Map<string, PreparedUpload>()
   private readonly pausedDirections = new Set<TransferDirection>()
   private readonly pauseWaiters: Record<TransferDirection, Array<() => void>> = {
@@ -123,6 +124,7 @@ export class OssService {
   async connect(config: AuthConfig): Promise<BucketInfo[]> {
     this.resetActiveTransfers()
     this.preparedUploads.clear()
+    this.remoteObjectPreviews.clear()
     this.auth = config
     try {
       if (config.presetPath) {
@@ -152,6 +154,7 @@ export class OssService {
     this.auth = null
     this.bucketRegions.clear()
     this.preparedUploads.clear()
+    this.remoteObjectPreviews.clear()
   }
 
   setSecure(secure: boolean): void {
@@ -888,6 +891,29 @@ export class OssService {
 
   signedUrl(bucket: string, name: string, expires: number, process?: string): string {
     return this.bucketClient(bucket).signatureUrl(name, { expires, process })
+  }
+
+  prepareObjectPreview(bucket: string, name: string): string {
+    const token = randomUUID()
+    this.remoteObjectPreviews.set(token, {
+      url: this.bucketClient(bucket).signatureUrl(name, { expires: 900 }),
+      expiresAt: Date.now() + 15 * 60 * 1000
+    })
+    return `oss-browser-media://object/${token}`
+  }
+
+  resolveObjectPreview(token: string): string | undefined {
+    const preview = this.remoteObjectPreviews.get(token)
+    if (!preview) return undefined
+    if (preview.expiresAt <= Date.now()) {
+      this.remoteObjectPreviews.delete(token)
+      return undefined
+    }
+    return preview.url
+  }
+
+  discardObjectPreview(token: string): void {
+    this.remoteObjectPreviews.delete(token)
   }
 
   async getImageDimensions(bucket: string, name: string): Promise<ImageDimensions> {

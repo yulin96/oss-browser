@@ -156,6 +156,14 @@ export interface ImageDimensions {
   height: number
 }
 
+export interface ObjectPreviewDescriptor {
+  kind: import('./object-preview').ObjectPreviewKind
+  name: string
+  size: number
+  url?: string
+  language?: string
+}
+
 export interface UploadConflict {
   name: string
   displayName: string
@@ -308,6 +316,8 @@ export interface OssBrowserApi {
     setAcl: (bucket: string, name: string, acl: string) => Promise<void>
     setHeaders: (bucket: string, name: string, headers: Record<string, string>) => Promise<void>
     signedUrl: (bucket: string, name: string, expires: number, process?: string) => Promise<string>
+    preparePreview: (bucket: string, name: string) => Promise<string>
+    discardPreview: (url: string) => Promise<void>
     imageDimensions: (bucket: string, name: string) => Promise<ImageDimensions>
     readText: (bucket: string, name: string) => Promise<string>
     saveText: (bucket: string, name: string, content: string) => Promise<void>

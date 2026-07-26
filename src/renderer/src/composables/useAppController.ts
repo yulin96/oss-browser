@@ -35,8 +35,10 @@ import type {
   FloatingUploadState,
   FloatingUploadTarget,
   ObjectInfo,
+  ObjectPreviewDescriptor,
   SavedProfile
 } from '../../../shared/types'
+import { resolveObjectPreview } from '../../../shared/object-preview'
 import type { ObjectAction } from '../components/ObjectActionMenu.vue'
 import { useAppSettings } from './useAppSettings'
 import { useBucketOperations } from './useBucketOperations'
@@ -96,7 +98,7 @@ export function useAppController() {
     { pattern: /\.(ttf|otf|woff2?|eot)$/i, icon: FileType2, kind: 'font' },
     {
       pattern:
-        /\.(html?|css|scss|sass|less|js|jsx|mjs|cjs|ts|tsx|vue|svelte|java|go|rs|py|php|rb|swift|kt)$/i,
+        /\.(html?|css|scss|sass|less|js|jsx|mjs|cjs|ts|tsx|vue|svelte|c|h|cc|cpp|cxx|hh|hpp|hxx|cs|java|go|rs|py|php|rb|swift|kts?)$/i,
       icon: FileCode2,
       kind: 'code'
     },
@@ -150,6 +152,12 @@ export function useAppController() {
   })
   const previewUrl = ref('')
   const previewText = ref('')
+  const objectPreview = shallowRef<ObjectPreviewDescriptor | null>(null)
+  const previewLoading = ref(false)
+  const previewError = ref('')
+  const previewSaving = ref(false)
+  const previewSaved = ref(false)
+  const previewSaveError = ref('')
   const shareNeedsExpiry = ref(true)
   const sharePreparing = ref(false)
   const shareCopied = ref(false)
@@ -599,24 +607,19 @@ export function useAppController() {
   const pasteTargetExists = computed(() =>
     objects.value.some((item) => item.displayName === objectForm.target)
   )
-  const previewType = computed(() => {
-    const name = selectedObjects.value[0]?.name.toLowerCase() || ''
-    if (/\.(png|jpe?g|gif|webp|svg|bmp)$/.test(name)) return 'image'
-    if (/\.(mp4|webm|mov|m4v)$/.test(name)) return 'video'
-    if (/\.(mp3|wav|ogg|m4a)$/.test(name)) return 'audio'
-    if (/\.(pdf)$/.test(name)) return 'pdf'
-    if (/\.(docx?|xlsx?|pptx?)$/.test(name)) return 'document'
-    if (
-      /\.(txt|md|json|ya?ml|xml|csv|log|js|mjs|cjs|ts|tsx|jsx|vue|html?|css|scss|less|py|java|go|rs|sh|sql|ini|conf)$/.test(
-        name
-      )
-    )
-      return 'text'
-    return 'other'
+  const previewDefinition = computed(() =>
+    resolveObjectPreview(selectedObjects.value[0]?.name || '')
+  )
+  const previewType = computed(() => previewDefinition.value.kind)
+
+  watch(modal, (next, previous) => {
+    if (previous === 'preview' && next !== 'preview') releaseObjectPreview()
   })
 
   let toastTimer: ReturnType<typeof setTimeout> | undefined
   let shareCopyTimer: ReturnType<typeof setTimeout> | undefined
+  let previewSavedTimer: ReturnType<typeof setTimeout> | undefined
+  let previewGeneration = 0
   let dragDepth = 0
   const addressAccessCache = new Map<string, Promise<boolean>>()
   let domainOptionsBucket = ''
@@ -651,6 +654,7 @@ export function useAppController() {
   })
 
   onBeforeUnmount(() => {
+    releaseObjectPreview()
     disposeTransfers()
     disposeUpdates()
     disposeSettings()
@@ -664,6 +668,7 @@ export function useAppController() {
     window.removeEventListener('blur', resetDragState)
     if (toastTimer) clearTimeout(toastTimer)
     if (shareCopyTimer) clearTimeout(shareCopyTimer)
+    if (previewSavedTimer) clearTimeout(previewSavedTimer)
     if (fileLoadingTimer) clearTimeout(fileLoadingTimer)
   })
 
@@ -710,6 +715,7 @@ export function useAppController() {
   }
 
   function resetAccountRuntimeState(): void {
+    releaseObjectPreview()
     fileBrowser.reset()
     errorMessage.value = ''
     toastMessage.value = ''
@@ -1624,37 +1630,113 @@ export function useAppController() {
   async function openPreview(): Promise<void> {
     if (!currentBucket.value || selectedObjects.value.length !== 1) return
     const item = selectedObjects.value[0]
-    if (previewType.value === 'text') {
-      if (item.size > 5 * 1024 * 1024) {
-        errorMessage.value = t('文本预览最大支持 5 MB')
-        return
-      }
-      const content = await run(() =>
-        window.ossBrowser.objects.readText(currentBucket.value!.name, item.name)
-      )
-      if (content === undefined) return
-      previewText.value = content
+    releaseObjectPreview()
+    const definition = resolveObjectPreview(item.name)
+    const generation = ++previewGeneration
+    const descriptor: ObjectPreviewDescriptor = {
+      ...definition,
+      name: item.displayName,
+      size: item.size
     }
-    const url = await run(() =>
-      window.ossBrowser.objects.signedUrl(
-        currentBucket.value!.name,
-        item.name,
-        3600,
-        previewType.value === 'document' ? 'imm/previewdoc,copy_1' : undefined
-      )
-    )
-    if (!url) return
-    previewUrl.value = url
+    objectPreview.value = descriptor
+    previewText.value = ''
+    previewError.value = ''
+    previewSaving.value = false
+    previewSaved.value = false
+    previewSaveError.value = ''
+    previewLoading.value = true
     modal.value = 'preview'
+
+    try {
+      if (['markdown', 'json', 'yaml', 'csv', 'tsv', 'code', 'text'].includes(definition.kind)) {
+        if (item.size > 5 * 1024 * 1024) throw new Error(t('文本预览最大支持 5 MB'))
+        const content = await window.ossBrowser.objects.readText(
+          currentBucket.value.name,
+          item.name
+        )
+        if (generation !== previewGeneration) return
+        previewText.value = content
+      } else if (definition.kind === 'font') {
+        if (item.size > 50 * 1024 * 1024) throw new Error(t('字体预览最大支持 50 MB'))
+        const url = await window.ossBrowser.objects.preparePreview(
+          currentBucket.value.name,
+          item.name
+        )
+        if (generation !== previewGeneration) {
+          void window.ossBrowser.objects.discardPreview(url)
+          return
+        }
+        objectPreview.value = { ...descriptor, url }
+      } else if (definition.kind === 'pdf') {
+        const url = await window.ossBrowser.objects.preparePreview(
+          currentBucket.value.name,
+          item.name
+        )
+        if (generation !== previewGeneration) {
+          void window.ossBrowser.objects.discardPreview(url)
+          return
+        }
+        objectPreview.value = { ...descriptor, url }
+      } else {
+        const url = await window.ossBrowser.objects.signedUrl(
+          currentBucket.value.name,
+          item.name,
+          3600,
+          definition.kind === 'document' ? 'imm/previewdoc,copy_1' : undefined
+        )
+        if (generation !== previewGeneration) return
+        objectPreview.value = { ...descriptor, url }
+      }
+    } catch (reason) {
+      if (generation === previewGeneration)
+        previewError.value = reason instanceof Error ? reason.message : String(reason)
+    } finally {
+      if (generation === previewGeneration) previewLoading.value = false
+    }
   }
 
-  async function savePreviewText(): Promise<void> {
-    if (!currentBucket.value || selectedObjects.value.length !== 1) return
+  async function savePreviewText(content = previewText.value): Promise<void> {
+    if (
+      !currentBucket.value ||
+      selectedObjects.value.length !== 1 ||
+      !['text', 'code'].includes(objectPreview.value?.kind || '')
+    )
+      return
+    if (objectPreview.value?.kind === 'code') {
+      if (previewSaving.value || content === previewText.value) return
+      const generation = previewGeneration
+      previewSaving.value = true
+      previewSaved.value = false
+      previewSaveError.value = ''
+      if (previewSavedTimer) clearTimeout(previewSavedTimer)
+      try {
+        await window.ossBrowser.objects.saveText(
+          currentBucket.value.name,
+          selectedObjects.value[0].name,
+          content
+        )
+        if (generation !== previewGeneration) return
+        previewText.value = content
+        const size = new TextEncoder().encode(content).byteLength
+        selectedObjects.value[0].size = size
+        objectPreview.value = { ...objectPreview.value, size }
+        previewSaved.value = true
+        previewSavedTimer = setTimeout(() => {
+          previewSaved.value = false
+        }, 1800)
+      } catch (reason) {
+        if (generation === previewGeneration)
+          previewSaveError.value = reason instanceof Error ? reason.message : String(reason)
+      } finally {
+        if (generation === previewGeneration) previewSaving.value = false
+      }
+      return
+    }
     const done = await run(() =>
       window.ossBrowser.objects.saveText(
         currentBucket.value!.name,
         selectedObjects.value[0].name,
-        previewText.value
+        content
       )
     )
     if (done === undefined && errorMessage.value) return
@@ -1698,7 +1780,24 @@ export function useAppController() {
   }
 
   function openPreviewExternally(): Promise<void> {
-    return window.ossBrowser.system.openExternal(previewUrl.value)
+    return objectPreview.value?.url
+      ? window.ossBrowser.system.openExternal(objectPreview.value.url)
+      : Promise.resolve()
+  }
+
+  function releaseObjectPreview(): void {
+    previewGeneration += 1
+    const url = objectPreview.value?.url
+    if (url?.startsWith('oss-browser-media://object/')) {
+      void window.ossBrowser.objects.discardPreview(url)
+    }
+    objectPreview.value = null
+    previewLoading.value = false
+    previewError.value = ''
+    previewSaving.value = false
+    previewSaved.value = false
+    previewSaveError.value = ''
+    if (previewSavedTimer) clearTimeout(previewSavedTimer)
   }
 
   function clearSavedProfile(): void {
@@ -1843,6 +1942,12 @@ export function useAppController() {
     floatingUploadState,
     previewUrl,
     previewText,
+    objectPreview,
+    previewLoading,
+    previewError,
+    previewSaving,
+    previewSaved,
+    previewSaveError,
     shareNeedsExpiry,
     sharePreparing,
     shareCopied,

@@ -15,10 +15,35 @@ import type { AuthConfig, ObjectInfo } from '../src/shared/types'
 interface OssClientStub {
   list: ReturnType<typeof vi.fn>
   copy: ReturnType<typeof vi.fn>
+  signatureUrl?: ReturnType<typeof vi.fn>
   put?: ReturnType<typeof vi.fn>
   putStream?: ReturnType<typeof vi.fn>
   cancel?: ReturnType<typeof vi.fn>
 }
+
+describe('OssService object previews', () => {
+  it('uses an opaque expiring token instead of exposing the signed object URL', () => {
+    const service = new OssService(vi.fn())
+    const client = {
+      list: vi.fn(),
+      copy: vi.fn(),
+      signatureUrl: vi.fn().mockReturnValue('https://bucket.example/private.pdf?signature=secret')
+    }
+    useClients(service, { bucket: client })
+
+    const previewUrl = service.prepareObjectPreview('bucket', 'private.pdf')
+    const token = new URL(previewUrl).pathname.slice(1)
+
+    expect(previewUrl).toMatch(/^oss-browser-media:\/\/object\/[0-9a-f-]+$/)
+    expect(previewUrl).not.toContain('private.pdf')
+    expect(service.resolveObjectPreview(token)).toBe(
+      'https://bucket.example/private.pdf?signature=secret'
+    )
+
+    service.discardObjectPreview(token)
+    expect(service.resolveObjectPreview(token)).toBeUndefined()
+  })
+})
 
 interface CdnClientStub {
   describeUserDomains: ReturnType<typeof vi.fn>

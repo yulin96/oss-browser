@@ -1,15 +1,27 @@
 <script setup lang="ts">
-import { CircleCheck, Copy, RefreshCw } from '@lucide/vue'
+import { ref, watch } from 'vue'
+import { CircleCheck, Copy, LoaderCircle, RefreshCw, TriangleAlert } from '@lucide/vue'
+import type { ObjectPreviewKind } from '../../../shared/object-preview'
 import type { AppController } from '../composables/useAppController'
 import { t } from '../i18n'
 import AppButton from './AppButton.vue'
 import ModalShell from './ModalShell.vue'
+import CodePreview from './previews/CodePreview.vue'
+import FontPreview from './previews/FontPreview.vue'
+import PdfPreview from './previews/PdfPreview.vue'
+import StructuredTextPreview from './previews/StructuredTextPreview.vue'
 
 const props = defineProps<{ controller: AppController }>()
 const {
   modal,
   previewUrl,
   previewText,
+  objectPreview,
+  previewLoading,
+  previewError,
+  previewSaving,
+  previewSaved,
+  previewSaveError,
   shareNeedsExpiry,
   sharePreparing,
   shareCopied,
@@ -37,9 +49,20 @@ const {
   updateAddressDomain,
   toggleMediaProcess,
   copyShareUrl,
+  openPreview,
   savePreviewText,
   openPreviewExternally
 } = props.controller
+
+const mediaError = ref('')
+
+watch(objectPreview, () => {
+  mediaError.value = ''
+})
+
+function structuredFormat(kind: ObjectPreviewKind): 'markdown' | 'json' | 'yaml' | 'csv' | 'tsv' {
+  return kind as 'markdown' | 'json' | 'yaml' | 'csv' | 'tsv'
+}
 
 function cacheTaskStatusLabel(status: string): string {
   const labels: Record<string, string> = {
@@ -290,33 +313,86 @@ function cacheTaskStatusClass(status: string): string {
       <ModalShell
         v-if="modal === 'preview'"
         :title="t('预览：{name}', { name: selectedObjects[0]?.displayName || '' })"
-        width="800px"
+        width="960px"
         @close="modal = null"
       >
-        <div class="preview-area">
-          <img v-if="previewType === 'image'" :src="previewUrl" />
-          <video v-else-if="previewType === 'video'" :src="previewUrl" controls autoplay />
-          <audio v-else-if="previewType === 'audio'" :src="previewUrl" controls autoplay />
-          <iframe
-            v-else-if="previewType === 'pdf' || previewType === 'document'"
-            :src="previewUrl"
-            sandbox="allow-downloads allow-forms allow-scripts"
-            referrerpolicy="no-referrer"
-          />
-          <div v-else-if="previewType === 'text'" class="text-preview">
-            <textarea v-model="previewText" spellcheck="false" />
-            <div class="text-preview-actions">
-              <AppButton :label="t('保存修改')" tone="primary" @click="savePreviewText" />
-            </div>
+        <div class="preview-area" :class="objectPreview?.kind">
+          <div v-if="previewLoading" class="preview-status">
+            <LoaderCircle class="spin" :size="28" />
+            <span>{{ t('正在准备预览…') }}</span>
           </div>
-          <div v-else class="preview-unknown">
-            <span>{{ t('该格式暂不支持直接预览') }}</span
-            ><AppButton
-              :label="t('在浏览器中打开')"
-              tone="primary"
-              @click="openPreviewExternally"
+          <div v-else-if="previewError || mediaError" class="preview-status is-error">
+            <TriangleAlert :size="30" />
+            <strong>{{ t('无法预览此文件') }}</strong>
+            <span>{{ previewError || mediaError }}</span>
+            <AppButton :label="t('重试')" @click="openPreview" />
+          </div>
+          <template v-else-if="objectPreview">
+            <img
+              v-if="objectPreview.kind === 'image'"
+              :src="objectPreview.url"
+              @error="mediaError = t('图片加载失败')"
             />
-          </div>
+            <video
+              v-else-if="objectPreview.kind === 'video'"
+              :src="objectPreview.url"
+              controls
+              autoplay
+              @error="mediaError = t('当前视频编码无法播放或文件无法读取')"
+            />
+            <audio
+              v-else-if="objectPreview.kind === 'audio'"
+              :src="objectPreview.url"
+              controls
+              autoplay
+              @error="mediaError = t('当前音频编码无法播放或文件无法读取')"
+            />
+            <PdfPreview
+              v-else-if="objectPreview.kind === 'pdf' && objectPreview.url"
+              :url="objectPreview.url"
+            />
+            <FontPreview
+              v-else-if="objectPreview.kind === 'font' && objectPreview.url"
+              :url="objectPreview.url"
+              :name="objectPreview.name"
+              :size="objectPreview.size"
+            />
+            <StructuredTextPreview
+              v-else-if="['markdown', 'json', 'yaml', 'csv', 'tsv'].includes(objectPreview.kind)"
+              :content="previewText"
+              :format="structuredFormat(objectPreview.kind)"
+            />
+            <CodePreview
+              v-else-if="objectPreview.kind === 'code'"
+              :content="previewText"
+              :language="objectPreview.language"
+              editable
+              :saving="previewSaving"
+              :saved="previewSaved"
+              :save-error="previewSaveError"
+              @save="savePreviewText"
+            />
+            <iframe
+              v-else-if="objectPreview.kind === 'document'"
+              :src="objectPreview.url"
+              sandbox="allow-downloads allow-forms allow-scripts"
+              referrerpolicy="no-referrer"
+            />
+            <div v-else-if="objectPreview.kind === 'text'" class="text-preview">
+              <textarea v-model="previewText" spellcheck="false" />
+              <div class="text-preview-actions">
+                <AppButton :label="t('保存修改')" tone="primary" @click="savePreviewText()" />
+              </div>
+            </div>
+            <div v-else class="preview-unknown">
+              <span>{{ t('该格式暂不支持直接预览') }}</span
+              ><AppButton
+                :label="t('在浏览器中打开')"
+                tone="primary"
+                @click="openPreviewExternally"
+              />
+            </div>
+          </template>
         </div>
       </ModalShell>
     </Transition>
