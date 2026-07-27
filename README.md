@@ -78,9 +78,19 @@ The workflow in [`.github/workflows/release.yml`](.github/workflows/release.yml)
 
 After every platform finishes successfully, the workflow creates a GitHub Release and uploads all packages to it.
 Add user-facing changes to the `未发布` section at the top of
-[`release-notes.md`](release-notes.md). Before pushing a version tag, move those entries into a
-version section such as `## v0.6.0`, matching both `package.json` and the Git tag. The release
-workflow extracts only that version for the in-app changelog, update metadata, and GitHub Release.
+[`release-notes.md`](release-notes.md), then publish with one of:
+
+```bash
+pnpm release patch
+pnpm release minor
+pnpm release major
+pnpm release 0.6.0
+```
+
+The command updates `package.json`, archives the `未发布` section (including when it is empty), runs
+type checking, lint, and tests, commits the version, creates an annotated tag, and atomically pushes
+the `main` branch and tag. The release workflow extracts only that version for the in-app changelog,
+update metadata, and GitHub Release.
 
 ### Signing notice
 
