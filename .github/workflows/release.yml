@@ -26,8 +26,6 @@ jobs:
             artifact: release-macos
             files: |
               dist/*.dmg
-              dist/*.zip
-              dist/latest-mac.yml
           - name: Windows
             os: windows-latest
             command: pnpm exec electron-builder --win nsis zip --x64 --publish never
@@ -130,7 +128,7 @@ jobs:
           path: release-assets
           merge-multiple: true
 
-      - name: Upload update files to OSS
+      - name: Upload packages to OSS
         env:
           OSS_ACCESS_KEY_ID: ${{ secrets.OSS_ACCESS_KEY_ID }}
           OSS_ACCESS_KEY_SECRET: ${{ secrets.OSS_ACCESS_KEY_SECRET }}
@@ -138,7 +136,7 @@ jobs:
           OSS_REGION: ${{ vars.OSS_REGION }}
           OSS_ENDPOINT: ${{ vars.OSS_ENDPOINT }}
           OSS_RELEASE_PREFIX: ${{ vars.OSS_RELEASE_PREFIX }}
-        run: node scripts/upload-release-to-oss.mjs
+        run: node scripts/upload-release-to-oss.mjs --packages-only
 
       - name: Prepare release notes
         run: >-
@@ -147,12 +145,34 @@ jobs:
           --output .release/release-notes.md
 
       - name: Create release and upload files
+        shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-        run: >-
-          gh release create "${GITHUB_REF_NAME}"
-          release-assets/*
-          --repo "${GITHUB_REPOSITORY}"
-          --title "OSS Browser ${GITHUB_REF_NAME}"
-          --notes-file .release/release-notes.md
-          --verify-tag
+        run: |
+          mapfile -d '' ASSETS < <(find release-assets -type f -print0)
+          if gh release view "${GITHUB_REF_NAME}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+            gh release upload "${GITHUB_REF_NAME}" "${ASSETS[@]}" \
+              --repo "${GITHUB_REPOSITORY}" \
+              --clobber
+            gh release edit "${GITHUB_REF_NAME}" \
+              --repo "${GITHUB_REPOSITORY}" \
+              --title "OSS Browser ${GITHUB_REF_NAME}" \
+              --notes-file .release/release-notes.md
+          else
+            gh release create "${GITHUB_REF_NAME}" \
+              "${ASSETS[@]}" \
+              --repo "${GITHUB_REPOSITORY}" \
+              --title "OSS Browser ${GITHUB_REF_NAME}" \
+              --notes-file .release/release-notes.md \
+              --verify-tag
+          fi
+
+      - name: Publish update manifests to OSS
+        env:
+          OSS_ACCESS_KEY_ID: ${{ secrets.OSS_ACCESS_KEY_ID }}
+          OSS_ACCESS_KEY_SECRET: ${{ secrets.OSS_ACCESS_KEY_SECRET }}
+          OSS_BUCKET: ${{ vars.OSS_BUCKET }}
+          OSS_REGION: ${{ vars.OSS_REGION }}
+          OSS_ENDPOINT: ${{ vars.OSS_ENDPOINT }}
+          OSS_RELEASE_PREFIX: ${{ vars.OSS_RELEASE_PREFIX }}
+        run: node scripts/upload-release-to-oss.mjs --manifests-only
