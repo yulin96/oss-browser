@@ -81,9 +81,9 @@ Add user-facing changes to the `未发布` section at the top of
 [`release-notes.md`](release-notes.md), then publish with one of:
 
 ```bash
-pnpm release patch
-pnpm release minor
-pnpm release major
+pnpm release:patch
+pnpm release:minor
+pnpm release:major
 pnpm release 0.6.0
 ```
 

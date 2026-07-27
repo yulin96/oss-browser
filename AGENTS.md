@@ -43,7 +43,7 @@ Repository: <https://github.com/yulin96/oss-browser>
 - The Git tag must match the `package.json` version with a leading `v`.
 - Keep `.github/workflows/release.yml` capable of producing macOS ARM64/x64, Windows x64, and Linux x64 packages.
 - On macOS, check for updates in the app but direct users to GitHub Releases for downloads. Do not download or install updates in the app.
-- Keep `release-notes.md` as the versioned user-facing changelog, with `## 未发布` at the top. Update that section in the same change whenever functionality, UI, behavior, compatibility, or a user-visible bug fix changes. Publish with `pnpm release <patch|minor|major|X.Y.Z>`; it archives the section, including when empty, updates `package.json`, validates, commits, tags, and pushes. Release automation extracts only that version. Do not add test-only, formatting, refactoring, or internal build details.
+- Keep `release-notes.md` as the versioned user-facing changelog, with `## 未发布` at the top. Update that section in the same change whenever functionality, UI, behavior, compatibility, or a user-visible bug fix changes. Publish with `pnpm release:patch`, `pnpm release:minor`, `pnpm release:major`, or `pnpm release X.Y.Z`; it archives the section, including when empty, updates `package.json`, validates, commits, tags, and pushes. Release automation extracts only that version. Do not add test-only, formatting, refactoring, or internal build details.
 - Do not commit generated `dist` packages to the repository.
 - Treat Apple signing, notarization, and Windows signing credentials as GitHub secrets. Never commit signing credentials.
 
