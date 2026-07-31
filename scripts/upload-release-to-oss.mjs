@@ -1,6 +1,6 @@
 import OSS from 'ali-oss'
 import { readdir } from 'node:fs/promises'
-import { join, relative } from 'node:path'
+import { basename, join, relative } from 'node:path'
 
 const required = [
   'OSS_ACCESS_KEY_ID',
@@ -30,6 +30,7 @@ const files = entries
   .map((entry) => join(entry.parentPath, entry.name))
 const manifests = files.filter((file) => /latest.*\.ya?ml$/.test(file))
 const packages = files.filter((file) => !manifests.includes(file))
+const requiredManifests = ['latest.yml', 'latest-mac.yml', 'latest-linux.yml']
 const prefix = process.env.OSS_RELEASE_PREFIX.replace(/^\/+|\/+$/g, '')
 const mode = process.argv[2] ?? '--all'
 const selectedFiles =
@@ -48,6 +49,13 @@ if (!selectedFiles) {
 }
 if (selectedFiles.length === 0) {
   throw new Error(`No release files matched ${mode}`)
+}
+if (mode !== '--packages-only') {
+  const manifestNames = new Set(manifests.map((file) => basename(file)))
+  const missingManifests = requiredManifests.filter((name) => !manifestNames.has(name))
+  if (missingManifests.length) {
+    throw new Error(`Missing update manifests: ${missingManifests.join(', ')}`)
+  }
 }
 
 for (const file of selectedFiles) {
