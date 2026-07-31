@@ -13,13 +13,14 @@ import {
   FileType2,
   FolderPlus,
   FolderUp,
-  Group,
   LayoutGrid,
   List,
+  ListTree,
   Search,
   Square,
   SquareCheck,
   Upload,
+  Ungroup,
   Weight,
   X
 } from '@lucide/vue'
@@ -119,13 +120,13 @@ const {
     <div class="more-actions sort-actions group">
       <div class="sort-trigger" role="button" tabindex="0" :aria-label="t('分组方式')">
         <CalendarDays v-if="groupMode === 'day'" :size="17" />
-        <Group v-else :size="17" />
+        <ListTree v-else :size="17" />
       </div>
       <div
         class="more-menu sort-menu group-menu invisible pointer-events-none opacity-0 group-hover:visible group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:visible group-focus-within:pointer-events-auto group-focus-within:opacity-100"
       >
         <div :class="{ active: groupMode === 'none' }" @click="setGroupMode('none')">
-          <Group :size="15" />{{ t('不分组')
+          <Ungroup :size="15" />{{ t('不分组')
           }}<Check v-if="groupMode === 'none'" class="sort-check" :size="14" />
         </div>
         <div :class="{ active: groupMode === 'day' }" @click="setGroupMode('day')">
