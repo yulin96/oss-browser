@@ -2,6 +2,7 @@
 import {
   ArrowDownWideNarrow,
   ArrowUpNarrowWide,
+  CalendarDays,
   CalendarClock,
   CaseSensitive,
   Check,
@@ -12,6 +13,7 @@ import {
   FileType2,
   FolderPlus,
   FolderUp,
+  Group,
   LayoutGrid,
   List,
   Search,
@@ -35,11 +37,13 @@ const {
   viewMode,
   sortField,
   sortDirection,
+  groupMode,
   selectedObjects,
   filteredObjects,
   pageCounts,
   setSortField,
   setSortDirection,
+  setGroupMode,
   setViewMode,
   toggleAll,
   canPaste,
@@ -111,6 +115,24 @@ const {
     </div>
     <div class="search-wrap toolbar-search">
       <Search :size="15" /><input v-model="searchText" :placeholder="t('搜索当前目录')" />
+    </div>
+    <div class="more-actions sort-actions group">
+      <div class="sort-trigger" role="button" tabindex="0" :aria-label="t('分组方式')">
+        <CalendarDays v-if="groupMode === 'day'" :size="17" />
+        <Group v-else :size="17" />
+      </div>
+      <div
+        class="more-menu sort-menu group-menu invisible pointer-events-none opacity-0 group-hover:visible group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:visible group-focus-within:pointer-events-auto group-focus-within:opacity-100"
+      >
+        <div :class="{ active: groupMode === 'none' }" @click="setGroupMode('none')">
+          <Group :size="15" />{{ t('不分组')
+          }}<Check v-if="groupMode === 'none'" class="sort-check" :size="14" />
+        </div>
+        <div :class="{ active: groupMode === 'day' }" @click="setGroupMode('day')">
+          <CalendarDays :size="15" />{{ t('按天分组')
+          }}<Check v-if="groupMode === 'day'" class="sort-check" :size="14" />
+        </div>
+      </div>
     </div>
     <div class="more-actions sort-actions group">
       <div class="sort-trigger" role="button" tabindex="0" :aria-label="t('排序字段')">

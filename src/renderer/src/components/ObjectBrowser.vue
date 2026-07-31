@@ -1,8 +1,9 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import { Folder, FolderPlus, Home, LoaderCircle, Star, Upload, X } from '@lucide/vue'
 import type { ObjectInfo } from '../../../shared/types'
 import type { AppController } from '../composables/useAppController'
-import { storageClassLabel, t } from '../i18n'
+import { locale, storageClassLabel, t } from '../i18n'
 import AppButton from './AppButton.vue'
 import AppTooltip from './AppTooltip.vue'
 
@@ -20,6 +21,7 @@ const {
   selectedNames,
   searchText,
   viewMode,
+  groupMode,
   thumbnailUrls,
   imageDimensions,
   failedThumbnailNames,
@@ -39,6 +41,62 @@ const {
   isFavoriteDirectory,
   isHomeDirectory
 } = props.controller
+
+interface ObjectGroup {
+  key: string
+  label: string
+  items: ObjectInfo[]
+}
+
+const objectGroups = computed<ObjectGroup[]>(() => {
+  if (groupMode.value === 'none') {
+    return [{ key: 'all', label: '', items: filteredObjects.value }]
+  }
+
+  const directories: ObjectInfo[] = []
+  const withoutDate: ObjectInfo[] = []
+  const days = new Map<number, ObjectInfo[]>()
+
+  for (const item of filteredObjects.value) {
+    if (item.isDirectory) {
+      directories.push(item)
+      continue
+    }
+
+    const modified = item.lastModified ? new Date(item.lastModified) : null
+    if (!modified || Number.isNaN(modified.getTime())) {
+      withoutDate.push(item)
+      continue
+    }
+
+    modified.setHours(0, 0, 0, 0)
+    const timestamp = modified.getTime()
+    const items = days.get(timestamp)
+    if (items) items.push(item)
+    else days.set(timestamp, [item])
+  }
+
+  const groups: ObjectGroup[] = []
+  if (directories.length) {
+    groups.push({ key: 'directories', label: t('文件夹'), items: directories })
+  }
+  for (const [timestamp, items] of [...days.entries()].sort(([left], [right]) => right - left)) {
+    groups.push({
+      key: `day-${timestamp}`,
+      label: new Intl.DateTimeFormat(locale.value, {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+        weekday: 'short'
+      }).format(timestamp),
+      items
+    })
+  }
+  if (withoutDate.length) {
+    groups.push({ key: 'without-date', label: t('无日期'), items: withoutDate })
+  }
+  return groups
+})
 
 function fileNameParts(item: ObjectInfo): {
   start: string
@@ -94,66 +152,72 @@ function fileNameParts(item: ObjectInfo): {
         <div>{{ t('存储类型') }}</div>
         <div>{{ t('更新时间') }}</div>
       </div>
-      <div
-        v-for="item in filteredObjects"
-        :key="item.name"
-        class="table-row"
-        :class="{
-          selected: selectedNames.has(item.name),
-          'favorite-location': isFavoriteDirectory(item),
-          'home-location': isHomeDirectory(item)
-        }"
-        @click="toggleSelection(item)"
-        @contextmenu="openContextMenu($event, item)"
-      >
-        <div @click.stop>
-          <input
-            type="checkbox"
-            :checked="selectedNames.has(item.name)"
-            @change="toggleSelection(item)"
-          />
+      <template v-for="group in objectGroups" :key="group.key">
+        <div v-if="groupMode === 'day'" class="object-group-heading table-group-heading">
+          <strong>{{ group.label }}</strong>
+          <span>{{ t('{count} 个对象', { count: group.items.length }) }}</span>
         </div>
-        <div class="file-name">
-          <span class="file-icon" :class="getObjectVisual(item).kind">
-            <span v-thumbnail="item" class="thumbnail-observer-target" />
-            <img
-              v-if="thumbnailUrls[item.name] && !failedThumbnailNames.has(item.name)"
-              :src="thumbnailUrls[item.name]"
-              loading="lazy"
-              @error="markThumbnailFailed(item.name)"
+        <div
+          v-for="item in group.items"
+          :key="item.name"
+          class="table-row"
+          :class="{
+            selected: selectedNames.has(item.name),
+            'favorite-location': isFavoriteDirectory(item),
+            'home-location': isHomeDirectory(item)
+          }"
+          @click="toggleSelection(item)"
+          @contextmenu="openContextMenu($event, item)"
+        >
+          <div @click.stop>
+            <input
+              type="checkbox"
+              :checked="selectedNames.has(item.name)"
+              @change="toggleSelection(item)"
             />
-            <component :is="getObjectVisual(item).icon" v-else :size="18" /> </span
-          ><span
-            class="file-name-label"
-            role="button"
-            tabindex="0"
-            @click.stop="openItem(item)"
-            @keydown.enter.stop="openItem(item)"
-            >{{ item.displayName }}</span
-          >
-          <span v-if="isFavoriteDirectory(item) || isHomeDirectory(item)" class="location-tags">
-            <span v-if="isFavoriteDirectory(item)" class="location-tag favorite">
-              <Star :size="11" fill="currentColor" />{{ t('收藏') }}
+          </div>
+          <div class="file-name">
+            <span class="file-icon" :class="getObjectVisual(item).kind">
+              <span v-thumbnail="item" class="thumbnail-observer-target" />
+              <img
+                v-if="thumbnailUrls[item.name] && !failedThumbnailNames.has(item.name)"
+                :src="thumbnailUrls[item.name]"
+                loading="lazy"
+                @error="markThumbnailFailed(item.name)"
+              />
+              <component :is="getObjectVisual(item).icon" v-else :size="18" /> </span
+            ><span
+              class="file-name-label"
+              role="button"
+              tabindex="0"
+              @click.stop="openItem(item)"
+              @keydown.enter.stop="openItem(item)"
+              >{{ item.displayName }}</span
+            >
+            <span v-if="isFavoriteDirectory(item) || isHomeDirectory(item)" class="location-tags">
+              <span v-if="isFavoriteDirectory(item)" class="location-tag favorite">
+                <Star :size="11" fill="currentColor" />{{ t('收藏') }}
+              </span>
+              <span v-if="isHomeDirectory(item)" class="location-tag home">
+                <Home :size="11" />{{ t('首页') }}
+              </span>
             </span>
-            <span v-if="isHomeDirectory(item)" class="location-tag home">
-              <Home :size="11" />{{ t('首页') }}
+          </div>
+          <div class="object-size-metadata">
+            <span>{{ item.isDirectory ? '—' : formatSize(item.size) }}</span>
+            <span
+              v-if="settings.showImageResolution && imageDimensions[item.name]"
+              class="image-resolution"
+            >
+              {{ imageDimensions[item.name].width }}×{{ imageDimensions[item.name].height }}
             </span>
-          </span>
+          </div>
+          <div>{{ storageClassLabel(item.storageClass) }}</div>
+          <div>
+            {{ item.lastModified ? new Date(item.lastModified).toLocaleString() : '—' }}
+          </div>
         </div>
-        <div class="object-size-metadata">
-          <span>{{ item.isDirectory ? '—' : formatSize(item.size) }}</span>
-          <span
-            v-if="settings.showImageResolution && imageDimensions[item.name]"
-            class="image-resolution"
-          >
-            {{ imageDimensions[item.name].width }}×{{ imageDimensions[item.name].height }}
-          </span>
-        </div>
-        <div>{{ storageClassLabel(item.storageClass) }}</div>
-        <div>
-          {{ item.lastModified ? new Date(item.lastModified).toLocaleString() : '—' }}
-        </div>
-      </div>
+      </template>
       <div v-if="!filteredObjects.length && !fileBrowser.loading.value" class="empty-state">
         <div class="empty-icon"><Folder :size="42" /></div>
         <strong>{{ t('当前目录为空') }}</strong>
@@ -184,75 +248,85 @@ function fileNameParts(item: ObjectInfo): {
       </div>
     </div>
     <div v-else key="grid" class="object-grid-scroll" @click="handleBlankClick">
-      <div v-if="filteredObjects.length" class="object-grid">
-        <div
-          v-for="item in filteredObjects"
-          :key="item.name"
-          class="object-card"
-          :class="{
-            selected: selectedNames.has(item.name),
-            'favorite-location': isFavoriteDirectory(item),
-            'home-location': isHomeDirectory(item)
-          }"
-          role="button"
-          tabindex="0"
-          @click="openItem(item)"
-          @keydown.enter="openItem(item)"
-          @keydown.space.prevent="openItem(item)"
-          @contextmenu="openContextMenu($event, item)"
-        >
-          <div class="object-card-check" @click.stop="toggleSelection(item)">
-            <input type="checkbox" :checked="selectedNames.has(item.name)" />
+      <div v-if="filteredObjects.length" class="object-groups">
+        <section v-for="group in objectGroups" :key="group.key" class="object-group">
+          <div v-if="groupMode === 'day'" class="object-group-heading">
+            <strong>{{ group.label }}</strong>
+            <span>{{ t('{count} 个对象', { count: group.items.length }) }}</span>
           </div>
-          <div class="object-preview" :class="getObjectVisual(item).kind">
-            <span v-thumbnail="item" class="thumbnail-observer-target" />
-            <img
-              v-if="thumbnailUrls[item.name] && !failedThumbnailNames.has(item.name)"
-              :src="thumbnailUrls[item.name]"
-              :alt="item.displayName"
-              loading="lazy"
-              @error="markThumbnailFailed(item.name)"
-            />
-            <component :is="getObjectVisual(item).icon" v-else :size="44" />
-          </div>
-          <div class="object-info">
-            <strong class="object-grid-name" :title="item.displayName">
-              <span class="object-grid-name-start">{{ fileNameParts(item).start }}</span>
-              <span class="object-grid-name-end">{{ fileNameParts(item).end }}</span>
-            </strong>
-            <span
-              class="object-grid-metadata"
+          <div class="object-grid">
+            <div
+              v-for="item in group.items"
+              :key="item.name"
+              class="object-card"
               :class="{
-                'has-resolution': settings.showImageResolution && imageDimensions[item.name]
+                selected: selectedNames.has(item.name),
+                'favorite-location': isFavoriteDirectory(item),
+                'home-location': isHomeDirectory(item)
               }"
+              role="button"
+              tabindex="0"
+              @click="openItem(item)"
+              @keydown.enter="openItem(item)"
+              @keydown.space.prevent="openItem(item)"
+              @contextmenu="openContextMenu($event, item)"
             >
-              <template v-if="item.isDirectory">
-                <span>{{ t('文件夹') }}</span>
-                <span v-if="isFavoriteDirectory(item)" class="location-tag favorite">
-                  <Star :size="11" fill="currentColor" />{{ t('收藏') }}
-                </span>
-                <span v-if="isHomeDirectory(item)" class="location-tag home">
-                  <Home :size="11" />{{ t('首页') }}
-                </span>
-              </template>
-              <template v-else>
-                <span class="object-grid-size">{{ formatSize(item.size) }}</span>
-                <span class="object-grid-type">
-                  <span>·</span>
-                  <span class="uppercase">{{ getFileExtension(item.name) }}</span>
-                </span>
-                <template v-if="settings.showImageResolution && imageDimensions[item.name]">
-                  <span class="object-grid-resolution">
-                    <span>·</span>
-                    <span class="image-resolution">
-                      {{ imageDimensions[item.name].width }}×{{ imageDimensions[item.name].height }}
+              <div class="object-card-check" @click.stop="toggleSelection(item)">
+                <input type="checkbox" :checked="selectedNames.has(item.name)" />
+              </div>
+              <div class="object-preview" :class="getObjectVisual(item).kind">
+                <span v-thumbnail="item" class="thumbnail-observer-target" />
+                <img
+                  v-if="thumbnailUrls[item.name] && !failedThumbnailNames.has(item.name)"
+                  :src="thumbnailUrls[item.name]"
+                  :alt="item.displayName"
+                  loading="lazy"
+                  @error="markThumbnailFailed(item.name)"
+                />
+                <component :is="getObjectVisual(item).icon" v-else :size="44" />
+              </div>
+              <div class="object-info">
+                <strong class="object-grid-name" :title="item.displayName">
+                  <span class="object-grid-name-start">{{ fileNameParts(item).start }}</span>
+                  <span class="object-grid-name-end">{{ fileNameParts(item).end }}</span>
+                </strong>
+                <span
+                  class="object-grid-metadata"
+                  :class="{
+                    'has-resolution': settings.showImageResolution && imageDimensions[item.name]
+                  }"
+                >
+                  <template v-if="item.isDirectory">
+                    <span>{{ t('文件夹') }}</span>
+                    <span v-if="isFavoriteDirectory(item)" class="location-tag favorite">
+                      <Star :size="11" fill="currentColor" />{{ t('收藏') }}
                     </span>
-                  </span>
-                </template>
-              </template>
-            </span>
+                    <span v-if="isHomeDirectory(item)" class="location-tag home">
+                      <Home :size="11" />{{ t('首页') }}
+                    </span>
+                  </template>
+                  <template v-else>
+                    <span class="object-grid-size">{{ formatSize(item.size) }}</span>
+                    <span class="object-grid-type">
+                      <span>·</span>
+                      <span class="uppercase">{{ getFileExtension(item.name) }}</span>
+                    </span>
+                    <template v-if="settings.showImageResolution && imageDimensions[item.name]">
+                      <span class="object-grid-resolution">
+                        <span>·</span>
+                        <span class="image-resolution">
+                          {{ imageDimensions[item.name].width }}×{{
+                            imageDimensions[item.name].height
+                          }}
+                        </span>
+                      </span>
+                    </template>
+                  </template>
+                </span>
+              </div>
+            </div>
           </div>
-        </div>
+        </section>
       </div>
       <div v-else-if="!fileBrowser.loading.value" class="empty-state">
         <div class="empty-icon"><Folder :size="42" /></div>

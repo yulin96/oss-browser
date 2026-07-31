@@ -26,6 +26,7 @@ interface ImageJob {
 
 export type ObjectSortField = 'name' | 'modified' | 'type' | 'size'
 export type SortDirection = 'asc' | 'desc'
+export type ObjectGroupMode = 'none' | 'day'
 
 export function useFileBrowser(options: {
   settings: AppSettings
@@ -48,6 +49,7 @@ export function useFileBrowser(options: {
   viewMode: Ref<'list' | 'grid'>
   sortField: Ref<ObjectSortField>
   sortDirection: Ref<SortDirection>
+  groupMode: Ref<ObjectGroupMode>
   addressInput: Ref<string>
   navigationHistory: Ref<string[]>
   navigationIndex: Ref<number>
@@ -87,6 +89,7 @@ export function useFileBrowser(options: {
   setViewMode: (mode: 'list' | 'grid') => void
   setSortField: (field: ObjectSortField) => void
   setSortDirection: (direction: SortDirection) => void
+  setGroupMode: (mode: ObjectGroupMode) => void
   enterDirectory: (item: ObjectInfo) => Promise<void>
   toggleSelection: (item: ObjectInfo) => void
   toggleAll: () => void
@@ -108,6 +111,7 @@ export function useFileBrowser(options: {
   )
   const sortField = ref<ObjectSortField>('name')
   const sortDirection = ref<SortDirection>('asc')
+  const groupMode = ref<ObjectGroupMode>('none')
   const addressInput = ref('')
   const navigationHistory = ref<string[]>([])
   const navigationIndex = ref(-1)
@@ -204,6 +208,7 @@ export function useFileBrowser(options: {
       const preference = JSON.parse(localStorage.getItem(sortStorageKey()) || '{}') as {
         field?: ObjectSortField
         direction?: SortDirection
+        groupMode?: ObjectGroupMode
       }
       sortField.value =
         preference.field === 'modified' ||
@@ -212,9 +217,11 @@ export function useFileBrowser(options: {
           ? preference.field
           : 'name'
       sortDirection.value = preference.direction === 'desc' ? 'desc' : 'asc'
+      groupMode.value = preference.groupMode === 'day' ? 'day' : 'none'
     } catch {
       sortField.value = 'name'
       sortDirection.value = 'asc'
+      groupMode.value = 'none'
       localStorage.removeItem(sortStorageKey())
     }
   }
@@ -240,6 +247,7 @@ export function useFileBrowser(options: {
     bucketSearchText.value = ''
     sortField.value = 'name'
     sortDirection.value = 'asc'
+    groupMode.value = 'none'
     addressInput.value = ''
     navigationHistory.value = []
     navigationIndex.value = -1
@@ -594,6 +602,7 @@ export function useFileBrowser(options: {
     viewMode,
     sortField,
     sortDirection,
+    groupMode,
     addressInput,
     navigationHistory,
     navigationIndex,
@@ -638,12 +647,26 @@ export function useFileBrowser(options: {
       sortField.value = field
       localStorage.setItem(
         sortStorageKey(),
-        JSON.stringify({ field, direction: sortDirection.value })
+        JSON.stringify({ field, direction: sortDirection.value, groupMode: groupMode.value })
       )
     },
     setSortDirection: (direction) => {
       sortDirection.value = direction
-      localStorage.setItem(sortStorageKey(), JSON.stringify({ field: sortField.value, direction }))
+      localStorage.setItem(
+        sortStorageKey(),
+        JSON.stringify({ field: sortField.value, direction, groupMode: groupMode.value })
+      )
+    },
+    setGroupMode: (mode) => {
+      groupMode.value = mode
+      localStorage.setItem(
+        sortStorageKey(),
+        JSON.stringify({
+          field: sortField.value,
+          direction: sortDirection.value,
+          groupMode: mode
+        })
+      )
     },
     enterDirectory: (item) => visit(currentBucket.value!, item.name),
     toggleSelection,
