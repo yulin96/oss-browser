@@ -500,10 +500,9 @@ export function useFileBrowser(options: {
         const result = await window.ossBrowser.objects.scan(bucketName, requestedPrefix, nextMarker)
         if (generation !== countGeneration || !isCurrentLocation(bucketName, requestedPrefix))
           return
-        const counts = countObjects(result.objects)
         totalObjectCounts.value = {
-          directories: totalObjectCounts.value.directories + counts.directories,
-          files: totalObjectCounts.value.files + counts.files
+          directories: totalObjectCounts.value.directories + result.directories,
+          files: totalObjectCounts.value.files + result.files
         }
         nextMarker = result.isTruncated ? result.nextMarker : undefined
       }
@@ -542,14 +541,16 @@ export function useFileBrowser(options: {
     try {
       let marker: string | undefined
       do {
-        const result = await window.ossBrowser.objects.scan(bucketName, requestedPrefix, marker)
+        const result = await window.ossBrowser.objects.scan(
+          bucketName,
+          requestedPrefix,
+          marker,
+          keyword
+        )
         if (generation !== searchGeneration || !isCurrentLocation(bucketName, requestedPrefix))
           return
-        const matches = result.objects.filter((item) =>
-          item.displayName.toLocaleLowerCase().includes(keyword)
-        )
-        if (matches.length) searchObjects.value = [...searchObjects.value, ...matches]
-        searchScannedCount.value += result.objects.length
+        if (result.matches.length) searchObjects.value = [...searchObjects.value, ...result.matches]
+        searchScannedCount.value += result.directories + result.files
         marker = result.isTruncated ? result.nextMarker : undefined
       } while (marker)
     } catch (reason) {
@@ -579,6 +580,7 @@ export function useFileBrowser(options: {
     const bucketName = currentBucket.value?.name
     const requestedPrefix = prefix.value
     if (!keyword || !bucketName) return
+    searchingObjects.value = true
     searchTimer = setTimeout(() => {
       searchTimer = undefined
       void searchAllObjects(bucketName, requestedPrefix, keyword, generation)

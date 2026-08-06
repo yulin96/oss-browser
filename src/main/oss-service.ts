@@ -42,6 +42,7 @@ import type {
   ObjectDetails,
   ObjectInfo,
   ObjectListResult,
+  ObjectScanResult,
   PermissionProbeItem,
   RamAccessKey,
   RamUser,
@@ -431,8 +432,25 @@ export class OssService {
     return this.listObjectPage(bucket, prefix, marker, this.settings.listPageSize)
   }
 
-  async scanObjects(bucket: string, prefix: string, marker?: string): Promise<ObjectListResult> {
-    return this.listObjectPage(bucket, prefix, marker, 1000)
+  async scanObjects(
+    bucket: string,
+    prefix: string,
+    marker?: string,
+    keyword?: string
+  ): Promise<ObjectScanResult> {
+    const page = await this.listObjectPage(bucket, prefix, marker, 1000)
+    const normalizedKeyword = keyword?.trim().toLocaleLowerCase()
+    return {
+      matches: normalizedKeyword
+        ? page.objects.filter((item) =>
+            item.displayName.toLocaleLowerCase().includes(normalizedKeyword)
+          )
+        : [],
+      directories: page.objects.filter((item) => item.isDirectory).length,
+      files: page.objects.filter((item) => !item.isDirectory).length,
+      nextMarker: page.nextMarker,
+      isTruncated: page.isTruncated
+    }
   }
 
   private async listObjectPage(

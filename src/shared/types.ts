@@ -188,6 +188,14 @@ export interface ObjectListResult {
   isTruncated: boolean
 }
 
+export interface ObjectScanResult {
+  matches: ObjectInfo[]
+  directories: number
+  files: number
+  nextMarker?: string
+  isTruncated: boolean
+}
+
 export interface TransferItem {
   id: string
   batchId: string
@@ -303,7 +311,12 @@ export interface OssBrowserApi {
   }
   objects: {
     list: (bucket: string, prefix: string, marker?: string) => Promise<ObjectListResult>
-    scan: (bucket: string, prefix: string, marker?: string) => Promise<ObjectListResult>
+    scan: (
+      bucket: string,
+      prefix: string,
+      marker?: string,
+      keyword?: string
+    ) => Promise<ObjectScanResult>
     createFolder: (bucket: string, path: string) => Promise<void>
     remove: (bucket: string, names: string[]) => Promise<void>
     copy: (bucket: string, source: string, target: string) => Promise<void>
