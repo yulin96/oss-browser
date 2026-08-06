@@ -21,8 +21,7 @@ cask "oss-browser" do
 
   postflight_steps do
     run "/usr/bin/xattr",
-        args: ["-dr", "com.apple.quarantine", "{{appdir}}/OSS Browser.app"],
-        must_succeed: true
+        args: ["-dr", "com.apple.quarantine", "{{appdir}}/OSS Browser.app"]
   end
 
   zap trash: "~/Library/Application Support/oss-browser"
