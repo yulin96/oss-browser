@@ -147,6 +147,15 @@ jobs:
           --version "${GITHUB_REF_NAME}"
           --output .release/release-notes.md
 
+      - name: Prepare stable Homebrew downloads
+        shell: bash
+        run: |
+          PACKAGE_VERSION="$(node -p "require('./package.json').version")"
+          cp -- "release-assets/oss-browser-${PACKAGE_VERSION}-arm64.dmg" \
+            "release-assets/oss-browser-latest-arm64.dmg"
+          cp -- "release-assets/oss-browser-${PACKAGE_VERSION}-x64.dmg" \
+            "release-assets/oss-browser-latest-x64.dmg"
+
       - name: Create release and upload files
         shell: bash
         env:

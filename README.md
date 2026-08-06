@@ -27,14 +27,14 @@ brew tap yulin96/apps https://github.com/yulin96/oss-browser.git
 brew install --cask yulin96/apps/oss-browser
 ```
 
-The Cask selects the ARM64 or Intel package automatically, verifies its SHA-256 checksum, and removes
-the quarantine attribute from the installed OSS Browser application.
+The Cask selects the ARM64 or Intel package automatically, follows the latest GitHub Release, and
+removes the quarantine attribute from the installed OSS Browser application.
 
 Update OSS Browser through Homebrew:
 
 ```bash
 brew update
-brew upgrade --cask yulin96/apps/oss-browser
+brew upgrade --cask --greedy-latest yulin96/apps/oss-browser
 ```
 
 Uninstall it while keeping local application data:
@@ -133,17 +133,10 @@ sudo xattr -r -d com.apple.quarantine /Applications/OSS\ Browser.app
 
 The Homebrew Cask performs this quarantine removal for its own installation automatically.
 
-### Updating the Homebrew Cask
-
-After a new GitHub Release has finished uploading both macOS DMGs, update the Cask version and
-checksums with:
-
-```bash
-pnpm homebrew:update
-```
-
-Commit and push the resulting `Casks/oss-browser.rb` change so `brew update` can discover the new
-version.
+The release workflow also publishes stable `oss-browser-latest-arm64.dmg` and
+`oss-browser-latest-x64.dmg` aliases. The Cask follows these aliases, so it does not need a version or
+checksum update after each release. Because Homebrew normally skips `version :latest` Casks, use
+`--greedy-latest` when upgrading through Homebrew.
 
 ## Local Data and Permissions
 

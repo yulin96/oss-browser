@@ -26,7 +26,6 @@
     "release:patch": "pnpm release patch",
     "release:minor": "pnpm release minor",
     "release:major": "pnpm release major",
-    "homebrew:update": "node scripts/update-homebrew-cask.mjs",
     "release-notes:prepare": "node scripts/extract-release-notes.mjs --output .release/release-notes.md",
     "start": "electron-vite preview",
     "dev": "electron-vite dev",
