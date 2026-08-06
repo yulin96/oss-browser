@@ -18,6 +18,34 @@ This project is inspired by [Alibaba OSS Browser](https://github.com/aliyun/oss-
 - Simplified Chinese, English, and Japanese interface languages
 - Light, dark, and system appearance modes
 
+## Install with Homebrew
+
+Add this repository as a custom Tap, then install OSS Browser:
+
+```bash
+brew tap yulin96/apps https://github.com/yulin96/oss-browser.git
+brew install --cask yulin96/apps/oss-browser
+```
+
+The Cask selects the ARM64 or Intel package automatically, verifies its SHA-256 checksum, and removes
+the quarantine attribute from the installed OSS Browser application.
+
+Update OSS Browser through Homebrew:
+
+```bash
+brew update
+brew upgrade --cask yulin96/apps/oss-browser
+```
+
+Uninstall it while keeping local application data:
+
+```bash
+brew uninstall --cask yulin96/apps/oss-browser
+```
+
+Use `brew uninstall --cask --zap yulin96/apps/oss-browser` only when you also want to delete
+local settings, saved accounts, and transfer history.
+
 ## Development
 
 Requirements:
@@ -71,8 +99,8 @@ Packaged files are written to the `dist` directory.
 
 The workflow in [`.github/workflows/release.yml`](.github/workflows/release.yml) runs when a version tag matching `v*` is pushed. It builds:
 
-- macOS ARM64 DMG for Apple Silicon
-- macOS x64 DMG for Intel Macs
+- macOS ARM64 DMG and ZIP for Apple Silicon
+- macOS x64 DMG and ZIP for Intel Macs
 - Windows x64 NSIS installer and portable ZIP archive
 - Linux x64 AppImage and DEB packages
 
@@ -94,13 +122,28 @@ update metadata, and GitHub Release.
 
 ### Signing notice
 
-Current packages are unsigned. macOS Gatekeeper and Windows SmartScreen may warn users when opening them.
+macOS packages use Ad-hoc signing rather than Apple Developer ID signing and notarization. macOS
+Gatekeeper and Windows SmartScreen may still warn users when opening downloaded packages directly.
 
 On macOS, you might see a warning stating `“OSS Browser.app” is damaged and cannot be opened`. You can bypass this by removing the quarantine attribute. Open your terminal and run:
 
 ```bash
 sudo xattr -r -d com.apple.quarantine /Applications/OSS\ Browser.app
 ```
+
+The Homebrew Cask performs this quarantine removal for its own installation automatically.
+
+### Updating the Homebrew Cask
+
+After a new GitHub Release has finished uploading both macOS DMGs, update the Cask version and
+checksums with:
+
+```bash
+pnpm homebrew:update
+```
+
+Commit and push the resulting `Casks/oss-browser.rb` change so `brew update` can discover the new
+version.
 
 ## Local Data and Permissions
 
