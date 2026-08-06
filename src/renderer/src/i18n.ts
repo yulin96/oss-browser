@@ -459,6 +459,10 @@ const translations: Record<Exclude<AppLocale, 'zh-CN'>, Record<string, string>> 
     重启安装: 'Restart and install',
     当前已是最新版本: 'You are using the latest version',
     '检查更新失败，请稍后重试': 'Could not check for updates. Try again later.',
+    自动更新失败: 'Automatic update failed',
+    '自动更新未能完成，可前往 GitHub 手动下载。':
+      'The automatic update could not be completed. Download it manually from GitHub.',
+    手动下载: 'Download manually',
     开发模式下不检查更新: 'Updates are disabled in development mode',
     '华东 1 (杭州)': 'China East 1 (Hangzhou)',
     '华东 2 (上海)': 'China East 2 (Shanghai)',
@@ -933,6 +937,10 @@ const translations: Record<Exclude<AppLocale, 'zh-CN'>, Record<string, string>> 
     重启安装: '再起動してインストール',
     当前已是最新版本: '現在のバージョンは最新です',
     '检查更新失败，请稍后重试': '更新を確認できませんでした。後でもう一度お試しください。',
+    自动更新失败: '自動更新に失敗しました',
+    '自动更新未能完成，可前往 GitHub 手动下载。':
+      '自動更新を完了できませんでした。GitHub から手動でダウンロードできます。',
+    手动下载: '手動でダウンロード',
     开发模式下不检查更新: '開発モードでは更新を確認しません',
     '华东 1 (杭州)': '中国東部 1 (杭州)',
     '华东 2 (上海)': '中国東部 2 (上海)',

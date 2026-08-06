@@ -54,7 +54,7 @@ export class UpdateService {
         releaseNotes: getReleaseNotes(info)
       })
     )
-    autoUpdater.on('error', (error) => this.setState({ status: 'error', message: error.message }))
+    autoUpdater.on('error', (error) => this.setError(error))
 
     setTimeout(() => void this.check().catch(() => undefined), 5000)
   }
@@ -71,14 +71,25 @@ export class UpdateService {
   }
 
   async download(): Promise<void> {
-    if (process.platform === 'darwin') return
     if (!app.isPackaged || this.state.status !== 'available') return
-    await autoUpdater.downloadUpdate()
+    try {
+      await autoUpdater.downloadUpdate()
+    } catch (error) {
+      this.setError(error)
+    }
   }
 
   install(): void {
-    if (process.platform === 'darwin') return
     if (this.state.status === 'downloaded') autoUpdater.quitAndInstall(false, true)
+  }
+
+  private setError(error: unknown): void {
+    this.setState({
+      status: 'error',
+      version: this.state.version,
+      releaseNotes: this.state.releaseNotes,
+      message: error instanceof Error ? error.message : String(error)
+    })
   }
 
   private setState(state: UpdateState): void {

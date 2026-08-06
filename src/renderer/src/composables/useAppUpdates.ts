@@ -16,15 +16,15 @@ export function useAppUpdates(requestConfirmation: (request: ConfirmationRequest
   const appVersion = ref('')
   const currentReleaseNotes = ref('')
   const updateState = ref<UpdateState>({ status: 'idle' })
-  const isMac = /macintosh|mac os x/i.test(navigator.userAgent)
   let promptedAvailableVersion = ''
   let promptedDownloadedVersion = ''
+  let promptedFailedVersion = ''
   let removeUpdateListener: (() => void) | undefined
 
   const updateDescription = computed(() => {
     if (updateState.value.status === 'checking') return t('正在检查新版本…')
     if (updateState.value.status === 'available')
-      return t(isMac ? '发现新版本 {version}，请前往 GitHub 下载' : '发现新版本 {version}', {
+      return t('发现新版本 {version}', {
         version: updateState.value.version || ''
       })
     if (updateState.value.status === 'downloading')
@@ -41,34 +41,26 @@ export function useAppUpdates(requestConfirmation: (request: ConfirmationRequest
 
   const updateButtonLabel = computed(() => {
     if (updateState.value.status === 'checking') return t('检查中')
-    if (updateState.value.status === 'available') return t(isMac ? '前往 GitHub' : '下载更新')
+    if (updateState.value.status === 'available') return t('下载更新')
     if (updateState.value.status === 'downloading') return `${updateState.value.percent || 0}%`
     if (updateState.value.status === 'downloaded') return t('重启安装')
+    if (updateState.value.status === 'error' && updateState.value.version) return t('手动下载')
     return t('检查更新')
   })
 
   function requestAvailableUpdate(): void {
     requestConfirmation({
       title: t('发现新版本'),
-      description: t(
-        isMac
-          ? '发现新版本 {version}，请前往 GitHub 下载'
-          : '新版本 {version} 已发布，是否现在下载？',
-        { version: updateState.value.version || '' }
-      ),
+      description: t('新版本 {version} 已发布，是否现在下载？', {
+        version: updateState.value.version || ''
+      }),
       details: updateState.value.releaseNotes,
-      confirmLabel: t(isMac ? '前往 GitHub' : '下载更新'),
-      action: () =>
-        isMac
-          ? window.ossBrowser.system.openExternal(
-              'https://github.com/yulin96/oss-browser/releases/latest'
-            )
-          : window.ossBrowser.updates.download()
+      confirmLabel: t('下载更新'),
+      action: () => window.ossBrowser.updates.download()
     })
   }
 
   function requestUpdateInstall(): void {
-    if (isMac) return
     requestConfirmation({
       title: t('更新已准备好'),
       description: t('程序将关闭并安装新版本，是否立即重启？'),
@@ -77,15 +69,32 @@ export function useAppUpdates(requestConfirmation: (request: ConfirmationRequest
     })
   }
 
+  function requestManualUpdate(): void {
+    requestConfirmation({
+      title: t('自动更新失败'),
+      description: t('自动更新未能完成，可前往 GitHub 手动下载。'),
+      details: updateState.value.message,
+      confirmLabel: t('手动下载'),
+      action: () =>
+        window.ossBrowser.system.openExternal(
+          'https://github.com/yulin96/oss-browser/releases/latest'
+        )
+    })
+  }
+
   function handleUpdateState(state: UpdateState): void {
     updateState.value = state
     if (state.status === 'available' && state.version !== promptedAvailableVersion) {
       promptedAvailableVersion = state.version || 'latest'
-      if (!isMac) requestAvailableUpdate()
+      requestAvailableUpdate()
     }
     if (state.status === 'downloaded' && state.version !== promptedDownloadedVersion) {
       promptedDownloadedVersion = state.version || 'latest'
       requestUpdateInstall()
+    }
+    if (state.status === 'error' && state.version && state.version !== promptedFailedVersion) {
+      promptedFailedVersion = state.version
+      requestManualUpdate()
     }
   }
 
@@ -104,6 +113,8 @@ export function useAppUpdates(requestConfirmation: (request: ConfirmationRequest
   async function handleUpdateAction(): Promise<void> {
     if (updateState.value.status === 'available') return requestAvailableUpdate()
     if (updateState.value.status === 'downloaded') return requestUpdateInstall()
+    if (updateState.value.status === 'error' && updateState.value.version)
+      return requestManualUpdate()
     if (updateState.value.status === 'checking' || updateState.value.status === 'downloading')
       return
     try {
