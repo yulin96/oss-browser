@@ -428,11 +428,24 @@ export class OssService {
   }
 
   async listObjects(bucket: string, prefix: string, marker?: string): Promise<ObjectListResult> {
+    return this.listObjectPage(bucket, prefix, marker, this.settings.listPageSize)
+  }
+
+  async scanObjects(bucket: string, prefix: string, marker?: string): Promise<ObjectListResult> {
+    return this.listObjectPage(bucket, prefix, marker, 1000)
+  }
+
+  private async listObjectPage(
+    bucket: string,
+    prefix: string,
+    marker: string | undefined,
+    maxKeys: number
+  ): Promise<ObjectListResult> {
     const result = await this.bucketClient(bucket).list({
       prefix,
       delimiter: '/',
       marker,
-      'max-keys': this.settings.listPageSize
+      'max-keys': maxKeys
     })
     const directories: ObjectInfo[] = (result.prefixes || []).map((name) => ({
       name,

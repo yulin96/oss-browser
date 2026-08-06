@@ -20,6 +20,7 @@ const {
   hasMoreObjects,
   selectedNames,
   searchText,
+  searchingObjects,
   viewMode,
   groupMode,
   thumbnailUrls,
@@ -218,11 +219,15 @@ function fileNameParts(item: ObjectInfo): {
           </div>
         </div>
       </template>
-      <div v-if="!filteredObjects.length && !fileBrowser.loading.value" class="empty-state">
+      <div v-if="searchText && searchingObjects && !filteredObjects.length" class="file-loading">
+        <LoaderCircle :size="30" />
+        <span>{{ t('正在搜索当前目录全部对象') }}</span>
+      </div>
+      <div v-else-if="!filteredObjects.length && !fileBrowser.loading.value" class="empty-state">
         <div class="empty-icon"><Folder :size="42" /></div>
-        <strong>{{ t('当前目录为空') }}</strong>
-        <span>{{ t('上传文件或新建文件夹开始使用') }}</span>
-        <div class="mt-4 flex justify-center gap-3">
+        <strong>{{ searchText ? t('未找到匹配对象') : t('当前目录为空') }}</strong>
+        <span>{{ searchText ? t('请尝试其他关键词') : t('上传文件或新建文件夹开始使用') }}</span>
+        <div v-if="!searchText" class="mt-4 flex justify-center gap-3">
           <AppButton
             :label="t('新建文件夹')"
             :icon="FolderPlus"
@@ -328,11 +333,15 @@ function fileNameParts(item: ObjectInfo): {
           </div>
         </section>
       </div>
+      <div v-else-if="searchText && searchingObjects" class="file-loading">
+        <LoaderCircle :size="30" />
+        <span>{{ t('正在搜索当前目录全部对象') }}</span>
+      </div>
       <div v-else-if="!fileBrowser.loading.value" class="empty-state">
         <div class="empty-icon"><Folder :size="42" /></div>
-        <strong>{{ t('当前目录为空') }}</strong>
-        <span>{{ t('上传文件或新建文件夹开始使用') }}</span>
-        <div class="mt-4 flex justify-center gap-3">
+        <strong>{{ searchText ? t('未找到匹配对象') : t('当前目录为空') }}</strong>
+        <span>{{ searchText ? t('请尝试其他关键词') : t('上传文件或新建文件夹开始使用') }}</span>
+        <div v-if="!searchText" class="mt-4 flex justify-center gap-3">
           <AppButton
             :label="t('新建文件夹')"
             :icon="FolderPlus"

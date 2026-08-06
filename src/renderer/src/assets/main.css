@@ -1212,6 +1212,9 @@ input[type='checkbox']:checked::after {
   font-size: 12px;
   white-space: nowrap;
 }
+.search-count-status {
+  color: var(--primary);
+}
 .more-menu {
   position: absolute;
   z-index: 20;

@@ -51,6 +51,7 @@ const api: OssBrowserApi = {
   },
   objects: {
     list: (bucket, prefix, marker) => ipcRenderer.invoke('objects:list', bucket, prefix, marker),
+    scan: (bucket, prefix, marker) => ipcRenderer.invoke('objects:scan', bucket, prefix, marker),
     createFolder: (bucket, path) => ipcRenderer.invoke('objects:createFolder', bucket, path),
     remove: (bucket, names) => ipcRenderer.invoke('objects:remove', bucket, names),
     copy: (bucket, source, target) => ipcRenderer.invoke('objects:copy', bucket, source, target),

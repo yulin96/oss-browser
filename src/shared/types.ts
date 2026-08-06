@@ -303,6 +303,7 @@ export interface OssBrowserApi {
   }
   objects: {
     list: (bucket: string, prefix: string, marker?: string) => Promise<ObjectListResult>
+    scan: (bucket: string, prefix: string, marker?: string) => Promise<ObjectListResult>
     createFolder: (bucket: string, path: string) => Promise<void>
     remove: (bucket: string, names: string[]) => Promise<void>
     copy: (bucket: string, source: string, target: string) => Promise<void>

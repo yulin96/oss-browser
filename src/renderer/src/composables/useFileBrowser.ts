@@ -1,10 +1,11 @@
-import { computed, reactive, ref, type ComputedRef, type Ref } from 'vue'
+import { computed, reactive, ref, watch, type ComputedRef, type Ref } from 'vue'
 import type {
   AppSettings,
   BucketInfo,
   BucketStorageStat,
   ImageDimensions,
-  ObjectInfo
+  ObjectInfo,
+  ObjectListResult
 } from '../../../shared/types'
 import { t } from '../i18n'
 
@@ -45,6 +46,11 @@ export function useFileBrowser(options: {
   hasMoreObjects: Ref<boolean>
   selectedNames: Ref<Set<string>>
   searchText: Ref<string>
+  searchingObjects: Ref<boolean>
+  searchScannedCount: Ref<number>
+  searchError: Ref<string>
+  totalCountsLoading: Ref<boolean>
+  totalCountsError: Ref<string>
   bucketSearchText: Ref<string>
   viewMode: Ref<'list' | 'grid'>
   sortField: Ref<ObjectSortField>
@@ -105,6 +111,13 @@ export function useFileBrowser(options: {
   const hasMoreObjects = ref(false)
   const selectedNames = ref(new Set<string>())
   const searchText = ref('')
+  const searchObjects = ref<ObjectInfo[]>([])
+  const searchingObjects = ref(false)
+  const searchScannedCount = ref(0)
+  const searchError = ref('')
+  const totalObjectCounts = ref({ directories: 0, files: 0 })
+  const totalCountsLoading = ref(false)
+  const totalCountsError = ref('')
   const bucketSearchText = ref('')
   const viewMode = ref<'list' | 'grid'>(
     localStorage.getItem('oss-browser-view-mode') === 'grid' ? 'grid' : 'list'
@@ -127,22 +140,24 @@ export function useFileBrowser(options: {
   const pendingImageGenerations = new Map<string, number>()
   let activeImageJobs = 0
   let loadGeneration = 0
+  let countGeneration = 0
+  let searchGeneration = 0
+  let searchTimer: ReturnType<typeof setTimeout> | undefined
   let imageGeneration = 0
   let bucketGeneration = 0
   let bucketStorageStatGeneration = 0
 
+  const displayedObjects = computed(() =>
+    searchText.value.trim() ? searchObjects.value : objects.value
+  )
   const selectedObjects = computed(() =>
-    objects.value.filter((item) => selectedNames.value.has(item.name))
+    displayedObjects.value.filter((item) => selectedNames.value.has(item.name))
   )
   const nameCollator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' })
   const filteredObjects = computed(() => {
-    const keyword = searchText.value.trim().toLowerCase()
-    const visibleObjects = keyword
-      ? objects.value.filter((item) => item.displayName.toLowerCase().includes(keyword))
-      : objects.value
     const direction = sortDirection.value === 'asc' ? 1 : -1
 
-    return [...visibleObjects].sort((left, right) => {
+    return [...displayedObjects.value].sort((left, right) => {
       if (left.isDirectory !== right.isDirectory) return left.isDirectory ? -1 : 1
 
       let result = 0
@@ -173,10 +188,7 @@ export function useFileBrowser(options: {
       ? buckets.value.filter((bucket) => bucket.name.toLowerCase().includes(keyword))
       : buckets.value
   })
-  const pageCounts = computed(() => ({
-    directories: objects.value.filter((item) => item.isDirectory).length,
-    files: objects.value.filter((item) => !item.isDirectory).length
-  }))
+  const pageCounts = computed(() => totalObjectCounts.value)
 
   function homeStorageKey(): string {
     return `oss-browser-home:${options.profileId()}`
@@ -231,6 +243,10 @@ export function useFileBrowser(options: {
     imageGeneration += 1
     bucketGeneration += 1
     bucketStorageStatGeneration += 1
+    countGeneration += 1
+    searchGeneration += 1
+    if (searchTimer) clearTimeout(searchTimer)
+    searchTimer = undefined
     loading.value = false
     error.value = ''
     buckets.value = []
@@ -244,6 +260,13 @@ export function useFileBrowser(options: {
     hasMoreObjects.value = false
     selectedNames.value = new Set()
     searchText.value = ''
+    searchObjects.value = []
+    searchingObjects.value = false
+    searchScannedCount.value = 0
+    searchError.value = ''
+    totalObjectCounts.value = { directories: 0, files: 0 }
+    totalCountsLoading.value = false
+    totalCountsError.value = ''
     bucketSearchText.value = ''
     sortField.value = 'name'
     sortDirection.value = 'asc'
@@ -357,6 +380,10 @@ export function useFileBrowser(options: {
 
   function goBucketHome(): void {
     loadGeneration += 1
+    countGeneration += 1
+    searchGeneration += 1
+    if (searchTimer) clearTimeout(searchTimer)
+    searchTimer = undefined
     bucketStorageStatGeneration += 1
     loading.value = false
     currentBucket.value = null
@@ -366,6 +393,14 @@ export function useFileBrowser(options: {
     prefix.value = ''
     objects.value = []
     selectedNames.value = new Set()
+    searchText.value = ''
+    searchObjects.value = []
+    searchingObjects.value = false
+    searchScannedCount.value = 0
+    searchError.value = ''
+    totalObjectCounts.value = { directories: 0, files: 0 }
+    totalCountsLoading.value = false
+    totalCountsError.value = ''
     addressInput.value = ''
   }
 
@@ -439,6 +474,119 @@ export function useFileBrowser(options: {
     )
   }
 
+  function countObjects(items: ObjectInfo[]): { directories: number; files: number } {
+    let directories = 0
+    let files = 0
+    for (const item of items) {
+      if (item.isDirectory) directories += 1
+      else files += 1
+    }
+    return { directories, files }
+  }
+
+  function isCurrentLocation(bucketName: string, requestedPrefix: string): boolean {
+    return currentBucket.value?.name === bucketName && prefix.value === requestedPrefix
+  }
+
+  async function continueCountingObjects(
+    bucketName: string,
+    requestedPrefix: string,
+    marker: string,
+    generation: number
+  ): Promise<void> {
+    try {
+      let nextMarker: string | undefined = marker
+      while (nextMarker) {
+        const result = await window.ossBrowser.objects.scan(bucketName, requestedPrefix, nextMarker)
+        if (generation !== countGeneration || !isCurrentLocation(bucketName, requestedPrefix))
+          return
+        const counts = countObjects(result.objects)
+        totalObjectCounts.value = {
+          directories: totalObjectCounts.value.directories + counts.directories,
+          files: totalObjectCounts.value.files + counts.files
+        }
+        nextMarker = result.isTruncated ? result.nextMarker : undefined
+      }
+    } catch (reason) {
+      if (generation !== countGeneration || !isCurrentLocation(bucketName, requestedPrefix)) return
+      totalCountsError.value = reason instanceof Error ? reason.message : String(reason)
+    } finally {
+      if (generation === countGeneration && isCurrentLocation(bucketName, requestedPrefix))
+        totalCountsLoading.value = false
+    }
+  }
+
+  function startCountingObjects(
+    bucketName: string,
+    requestedPrefix: string,
+    firstPage: ObjectListResult
+  ): void {
+    const generation = ++countGeneration
+    totalObjectCounts.value = countObjects(firstPage.objects)
+    totalCountsError.value = ''
+    totalCountsLoading.value = firstPage.isTruncated
+    if (firstPage.isTruncated && firstPage.nextMarker) {
+      void continueCountingObjects(bucketName, requestedPrefix, firstPage.nextMarker, generation)
+    } else {
+      totalCountsLoading.value = false
+    }
+  }
+
+  async function searchAllObjects(
+    bucketName: string,
+    requestedPrefix: string,
+    keyword: string,
+    generation: number
+  ): Promise<void> {
+    searchingObjects.value = true
+    try {
+      let marker: string | undefined
+      do {
+        const result = await window.ossBrowser.objects.scan(bucketName, requestedPrefix, marker)
+        if (generation !== searchGeneration || !isCurrentLocation(bucketName, requestedPrefix))
+          return
+        const matches = result.objects.filter((item) =>
+          item.displayName.toLocaleLowerCase().includes(keyword)
+        )
+        if (matches.length) searchObjects.value = [...searchObjects.value, ...matches]
+        searchScannedCount.value += result.objects.length
+        marker = result.isTruncated ? result.nextMarker : undefined
+      } while (marker)
+    } catch (reason) {
+      if (generation !== searchGeneration || !isCurrentLocation(bucketName, requestedPrefix)) return
+      searchError.value = reason instanceof Error ? reason.message : String(reason)
+    } finally {
+      if (generation === searchGeneration && isCurrentLocation(bucketName, requestedPrefix))
+        searchingObjects.value = false
+    }
+  }
+
+  function resetObjectSearchState(): number {
+    const generation = ++searchGeneration
+    if (searchTimer) clearTimeout(searchTimer)
+    searchTimer = undefined
+    searchObjects.value = []
+    searchScannedCount.value = 0
+    searchError.value = ''
+    searchingObjects.value = false
+    selectedNames.value = new Set()
+    return generation
+  }
+
+  function queueObjectSearch(delay = 350): void {
+    const generation = resetObjectSearchState()
+    const keyword = searchText.value.trim().toLocaleLowerCase()
+    const bucketName = currentBucket.value?.name
+    const requestedPrefix = prefix.value
+    if (!keyword || !bucketName) return
+    searchTimer = setTimeout(() => {
+      searchTimer = undefined
+      void searchAllObjects(bucketName, requestedPrefix, keyword, generation)
+    }, delay)
+  }
+
+  watch(searchText, () => queueObjectSearch())
+
   async function loadObjects(append = false): Promise<void> {
     if (!currentBucket.value) return
     const generation = ++loadGeneration
@@ -446,6 +594,11 @@ export function useFileBrowser(options: {
     const requestedPrefix = prefix.value
     const marker = append ? nextMarker.value : undefined
     if (!append) {
+      countGeneration += 1
+      totalObjectCounts.value = { directories: 0, files: 0 }
+      totalCountsLoading.value = false
+      totalCountsError.value = ''
+      resetObjectSearchState()
       imageGeneration += 1
       objects.value = []
       nextMarker.value = undefined
@@ -481,6 +634,10 @@ export function useFileBrowser(options: {
     nextMarker.value = result.nextMarker
     hasMoreObjects.value = result.isTruncated
     selectedNames.value = new Set()
+    if (!append) {
+      startCountingObjects(bucketName, requestedPrefix, result)
+      if (searchText.value.trim()) queueObjectSearch(0)
+    }
   }
 
   function getPendingImageAssets(item: ObjectInfo): { preview: boolean; dimensions: boolean } {
@@ -598,6 +755,11 @@ export function useFileBrowser(options: {
     hasMoreObjects,
     selectedNames,
     searchText,
+    searchingObjects,
+    searchScannedCount,
+    searchError,
+    totalCountsLoading,
+    totalCountsError,
     bucketSearchText,
     viewMode,
     sortField,

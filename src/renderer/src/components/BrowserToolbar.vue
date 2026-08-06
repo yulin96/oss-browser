@@ -35,6 +35,11 @@ const {
   copyBuffer,
   selectedNames,
   searchText,
+  searchingObjects,
+  searchScannedCount,
+  searchError,
+  totalCountsLoading,
+  totalCountsError,
   viewMode,
   sortField,
   sortDirection,
@@ -111,8 +116,20 @@ const {
       </AppTooltip>
     </div>
     <div class="toolbar-spacer" />
-    <div class="page-counts">
-      {{ t('{directories} 个文件夹，{files} 个文件', pageCounts) }}
+    <div class="page-counts" :title="searchError || totalCountsError">
+      <span v-if="totalCountsLoading">{{ t('正在统计全部对象…') }}</span>
+      <span v-else-if="totalCountsError">{{ t('对象总数统计失败') }}</span>
+      <span v-else>{{ t('{directories} 个文件夹，{files} 个文件', pageCounts) }}</span>
+      <span v-if="searchText" class="search-count-status">
+        ·
+        <template v-if="searchingObjects">
+          {{ t('正在搜索，已扫描 {count} 个对象', { count: searchScannedCount }) }}
+        </template>
+        <template v-else-if="searchError">{{ t('搜索中断，结果不完整') }}</template>
+        <template v-else>
+          {{ t('找到 {count} 个结果', { count: filteredObjects.length }) }}
+        </template>
+      </span>
     </div>
     <div class="search-wrap toolbar-search">
       <Search :size="15" /><input v-model="searchText" :placeholder="t('搜索当前目录')" />

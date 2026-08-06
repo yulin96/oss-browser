@@ -335,6 +335,9 @@ function registerIpc(): void {
   ipcMain.handle('objects:list', (_event, bucket: string, prefix: string, marker?: string) =>
     oss.listObjects(bucket, prefix, marker)
   )
+  ipcMain.handle('objects:scan', (_event, bucket: string, prefix: string, marker?: string) =>
+    oss.scanObjects(bucket, prefix, marker)
+  )
   ipcMain.handle('objects:createFolder', (_event, bucket: string, path: string) =>
     oss.createFolder(bucket, path)
   )
