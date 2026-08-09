@@ -18,7 +18,11 @@ const api: OssBrowserApi = {
   },
   profiles: {
     list: () => ipcRenderer.invoke('profiles:list'),
+    connect: (id) => ipcRenderer.invoke('profiles:connect', id),
     save: (profile) => ipcRenderer.invoke('profiles:save', profile),
+    setSecure: (id, secure) => ipcRenderer.invoke('profiles:setSecure', id, secure),
+    setCdnCredentials: (id, credentials) =>
+      ipcRenderer.invoke('profiles:setCdnCredentials', id, credentials),
     remove: (id) => ipcRenderer.invoke('profiles:remove', id),
     clear: () => ipcRenderer.invoke('profiles:clear')
   },
@@ -56,6 +60,7 @@ const api: OssBrowserApi = {
     createFolder: (bucket, path) => ipcRenderer.invoke('objects:createFolder', bucket, path),
     remove: (bucket, names) => ipcRenderer.invoke('objects:remove', bucket, names),
     copy: (bucket, source, target) => ipcRenderer.invoke('objects:copy', bucket, source, target),
+    move: (bucket, source, target) => ipcRenderer.invoke('objects:move', bucket, source, target),
     transfer: (bucket, items, targetPath, move) =>
       ipcRenderer.invoke('objects:transfer', bucket, items, targetPath, move),
     isPublic: (bucket, name) => ipcRenderer.invoke('objects:isPublic', bucket, name),
@@ -68,8 +73,8 @@ const api: OssBrowserApi = {
     discardPreview: (url) => ipcRenderer.invoke('objects:discardPreview', url),
     imageDimensions: (bucket, name) => ipcRenderer.invoke('objects:imageDimensions', bucket, name),
     readText: (bucket, name) => ipcRenderer.invoke('objects:readText', bucket, name),
-    saveText: (bucket, name, content) =>
-      ipcRenderer.invoke('objects:saveText', bucket, name, content),
+    saveText: (bucket, name, content, etag) =>
+      ipcRenderer.invoke('objects:saveText', bucket, name, content, etag),
     createSymlink: (bucket, name, target) =>
       ipcRenderer.invoke('objects:createSymlink', bucket, name, target),
     restore: (bucket, names, days) => ipcRenderer.invoke('objects:restore', bucket, names, days),

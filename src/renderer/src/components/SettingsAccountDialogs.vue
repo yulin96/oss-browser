@@ -306,12 +306,10 @@ const {
         >
           <div>
             <strong>{{ profile.label }}</strong>
-            <span class="profile-access-key">{{ profile.config.accessKeyId }}</span>
+            <span class="profile-access-key">{{ profile.accessKeyId }}</span>
             <div class="profile-meta">
-              <span>{{
-                profile.config.endpointMode === 'public' ? t('公共云') : profile.config.endpoint
-              }}</span>
-              <span v-if="profile.config.cdnCredentials" class="profile-cdn-status">
+              <span>{{ profile.endpointMode === 'public' ? t('公共云') : profile.endpoint }}</span>
+              <span v-if="profile.hasCdnCredentials" class="profile-cdn-status">
                 {{ t('CDN 已配置') }}
               </span>
               <span v-if="loggedIn && profile.id === profileId()" class="profile-current-label">
@@ -321,7 +319,7 @@ const {
           </div>
           <div class="row-actions">
             <AppButton
-              :label="profile.config.cdnCredentials ? t('修改 CDN 凭证') : t('配置 CDN 凭证')"
+              :label="profile.hasCdnCredentials ? t('修改 CDN 凭证') : t('配置 CDN 凭证')"
               @click="openCdnCredentials(profile)"
             />
             <AppButton :label="t('使用')" tone="primary" @click="useProfile(profile)" />

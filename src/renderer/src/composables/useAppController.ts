@@ -36,7 +36,8 @@ import type {
   FloatingUploadTarget,
   ObjectInfo,
   ObjectPreviewDescriptor,
-  SavedProfile
+  SavedProfile,
+  SavedProfileSummary
 } from '../../../shared/types'
 import { resolveObjectPreview } from '../../../shared/object-preview'
 import type { ObjectAction } from '../components/ObjectActionMenu.vue'
@@ -161,7 +162,7 @@ export function useAppController() {
   const shareNeedsExpiry = ref(true)
   const sharePreparing = ref(false)
   const shareCopied = ref(false)
-  const savedProfiles = ref<SavedProfile[]>([])
+  const savedProfiles = ref<SavedProfileSummary[]>([])
   const copyBuffer = shallowRef<CopyBuffer | null>(null)
   const domainOptions = ref<string[]>([])
   const selectedDomain = ref('')
@@ -352,7 +353,6 @@ export function useAppController() {
       loggedIn,
       savedProfiles,
       profileId,
-      authSnapshot,
       run: settingsTask.run,
       taskError: settingsTask.error,
       openModal: () => {
@@ -632,6 +632,7 @@ export function useAppController() {
   let domainOptionsPromise: Promise<void> | undefined
   let removeFloatingUploadStateListener: (() => void) | undefined
   let removeFloatingUploadRequestListener: (() => void) | undefined
+  let previewTextEtag = ''
 
   onMounted(async () => {
     document.addEventListener('pointerdown', closeFloatingMenus)
@@ -947,13 +948,13 @@ export function useAppController() {
       const session = JSON.parse(raw) as SessionState
       const profile = savedProfiles.value.find((item) => item.id === session.profileId)
       if (!profile) return
-      Object.assign(auth, authSnapshot(profile.config))
-      const result = await window.ossBrowser.auth.connect(authSnapshot(profile.config))
+      const connection = await window.ossBrowser.profiles.connect(profile.id)
+      applyProfileSummary(connection.profile)
       resetAccountRuntimeState()
-      buckets.value = result
+      buckets.value = connection.buckets
       loggedIn.value = true
       loadAccountPreferences()
-      await openInitialLocation(result, auth.presetPath || '')
+      await openInitialLocation(connection.buckets, auth.presetPath || '')
     } catch {
       localStorage.removeItem('oss-browser-session')
     }
@@ -983,6 +984,21 @@ export function useAppController() {
           }
         : undefined
     }
+  }
+
+  function applyProfileSummary(profile: SavedProfileSummary): void {
+    Object.assign(auth, {
+      alias: profile.alias || '',
+      endpoint: profile.endpoint,
+      endpointMode: profile.endpointMode,
+      accessKeyId: profile.accessKeyId,
+      accessKeySecret: '',
+      stsToken: '',
+      secure: profile.secure,
+      remember: profile.remember,
+      presetPath: profile.presetPath || '',
+      cdnCredentials: undefined
+    })
   }
 
   async function loginWithToken(): Promise<void> {
@@ -1065,6 +1081,23 @@ export function useAppController() {
     modal.value = name
   }
 
+  async function openHeaders(): Promise<void> {
+    Object.assign(objectForm, { cacheControl: '', contentType: '', contentDisposition: '' })
+    if (currentBucket.value && selectedObjects.value.length === 1) {
+      const details = await run(() =>
+        window.ossBrowser.objects.details(currentBucket.value!.name, selectedObjects.value[0].name)
+      )
+      if (!details) return
+      const headers = Object.fromEntries(
+        Object.entries(details.headers).map(([key, value]) => [key.toLowerCase(), value])
+      )
+      objectForm.cacheControl = headers['cache-control'] || ''
+      objectForm.contentType = headers['content-type'] || ''
+      objectForm.contentDisposition = headers['content-disposition'] || ''
+    }
+    modal.value = 'headers'
+  }
+
   function handleObjectAction(action: ObjectAction): void {
     closeActions()
     if (action === 'download') return void downloadSelected()
@@ -1072,7 +1105,7 @@ export function useAppController() {
     if (action === 'move') return openModal('move')
     if (action === 'rename') return openModal('rename')
     if (action === 'acl') return openModal('acl')
-    if (action === 'headers') return openModal('headers')
+    if (action === 'headers') return void openHeaders()
     if (action === 'share') return openModal('share')
     if (action === 'symlink') return openModal('symlink')
     if (action === 'restore') return openModal('restore')
@@ -1360,10 +1393,9 @@ export function useAppController() {
     if (!currentBucket.value || selectedObjects.value.length !== 1) return
     const source = selectedObjects.value[0]
     const target = `${prefix.value}${objectForm.target}${source.isDirectory ? '/' : ''}`
-    const done = await run(async () => {
-      await window.ossBrowser.objects.copy(currentBucket.value!.name, source.name, target)
-      await window.ossBrowser.objects.remove(currentBucket.value!.name, [source.name])
-    })
+    const done = await run(() =>
+      window.ossBrowser.objects.move(currentBucket.value!.name, source.name, target)
+    )
     if (done === undefined && errorMessage.value) return
     modal.value = null
     await loadObjects()
@@ -1646,6 +1678,7 @@ export function useAppController() {
     }
     objectPreview.value = descriptor
     previewText.value = ''
+    previewTextEtag = ''
     previewError.value = ''
     previewSaving.value = false
     previewSaved.value = false
@@ -1656,12 +1689,13 @@ export function useAppController() {
     try {
       if (['markdown', 'json', 'yaml', 'csv', 'tsv', 'code', 'text'].includes(definition.kind)) {
         if (item.size > 5 * 1024 * 1024) throw new Error(t('文本预览最大支持 5 MB'))
-        const content = await window.ossBrowser.objects.readText(
+        const textObject = await window.ossBrowser.objects.readText(
           currentBucket.value.name,
           item.name
         )
         if (generation !== previewGeneration) return
-        previewText.value = content
+        previewText.value = textObject.content
+        previewTextEtag = textObject.etag
       } else if (definition.kind === 'font') {
         if (item.size > 50 * 1024 * 1024) throw new Error(t('字体预览最大支持 50 MB'))
         const url = await window.ossBrowser.objects.preparePreview(
@@ -1716,12 +1750,14 @@ export function useAppController() {
       previewSaveError.value = ''
       if (previewSavedTimer) clearTimeout(previewSavedTimer)
       try {
-        await window.ossBrowser.objects.saveText(
+        const nextEtag = await window.ossBrowser.objects.saveText(
           currentBucket.value.name,
           selectedObjects.value[0].name,
-          content
+          content,
+          previewTextEtag
         )
         if (generation !== previewGeneration) return
+        previewTextEtag = nextEtag
         previewText.value = content
         const size = new TextEncoder().encode(content).byteLength
         selectedObjects.value[0].size = size
@@ -1742,7 +1778,8 @@ export function useAppController() {
       window.ossBrowser.objects.saveText(
         currentBucket.value!.name,
         selectedObjects.value[0].name,
-        content
+        content,
+        previewTextEtag
       )
     )
     if (done === undefined && errorMessage.value) return
@@ -1798,6 +1835,7 @@ export function useAppController() {
       void window.ossBrowser.objects.discardPreview(url)
     }
     objectPreview.value = null
+    previewTextEtag = ''
     previewLoading.value = false
     previewError.value = ''
     previewSaving.value = false
@@ -1822,12 +1860,11 @@ export function useAppController() {
     localStorage.removeItem('oss-browser-session')
   }
 
-  function openCdnCredentials(profile?: SavedProfile): void {
+  function openCdnCredentials(profile?: SavedProfileSummary): void {
     cdnCredentialTargetId.value = profile?.id || null
-    const credentials = profile ? profile.config.cdnCredentials : auth.cdnCredentials
     Object.assign(cdnCredentialForm, {
-      accessKeyId: credentials?.accessKeyId || '',
-      accessKeySecret: credentials?.accessKeySecret || ''
+      accessKeyId: profile?.cdnAccessKeyId || auth.cdnCredentials?.accessKeyId || '',
+      accessKeySecret: profile ? '' : auth.cdnCredentials?.accessKeySecret || ''
     })
     showProfilesModal.value = false
     modal.value = 'cdn-credentials'
@@ -1851,17 +1888,12 @@ export function useAppController() {
       modal.value = null
       return
     }
-    const profile = savedProfiles.value.find((item) => item.id === targetId)
-    if (!profile) {
+    if (!savedProfiles.value.some((item) => item.id === targetId)) {
       errorMessage.value = t('未找到要更新的已保存账号')
       return
     }
-    const updatedProfile: SavedProfile = {
-      ...profile,
-      config: { ...profile.config, cdnCredentials: credentials }
-    }
     const nextProfiles = await settingsTask.run(async () => {
-      await window.ossBrowser.profiles.save(updatedProfile)
+      await window.ossBrowser.profiles.setCdnCredentials(targetId, credentials)
       const profiles = await window.ossBrowser.profiles.list()
       if (loggedIn.value && targetId === profileId()) {
         await window.ossBrowser.auth.setCdnCredentials(credentials)
@@ -1874,42 +1906,34 @@ export function useAppController() {
     modal.value = null
   }
 
-  async function useProfile(profile: SavedProfile): Promise<void> {
-    if (loggedIn.value) {
-      const result = await authTask.run(() =>
-        window.ossBrowser.auth.connect(authSnapshot(profile.config))
-      )
-      if (!result) {
+  async function useProfile(profile: SavedProfileSummary): Promise<void> {
+    const connection = await authTask.run(() => window.ossBrowser.profiles.connect(profile.id))
+    if (!connection) {
+      if (loggedIn.value) {
         const message = errorMessage.value
         loggedIn.value = false
         resetAccountRuntimeState()
         errorMessage.value = message
         localStorage.removeItem('oss-browser-session')
-      } else {
-        resetAccountRuntimeState()
-        auth.alias = profile.config.alias || ''
-        Object.assign(auth, authSnapshot(profile.config))
-        buckets.value = result
-        loadAccountPreferences()
-        saveSession()
-        showProfilesModal.value = false
-        modal.value = null
-        await openInitialLocation(result, auth.presetPath || '')
       }
       return
     }
-    resetCloudOperations()
-    auth.alias = profile.config.alias || ''
-    Object.assign(auth, authSnapshot(profile.config))
+    resetAccountRuntimeState()
+    applyProfileSummary(connection.profile)
+    buckets.value = connection.buckets
+    loggedIn.value = true
+    loadAccountPreferences()
+    saveSession()
     showProfilesModal.value = false
     modal.value = null
+    await openInitialLocation(connection.buckets, auth.presetPath || '')
   }
 
   function changeLocale(event: Event): void {
     setLocale((event.target as HTMLSelectElement).value as AppLocale)
   }
 
-  function removeProfile(profile: SavedProfile): void {
+  function removeProfile(profile: SavedProfileSummary): void {
     requestConfirmation({
       title: t('删除已保存账号'),
       description: t('确定删除已保存账号「{name}」吗？', { name: profile.label }),
@@ -1919,7 +1943,7 @@ export function useAppController() {
     })
   }
 
-  async function performRemoveProfile(profile: SavedProfile): Promise<void> {
+  async function performRemoveProfile(profile: SavedProfileSummary): Promise<void> {
     await window.ossBrowser.profiles.remove(profile.id)
     savedProfiles.value = await window.ossBrowser.profiles.list()
   }

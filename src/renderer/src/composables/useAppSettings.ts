@@ -1,6 +1,6 @@
 import { reactive, ref, watch, type Ref } from 'vue'
 import { DEFAULT_APP_SETTINGS, validateAppSettings } from '../../../shared/app-settings'
-import type { AppSettings, AuthConfig, SavedProfile } from '../../../shared/types'
+import type { AppSettings, AuthConfig, SavedProfileSummary } from '../../../shared/types'
 
 export type ThemeMode = 'system' | 'light' | 'dark'
 
@@ -22,9 +22,8 @@ interface StoredSettings {
 export function useAppSettings(options: {
   auth: AuthConfig
   loggedIn: Ref<boolean>
-  savedProfiles: Ref<SavedProfile[]>
+  savedProfiles: Ref<SavedProfileSummary[]>
   profileId: () => string
-  authSnapshot: (config?: AuthConfig) => AuthConfig
   run: <T>(task: () => Promise<T>) => Promise<T | undefined>
   taskError: Ref<string>
   openModal: () => void
@@ -162,11 +161,7 @@ export function useAppSettings(options: {
       if (!options.loggedIn.value) return
       await window.ossBrowser.auth.setSecure(nextSecure)
       if (options.auth.remember) {
-        await window.ossBrowser.profiles.save({
-          id: options.profileId(),
-          label: options.auth.alias?.trim() || options.auth.accessKeyId,
-          config: options.authSnapshot()
-        })
+        await window.ossBrowser.profiles.setSecure(options.profileId(), nextSecure)
         options.savedProfiles.value = await window.ossBrowser.profiles.list()
       }
     }

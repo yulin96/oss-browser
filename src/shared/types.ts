@@ -48,6 +48,25 @@ export interface SavedProfile {
   config: AuthConfig
 }
 
+export interface SavedProfileSummary {
+  id: string
+  label: string
+  alias?: string
+  endpoint: string
+  endpointMode: EndpointMode
+  accessKeyId: string
+  secure: boolean
+  remember: boolean
+  presetPath?: string
+  hasCdnCredentials: boolean
+  cdnAccessKeyId?: string
+}
+
+export interface ProfileConnection {
+  profile: SavedProfileSummary
+  buckets: BucketInfo[]
+}
+
 export interface AppSettings {
   maxUploadJobs: number
   maxDownloadJobs: number
@@ -164,6 +183,11 @@ export interface ObjectPreviewDescriptor {
   language?: string
 }
 
+export interface TextObjectContent {
+  content: string
+  etag: string
+}
+
 export interface UploadConflict {
   name: string
   displayName: string
@@ -275,8 +299,11 @@ export interface OssBrowserApi {
     probePermissions: () => Promise<PermissionProbeItem[]>
   }
   profiles: {
-    list: () => Promise<SavedProfile[]>
+    list: () => Promise<SavedProfileSummary[]>
+    connect: (id: string) => Promise<ProfileConnection>
     save: (profile: SavedProfile) => Promise<void>
+    setSecure: (id: string, secure: boolean) => Promise<void>
+    setCdnCredentials: (id: string, credentials?: CdnCredentials) => Promise<void>
     remove: (id: string) => Promise<void>
     clear: () => Promise<void>
   }
@@ -320,6 +347,7 @@ export interface OssBrowserApi {
     createFolder: (bucket: string, path: string) => Promise<void>
     remove: (bucket: string, names: string[]) => Promise<void>
     copy: (bucket: string, source: string, target: string) => Promise<void>
+    move: (bucket: string, source: string, target: string) => Promise<void>
     transfer: (
       bucket: string,
       items: ObjectInfo[],
@@ -333,8 +361,8 @@ export interface OssBrowserApi {
     preparePreview: (bucket: string, name: string) => Promise<string>
     discardPreview: (url: string) => Promise<void>
     imageDimensions: (bucket: string, name: string) => Promise<ImageDimensions>
-    readText: (bucket: string, name: string) => Promise<string>
-    saveText: (bucket: string, name: string, content: string) => Promise<void>
+    readText: (bucket: string, name: string) => Promise<TextObjectContent>
+    saveText: (bucket: string, name: string, content: string, etag: string) => Promise<string>
     createSymlink: (bucket: string, name: string, target: string) => Promise<void>
     restore: (bucket: string, names: string[], days: number) => Promise<void>
     details: (bucket: string, name: string) => Promise<ObjectDetails>

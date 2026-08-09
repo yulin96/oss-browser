@@ -1,7 +1,7 @@
 import { app, safeStorage } from 'electron'
 import { rm } from 'node:fs/promises'
 import { join } from 'node:path'
-import type { SavedProfile } from '../shared/types'
+import type { CdnCredentials, SavedProfile, SavedProfileSummary } from '../shared/types'
 import { readJsonFile, writeJsonFileAtomic } from './atomic-json-file'
 import {
   decryptLegacyMacSafeStorage,
@@ -21,53 +21,25 @@ export class ProfileStore {
     return join(app.getPath('userData'), 'profiles.json')
   }
 
-  async list(): Promise<SavedProfile[]> {
+  async list(): Promise<SavedProfileSummary[]> {
     if (!safeStorage.isEncryptionAvailable()) throw new Error('系统安全存储当前不可用')
     return this.mutate(async () => {
       const stored = await this.read()
-      const profiles: SavedProfile[] = []
-      let legacyPassword: string | undefined
-      let legacyPasswordLoaded = false
-      let migrated = false
-
-      for (const profile of stored) {
-        const encrypted = Buffer.from(profile.encryptedConfig, 'base64')
-        let serialized: string
-        try {
-          serialized = safeStorage.decryptString(encrypted)
-        } catch (error) {
-          if (process.platform !== 'darwin') {
-            throw new Error(`已保存账号“${profile.label}”无法解密`, { cause: error })
-          }
-          if (!legacyPasswordLoaded) {
-            legacyPassword = await readLegacyMacSafeStoragePassword()
-            legacyPasswordLoaded = true
-          }
-          if (!legacyPassword) {
-            throw new Error(`已保存账号“${profile.label}”无法解密`, { cause: error })
-          }
-          try {
-            serialized = decryptLegacyMacSafeStorage(encrypted, legacyPassword)
-            profile.encryptedConfig = safeStorage.encryptString(serialized).toString('base64')
-            migrated = true
-          } catch (legacyError) {
-            throw new Error(`已保存账号“${profile.label}”无法解密`, { cause: legacyError })
-          }
-        }
-
-        try {
-          profiles.push({
-            id: profile.id,
-            label: profile.label,
-            config: JSON.parse(serialized)
-          })
-        } catch (error) {
-          throw new Error(`已保存账号“${profile.label}”内容无效`, { cause: error })
-        }
-      }
-
+      const { profiles, migrated } = await this.decrypt(stored)
       if (migrated) await writeJsonFileAtomic(this.path, stored)
-      return profiles
+      return profiles.map(toSavedProfileSummary)
+    })
+  }
+
+  async get(id: string): Promise<SavedProfile> {
+    if (!safeStorage.isEncryptionAvailable()) throw new Error('系统安全存储当前不可用')
+    return this.mutate(async () => {
+      const stored = await this.read()
+      const { profiles, migrated } = await this.decrypt(stored)
+      if (migrated) await writeJsonFileAtomic(this.path, stored)
+      const profile = profiles.find((item) => item.id === id)
+      if (!profile) throw new Error('未找到已保存账号')
+      return profile
     })
   }
 
@@ -99,6 +71,14 @@ export class ProfileStore {
     })
   }
 
+  async setSecure(id: string, secure: boolean): Promise<void> {
+    await this.updateConfig(id, (config) => ({ ...config, secure }))
+  }
+
+  async setCdnCredentials(id: string, credentials?: CdnCredentials): Promise<void> {
+    await this.updateConfig(id, (config) => ({ ...config, cdnCredentials: credentials }))
+  }
+
   async clear(): Promise<void> {
     await this.mutate(() => rm(this.path, { force: true }))
   }
@@ -122,6 +102,70 @@ export class ProfileStore {
     return parsed as StoredProfile[]
   }
 
+  private async updateConfig(
+    id: string,
+    update: (config: SavedProfile['config']) => SavedProfile['config']
+  ): Promise<void> {
+    if (!safeStorage.isEncryptionAvailable()) throw new Error('系统安全存储当前不可用')
+    await this.mutate(async () => {
+      const stored = await this.read()
+      const { profiles } = await this.decrypt(stored)
+      const profile = profiles.find((item) => item.id === id)
+      const target = stored.find((item) => item.id === id)
+      if (!profile || !target) throw new Error('未找到已保存账号')
+      target.encryptedConfig = safeStorage
+        .encryptString(JSON.stringify(update(profile.config)))
+        .toString('base64')
+      await writeJsonFileAtomic(this.path, stored)
+    })
+  }
+
+  private async decrypt(
+    stored: StoredProfile[]
+  ): Promise<{ profiles: SavedProfile[]; migrated: boolean }> {
+    const profiles: SavedProfile[] = []
+    let legacyPassword: string | undefined
+    let legacyPasswordLoaded = false
+    let migrated = false
+
+    for (const profile of stored) {
+      const encrypted = Buffer.from(profile.encryptedConfig, 'base64')
+      let serialized: string
+      try {
+        serialized = safeStorage.decryptString(encrypted)
+      } catch (error) {
+        if (process.platform !== 'darwin') {
+          throw new Error(`已保存账号“${profile.label}”无法解密`, { cause: error })
+        }
+        if (!legacyPasswordLoaded) {
+          legacyPassword = await readLegacyMacSafeStoragePassword()
+          legacyPasswordLoaded = true
+        }
+        if (!legacyPassword) {
+          throw new Error(`已保存账号“${profile.label}”无法解密`, { cause: error })
+        }
+        try {
+          serialized = decryptLegacyMacSafeStorage(encrypted, legacyPassword)
+          profile.encryptedConfig = safeStorage.encryptString(serialized).toString('base64')
+          migrated = true
+        } catch (legacyError) {
+          throw new Error(`已保存账号“${profile.label}”无法解密`, { cause: legacyError })
+        }
+      }
+
+      try {
+        profiles.push({
+          id: profile.id,
+          label: profile.label,
+          config: JSON.parse(serialized)
+        })
+      } catch (error) {
+        throw new Error(`已保存账号“${profile.label}”内容无效`, { cause: error })
+      }
+    }
+    return { profiles, migrated }
+  }
+
   private mutate<T>(task: () => Promise<T>): Promise<T> {
     const result = this.mutationQueue.then(task, task)
     this.mutationQueue = result.then(
@@ -129,5 +173,21 @@ export class ProfileStore {
       () => undefined
     )
     return result
+  }
+}
+
+export function toSavedProfileSummary(profile: SavedProfile): SavedProfileSummary {
+  return {
+    id: profile.id,
+    label: profile.label,
+    alias: profile.config.alias,
+    endpoint: profile.config.endpoint,
+    endpointMode: profile.config.endpointMode,
+    accessKeyId: profile.config.accessKeyId,
+    secure: profile.config.secure,
+    remember: profile.config.remember,
+    presetPath: profile.config.presetPath,
+    hasCdnCredentials: Boolean(profile.config.cdnCredentials),
+    cdnAccessKeyId: profile.config.cdnCredentials?.accessKeyId
   }
 }

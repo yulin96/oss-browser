@@ -66,6 +66,7 @@ interface PreparedUpload {
   prefix: string
   paths: string[]
   entries: UploadEntry[]
+  conflictNames: Set<string>
 }
 interface DownloadRange {
   start: number
@@ -502,27 +503,42 @@ export class OssService {
       if (name.endsWith('/')) expanded.push(...(await this.listAllObjectNames(client, name)))
       else expanded.push(name)
     }
-    for (let index = 0; index < expanded.length; index += 1000) {
-      await client.deleteMulti(expanded.slice(index, index + 1000), { quiet: true })
-    }
+    await this.deleteObjectNames(client, expanded)
   }
 
   async copyObject(bucket: string, source: string, target: string): Promise<void> {
     const client = this.bucketClient(bucket)
-    if (source === target) throw new Error('源路径和目标路径不能相同')
+    await this.copyObjectSnapshot(client, source, target)
+  }
 
+  async moveObject(bucket: string, source: string, target: string): Promise<void> {
+    const client = this.bucketClient(bucket)
+    const sourceNames = await this.copyObjectSnapshot(client, source, target)
+    await this.deleteObjectNames(client, sourceNames)
+  }
+
+  private async copyObjectSnapshot(
+    client: OssClient,
+    source: string,
+    target: string
+  ): Promise<string[]> {
+    if (source === target) throw new Error('源路径和目标路径不能相同')
+    if (source.endsWith('/') && target.startsWith(source)) {
+      throw new Error('目标目录不能位于源目录内部')
+    }
     try {
       if (!source.endsWith('/')) {
         await client.copy(target, source, {
           headers: { 'x-oss-forbid-overwrite': 'true' }
         })
-        return
+        return [source]
       }
       const names = await this.listAllObjectNames(client, source)
       for (const name of names)
         await client.copy(`${target}${name.slice(source.length)}`, name, {
           headers: { 'x-oss-forbid-overwrite': 'true' }
         })
+      return names
     } catch (error) {
       if ((error as { code?: string }).code === 'FileAlreadyExists')
         throw new Error('目标对象已存在，不能覆盖')
@@ -541,13 +557,20 @@ export class OssService {
       rawTargetPrefix && !rawTargetPrefix.endsWith('/') ? `${rawTargetPrefix}/` : rawTargetPrefix
     const sourceClient = this.bucketClient(sourceBucket)
     const targetClient = this.bucketClient(targetBucket)
+    const copiedSourceNames: string[] = []
 
     try {
       for (const item of items) {
+        const baseName = item.displayName.replace(/\/$/, '')
+        const targetRoot = item.isDirectory
+          ? `${targetPrefix}${baseName}/`
+          : `${targetPrefix}${baseName}`
+        if (item.isDirectory && sourceBucket === targetBucket && targetRoot.startsWith(item.name)) {
+          throw new Error('目标目录不能位于源目录内部')
+        }
         const sourceNames = item.isDirectory
           ? await this.listAllObjectNames(sourceClient, item.name)
           : [item.name]
-        const baseName = item.displayName.replace(/\/$/, '')
         for (const sourceName of sourceNames) {
           const suffix = item.isDirectory ? sourceName.slice(item.name.length) : ''
           const targetName = item.isDirectory
@@ -560,6 +583,7 @@ export class OssService {
             headers: { 'x-oss-forbid-overwrite': 'true' }
           })
         }
+        copiedSourceNames.push(...sourceNames)
       }
     } catch (error) {
       if ((error as { code?: string }).code === 'FileAlreadyExists') {
@@ -568,11 +592,7 @@ export class OssService {
       throw error
     }
 
-    if (move)
-      await this.removeObjects(
-        sourceBucket,
-        items.map((item) => item.name)
-      )
+    if (move) await this.deleteObjectNames(sourceClient, copiedSourceNames)
   }
 
   async createSymlink(bucket: string, name: string, target: string): Promise<void> {
@@ -917,7 +937,21 @@ export class OssService {
     name: string,
     headers: Record<string, string>
   ): Promise<void> {
-    await this.bucketClient(bucket).copy(name, name, { headers })
+    const client = this.bucketClient(bucket)
+    const current = await client.head(name)
+    const responseHeaders = Object.fromEntries(
+      Object.entries(current.res.headers || {}).map(([key, value]) => [key.toLowerCase(), value])
+    )
+    const preservedHeaders = this.preservedObjectHeaders(responseHeaders)
+    for (const [key, value] of Object.entries(headers)) {
+      preservedHeaders[key.toLowerCase()] = value
+    }
+    const etag = responseHeaders.etag
+    if (!etag) throw new Error('OSS 未返回对象 ETag，无法安全更新 HTTP 头')
+    await client.copy(name, name, {
+      meta: current.meta || {},
+      headers: { ...preservedHeaders, 'If-Match': String(etag) }
+    })
   }
 
   signedUrl(bucket: string, name: string, expires: number, process?: string): string {
@@ -961,13 +995,26 @@ export class OssService {
     return { width, height }
   }
 
-  async readText(bucket: string, name: string): Promise<string> {
+  async readText(bucket: string, name: string): Promise<{ content: string; etag: string }> {
     const result = await this.bucketClient(bucket).get(name)
-    return result.content.toString('utf8')
+    const etag = result.res.headers.etag
+    if (!etag) throw new Error('OSS 未返回对象 ETag，无法安全编辑文本')
+    return { content: result.content.toString('utf8'), etag: String(etag) }
   }
 
-  async saveText(bucket: string, name: string, content: string): Promise<void> {
-    await this.bucketClient(bucket).put(name, Buffer.from(content, 'utf8'))
+  async saveText(bucket: string, name: string, content: string, etag: string): Promise<string> {
+    const client = this.bucketClient(bucket)
+    const current = await client.head(name)
+    if (String(current.res.headers.etag || '') !== etag) {
+      throw new Error('对象已被其他位置修改，请重新打开后再保存')
+    }
+    const result = await client.put(name, Buffer.from(content, 'utf8'), {
+      meta: current.meta || {},
+      headers: this.preservedObjectHeaders(current.res.headers || {})
+    })
+    const nextEtag = result.res.headers.etag
+    if (!nextEtag) throw new Error('文本已保存，但 OSS 未返回新的对象 ETag')
+    return String(nextEtag)
   }
 
   async listMultipart(bucket: string): Promise<MultipartUploadInfo[]> {
@@ -1064,7 +1111,13 @@ export class OssService {
       return [conflict]
     })
     const id = randomUUID()
-    this.preparedUploads.set(id, { bucket, prefix, paths: [...paths], entries })
+    this.preparedUploads.set(id, {
+      bucket,
+      prefix,
+      paths: [...paths],
+      entries,
+      conflictNames
+    })
     return { id, conflicts }
   }
 
@@ -1112,9 +1165,13 @@ export class OssService {
     const uploadEntry = async ({ localPath, isDirectory, name }: UploadEntry): Promise<void> => {
       const transfer = this.newTransfer('upload', name, batch)
       const client = this.bucketClient(bucket)
+      const headers =
+        prepared && !prepared.conflictNames.has(name)
+          ? { 'x-oss-forbid-overwrite': 'true' }
+          : undefined
       if (isDirectory) {
         await this.runControlledTransfer(transfer, client, async () => {
-          await client.put(name, Buffer.alloc(0))
+          await client.put(name, Buffer.alloc(0), { headers })
         })
         return
       }
@@ -1132,7 +1189,8 @@ export class OssService {
             try {
               await client.putStream(name, stream, {
                 contentLength: fileSize,
-                mime: mime.getType(localPath) || undefined
+                mime: mime.getType(localPath) || undefined,
+                headers
               })
               break
             } catch (error) {
@@ -1153,6 +1211,7 @@ export class OssService {
         const checkpoint = await this.readCheckpoint(checkpointPath)
         await client.multipartUpload(name, localPath, {
           checkpoint,
+          headers,
           parallel: this.settings.multipartParallel,
           partSize: this.settings.partSizeMb * 1024 * 1024,
           progress: async (progress: number, nextCheckpoint: unknown) => {
@@ -1704,6 +1763,28 @@ export class OssService {
     } catch {
       return undefined
     }
+  }
+
+  private async deleteObjectNames(client: OssClient, names: string[]): Promise<void> {
+    for (let index = 0; index < names.length; index += 1000) {
+      await client.deleteMulti(names.slice(index, index + 1000), { quiet: true })
+    }
+  }
+
+  private preservedObjectHeaders(headers: Record<string, unknown>): Record<string, string> {
+    const normalized = Object.fromEntries(
+      Object.entries(headers).map(([key, value]) => [key.toLowerCase(), value])
+    )
+    return Object.fromEntries(
+      [
+        'cache-control',
+        'content-type',
+        'content-disposition',
+        'content-encoding',
+        'content-language',
+        'expires'
+      ].flatMap((key) => (normalized[key] === undefined ? [] : [[key, String(normalized[key])]]))
+    )
   }
 
   private newTransferBatch(direction: TransferDirection, total: number): TransferBatch {

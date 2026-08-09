@@ -15,9 +15,13 @@ import type { AuthConfig, ObjectInfo } from '../src/shared/types'
 interface OssClientStub {
   list: ReturnType<typeof vi.fn>
   copy: ReturnType<typeof vi.fn>
+  deleteMulti?: ReturnType<typeof vi.fn>
+  get?: ReturnType<typeof vi.fn>
+  head?: ReturnType<typeof vi.fn>
   signatureUrl?: ReturnType<typeof vi.fn>
   put?: ReturnType<typeof vi.fn>
   putStream?: ReturnType<typeof vi.fn>
+  multipartUpload?: ReturnType<typeof vi.fn>
   cancel?: ReturnType<typeof vi.fn>
 }
 
@@ -380,6 +384,194 @@ describe('OssService object operations', () => {
     expect(copy).toHaveBeenCalledWith('archive/example.txt', 'example.txt', 'source', {
       headers: { 'x-oss-forbid-overwrite': 'true' }
     })
+  })
+
+  it('rejects moving a directory into its own descendant', async () => {
+    const client = { list: vi.fn(), copy: vi.fn(), deleteMulti: vi.fn() }
+    const service = new OssService(vi.fn())
+    useClients(service, { bucket: client })
+
+    await expect(service.moveObject('bucket', 'source/', 'source/nested/')).rejects.toThrow(
+      '目标目录不能位于源目录内部'
+    )
+    expect(client.list).not.toHaveBeenCalled()
+    expect(client.copy).not.toHaveBeenCalled()
+    expect(client.deleteMulti).not.toHaveBeenCalled()
+  })
+
+  it('deletes only the source snapshot copied during a directory move', async () => {
+    const client = {
+      list: vi.fn().mockResolvedValue({
+        objects: [{ name: 'source/first.txt' }, { name: 'source/second.txt' }],
+        isTruncated: false
+      }),
+      copy: vi.fn().mockResolvedValue(undefined),
+      deleteMulti: vi.fn().mockResolvedValue(undefined)
+    }
+    const service = new OssService(vi.fn())
+    useClients(service, { bucket: client })
+
+    await service.moveObject('bucket', 'source/', 'target/')
+
+    expect(client.list).toHaveBeenCalledOnce()
+    expect(client.deleteMulti).toHaveBeenCalledWith(['source/first.txt', 'source/second.txt'], {
+      quiet: true
+    })
+  })
+
+  it('rejects transferring a directory into its own descendant before listing it', async () => {
+    const client = { list: vi.fn(), copy: vi.fn(), deleteMulti: vi.fn() }
+    const service = new OssService(vi.fn())
+    useClients(service, { bucket: client })
+
+    await expect(
+      service.transferObjects(
+        'bucket',
+        [object('source/', true)],
+        'oss://bucket/source/nested/',
+        true
+      )
+    ).rejects.toThrow('目标目录不能位于源目录内部')
+    expect(client.list).not.toHaveBeenCalled()
+    expect(client.copy).not.toHaveBeenCalled()
+    expect(client.deleteMulti).not.toHaveBeenCalled()
+  })
+
+  it('deletes only the copied source snapshot during a directory transfer', async () => {
+    const client = {
+      list: vi.fn().mockResolvedValue({
+        objects: [{ name: 'source/first.txt' }, { name: 'source/second.txt' }],
+        isTruncated: false
+      }),
+      copy: vi.fn().mockResolvedValue(undefined),
+      deleteMulti: vi.fn().mockResolvedValue(undefined)
+    }
+    const service = new OssService(vi.fn())
+    useClients(service, { bucket: client })
+
+    await service.transferObjects('bucket', [object('source/', true)], 'oss://bucket/target/', true)
+
+    expect(client.list).toHaveBeenCalledOnce()
+    expect(client.deleteMulti).toHaveBeenCalledWith(['source/first.txt', 'source/second.txt'], {
+      quiet: true
+    })
+  })
+
+  it('preserves existing headers and metadata when updating one HTTP header', async () => {
+    const client = {
+      list: vi.fn(),
+      head: vi.fn().mockResolvedValue({
+        res: {
+          headers: {
+            etag: '"old-etag"',
+            'content-type': 'text/plain',
+            'content-encoding': 'gzip',
+            'cache-control': 'max-age=60'
+          }
+        },
+        meta: { owner: 'operations' }
+      }),
+      copy: vi.fn().mockResolvedValue(undefined)
+    }
+    const service = new OssService(vi.fn())
+    useClients(service, { bucket: client })
+
+    await service.setObjectHeaders('bucket', 'example.txt', { 'Cache-Control': 'no-cache' })
+
+    expect(client.copy).toHaveBeenCalledWith('example.txt', 'example.txt', {
+      meta: { owner: 'operations' },
+      headers: {
+        'cache-control': 'no-cache',
+        'content-type': 'text/plain',
+        'content-encoding': 'gzip',
+        'If-Match': '"old-etag"'
+      }
+    })
+  })
+
+  it('rejects saving text when the remote ETag changed', async () => {
+    const client = {
+      list: vi.fn(),
+      copy: vi.fn(),
+      head: vi.fn().mockResolvedValue({ res: { headers: { etag: '"new-etag"' } } }),
+      put: vi.fn()
+    }
+    const service = new OssService(vi.fn())
+    useClients(service, { bucket: client })
+
+    await expect(
+      service.saveText('bucket', 'example.txt', 'updated', '"old-etag"')
+    ).rejects.toThrow('对象已被其他位置修改，请重新打开后再保存')
+    expect(client.put).not.toHaveBeenCalled()
+  })
+
+  it('returns the new ETag after saving unchanged remote text', async () => {
+    const client = {
+      list: vi.fn(),
+      copy: vi.fn(),
+      head: vi.fn().mockResolvedValue({
+        res: { headers: { etag: '"old-etag"', 'content-type': 'text/plain' } },
+        meta: { owner: 'operations' }
+      }),
+      put: vi.fn().mockResolvedValue({ res: { headers: { etag: '"new-etag"' } } })
+    }
+    const service = new OssService(vi.fn())
+    useClients(service, { bucket: client })
+
+    await expect(service.saveText('bucket', 'example.txt', 'updated', '"old-etag"')).resolves.toBe(
+      '"new-etag"'
+    )
+    expect(client.put).toHaveBeenCalledWith('example.txt', Buffer.from('updated'), {
+      meta: { owner: 'operations' },
+      headers: { 'content-type': 'text/plain' }
+    })
+  })
+
+  it('forbids overwriting objects that appeared after upload conflict scanning', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'oss-browser-upload-conflict-'))
+    temporaryDirectories.push(directory)
+    const localPath = join(directory, 'example.txt')
+    await writeFile(localPath, 'example')
+    const putStream = vi.fn().mockResolvedValue(undefined)
+    const client = {
+      list: vi.fn().mockResolvedValue({ objects: [], isTruncated: false }),
+      copy: vi.fn(),
+      putStream,
+      cancel: vi.fn()
+    }
+    const service = new OssService(vi.fn())
+    useClients(service, { bucket: client })
+
+    const preparation = await service.findUploadConflicts('bucket', '', [localPath])
+    await expect(
+      service.upload('bucket', '', [localPath], { preparationId: preparation.id })
+    ).resolves.toBe(true)
+
+    expect(putStream).toHaveBeenCalledWith(
+      'example.txt',
+      expect.anything(),
+      expect.objectContaining({ headers: { 'x-oss-forbid-overwrite': 'true' } })
+    )
+  })
+
+  it('keeps direct replacement uploads overwrite-enabled', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'oss-browser-upload-replace-'))
+    temporaryDirectories.push(directory)
+    const localPath = join(directory, 'example.txt')
+    await writeFile(localPath, 'example')
+    const putStream = vi.fn().mockResolvedValue(undefined)
+    const service = new OssService(vi.fn())
+    useClients(service, {
+      bucket: { list: vi.fn(), copy: vi.fn(), putStream, cancel: vi.fn() }
+    })
+
+    await expect(service.upload('bucket', '', [localPath])).resolves.toBe(true)
+
+    expect(putStream).toHaveBeenCalledWith(
+      'example.txt',
+      expect.anything(),
+      expect.objectContaining({ headers: undefined })
+    )
   })
 
   it('restores empty folders and nested folder markers during download', async () => {

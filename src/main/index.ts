@@ -32,7 +32,7 @@ import { extractVersionReleaseNotes } from '../shared/release-notes.mjs'
 import { OssService } from './oss-service'
 import { FloatingUploadManager } from './floating-upload-manager'
 import { FloatingUploadStore } from './floating-upload-store'
-import { ProfileStore } from './profile-store'
+import { ProfileStore, toSavedProfileSummary } from './profile-store'
 import { UpdateService } from './update-service'
 import { assertTrustedIpcSender, configureRendererWindow, openExternalUrl } from './window-security'
 import { WindowStateStore, type WindowState } from './window-state-store'
@@ -291,7 +291,24 @@ function registerIpc(): void {
   )
   ipcMain.handle('auth:probePermissions', () => oss.probePermissions())
   ipcMain.handle('profiles:list', () => profiles.list())
+  ipcMain.handle('profiles:connect', async (_event, id: string) => {
+    const profile = await profiles.get(id)
+    try {
+      const buckets = await oss.connect(profile.config)
+      await floatingUpload.setAccount(profile.id)
+      return { profile: toSavedProfileSummary(profile), buckets }
+    } catch (error) {
+      await floatingUpload.setAccount(null)
+      throw error
+    }
+  })
   ipcMain.handle('profiles:save', (_event, profile: SavedProfile) => profiles.save(profile))
+  ipcMain.handle('profiles:setSecure', (_event, id: string, secure: boolean) =>
+    profiles.setSecure(id, secure)
+  )
+  ipcMain.handle('profiles:setCdnCredentials', (_event, id: string, credentials?: CdnCredentials) =>
+    profiles.setCdnCredentials(id, credentials)
+  )
   ipcMain.handle('profiles:remove', (_event, id: string) => profiles.remove(id))
   ipcMain.handle('profiles:clear', () => profiles.clear())
   ipcMain.handle('settings:update', (_event, settings: AppSettings) => oss.updateSettings(settings))
@@ -349,6 +366,9 @@ function registerIpc(): void {
   ipcMain.handle('objects:copy', (_event, bucket: string, source: string, target: string) =>
     oss.copyObject(bucket, source, target)
   )
+  ipcMain.handle('objects:move', (_event, bucket: string, source: string, target: string) =>
+    oss.moveObject(bucket, source, target)
+  )
   ipcMain.handle(
     'objects:transfer',
     (_event, bucket: string, items: ObjectInfo[], targetPath: string, move: boolean) =>
@@ -386,8 +406,10 @@ function registerIpc(): void {
   ipcMain.handle('objects:readText', (_event, bucket: string, name: string) =>
     oss.readText(bucket, name)
   )
-  ipcMain.handle('objects:saveText', (_event, bucket: string, name: string, content: string) =>
-    oss.saveText(bucket, name, content)
+  ipcMain.handle(
+    'objects:saveText',
+    (_event, bucket: string, name: string, content: string, etag: string) =>
+      oss.saveText(bucket, name, content, etag)
   )
   ipcMain.handle('objects:createSymlink', (_event, bucket: string, name: string, target: string) =>
     oss.createSymlink(bucket, name, target)
