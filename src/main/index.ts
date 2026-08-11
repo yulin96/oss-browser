@@ -22,7 +22,6 @@ import type {
   AuthConfig,
   CacheRefreshRequest,
   CdnCredentials,
-  GrantOptions,
   ObjectInfo,
   SavedProfile,
   TransferItem,
@@ -312,9 +311,6 @@ function registerIpc(): void {
   ipcMain.handle('profiles:remove', (_event, id: string) => profiles.remove(id))
   ipcMain.handle('profiles:clear', () => profiles.clear())
   ipcMain.handle('settings:update', (_event, settings: AppSettings) => oss.updateSettings(settings))
-  ipcMain.handle('grants:createToken', (_event, options: GrantOptions) =>
-    oss.createGrantToken(options)
-  )
   ipcMain.handle('ram:listUsers', () => oss.listRamUsers())
   ipcMain.handle(
     'ram:saveUser',

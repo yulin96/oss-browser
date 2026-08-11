@@ -67,7 +67,6 @@ export type ModalName =
   | 'symlink'
   | 'restore'
   | 'details'
-  | 'grant'
   | 'ram-users'
   | 'ram-user'
   | 'ram-keys'
@@ -131,8 +130,6 @@ export function useAppController() {
 
   const loggedIn = ref(false)
   const initializing = ref(true)
-  const authMode = ref<'access-key' | 'token'>('access-key')
-  const authToken = ref('')
   const directError = ref('')
   const toastMessage = ref('')
   const modal = ref<ModalName>(null)
@@ -324,11 +321,6 @@ export function useAppController() {
     expires: 3600,
     days: 1
   })
-  const grantForm = reactive({
-    roleArn: '',
-    privilege: 'readOnly' as 'readOnly' | 'readWrite' | 'all',
-    durationSeconds: 3600
-  })
   const ramForm = reactive({
     ramUserName: '',
     ramDisplayName: '',
@@ -464,8 +456,6 @@ export function useAppController() {
   })
 
   const {
-    grantToken,
-    grantExpiration,
     ramUsers,
     ramAccessKeys,
     activeRamUser,
@@ -475,7 +465,6 @@ export function useAppController() {
     permissionChecking,
     resetCloudOperations,
     showDetails,
-    createGrantToken,
     openRamUsers,
     editRamUser,
     saveRamUser,
@@ -485,13 +474,10 @@ export function useAppController() {
     removeRamAccessKey,
     checkPermissions
   } = useCloudOperations({
-    run,
     runCloudTask: cloudTask.run,
     requestConfirmation,
     getBucket: () => currentBucket.value,
     getSelectedObjects: () => selectedObjects.value,
-    getPrefix: () => prefix.value,
-    grantForm,
     ramForm,
     setModal: (name) => {
       modal.value = name
@@ -755,7 +741,6 @@ export function useAppController() {
     resetConfirmation()
     cancelUploadConflicts()
     resetCloudOperations()
-    authToken.value = ''
     modal.value = null
     Object.assign(bucketForm, { name: '', region: 'oss-cn-hangzhou', acl: 'private' })
     Object.assign(objectForm, {
@@ -767,11 +752,6 @@ export function useAppController() {
       contentDisposition: '',
       expires: 3600,
       days: 1
-    })
-    Object.assign(grantForm, {
-      roleArn: '',
-      privilege: 'readOnly',
-      durationSeconds: 3600
     })
     Object.assign(ramForm, {
       ramUserName: '',
@@ -937,7 +917,6 @@ export function useAppController() {
       cdnCredentials: undefined
     })
     Object.assign(cdnCredentialForm, { accessKeyId: '', accessKeySecret: '' })
-    authToken.value = ''
     errorMessage.value = ''
   }
 
@@ -999,37 +978,6 @@ export function useAppController() {
       presetPath: profile.presetPath || '',
       cdnCredentials: undefined
     })
-  }
-
-  async function loginWithToken(): Promise<void> {
-    errorMessage.value = ''
-    try {
-      const bytes = Uint8Array.from(atob(authToken.value.trim()), (char) => char.charCodeAt(0))
-      const token = JSON.parse(new TextDecoder().decode(bytes)) as {
-        id: string
-        secret: string
-        stoken?: string
-        expiration?: string
-        osspath?: string
-        eptpl?: string
-        region?: string
-      }
-      if (!token.id || !token.secret) throw new Error(t('授权码内容不完整'))
-      if (token.expiration && new Date(token.expiration).getTime() <= Date.now()) {
-        throw new Error(t('授权码已经过期'))
-      }
-      auth.accessKeyId = token.id
-      auth.accessKeySecret = token.secret
-      auth.stsToken = token.stoken || ''
-      auth.presetPath = token.osspath || ''
-      auth.endpoint = (token.eptpl || `${token.region || 'oss-cn-hangzhou'}.aliyuncs.com`)
-        .replace('{region}', token.region || 'oss-cn-hangzhou')
-        .replace(/^https?:\/\//, '')
-      auth.endpointMode = 'custom'
-      await login()
-    } catch (error) {
-      errorMessage.value = error instanceof Error ? error.message : t('授权码格式不正确')
-    }
   }
 
   async function logout(): Promise<void> {
@@ -1110,7 +1058,6 @@ export function useAppController() {
     if (action === 'symlink') return openModal('symlink')
     if (action === 'restore') return openModal('restore')
     if (action === 'details') return void showDetails()
-    if (action === 'grant') return openModal('grant')
     if (action === 'cache') return void openCacheRefresh(selectedObjects.value[0])
     if (action === 'delete') return removeSelected()
   }
@@ -1955,8 +1902,6 @@ export function useAppController() {
     getObjectVisual,
     loggedIn,
     initializing,
-    authMode,
-    authToken,
     directError,
     toastMessage,
     modal,
@@ -1981,8 +1926,6 @@ export function useAppController() {
     shareNeedsExpiry,
     sharePreparing,
     shareCopied,
-    grantToken,
-    grantExpiration,
     ramUsers,
     ramAccessKeys,
     activeRamUser,
@@ -2043,7 +1986,6 @@ export function useAppController() {
     OSS_REGIONS,
     bucketForm,
     objectForm,
-    grantForm,
     ramForm,
     cacheForm,
     selectedMediaProcesses,
@@ -2164,7 +2106,6 @@ export function useAppController() {
     restoreSession,
     saveSession,
     profileId,
-    loginWithToken,
     logout,
     confirmLogout,
     isOpeningItem,
@@ -2200,7 +2141,6 @@ export function useAppController() {
     createSymlink,
     restoreSelected,
     showDetails,
-    createGrantToken,
     openRamUsers,
     editRamUser,
     saveRamUser,

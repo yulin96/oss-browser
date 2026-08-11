@@ -14,24 +14,15 @@ import { t } from '../i18n'
 type RunTask = <T>(task: () => Promise<T>) => Promise<T | undefined>
 
 export function useCloudOperations(options: {
-  run: RunTask
   runCloudTask: RunTask
   requestConfirmation: (request: ConfirmationRequest) => void
   getBucket: () => BucketInfo | null
   getSelectedObjects: () => ObjectInfo[]
-  getPrefix: () => string
-  grantForm: {
-    roleArn: string
-    privilege: 'readOnly' | 'readWrite' | 'all'
-    durationSeconds: number
-  }
   ramForm: { ramUserName: string; ramDisplayName: string; ramComments: string }
   setModal: (modal: 'details' | 'ram-users' | 'ram-user' | 'ram-keys' | null) => void
   getError: () => string
   setError: (message: string) => void
 }): {
-  grantToken: Ref<string>
-  grantExpiration: Ref<string>
   ramUsers: Ref<RamUser[]>
   ramAccessKeys: Ref<RamAccessKey[]>
   activeRamUser: Ref<RamUser | null>
@@ -41,7 +32,6 @@ export function useCloudOperations(options: {
   permissionChecking: Ref<boolean>
   resetCloudOperations: () => void
   showDetails: () => Promise<void>
-  createGrantToken: () => Promise<void>
   openRamUsers: () => Promise<void>
   editRamUser: (user?: RamUser) => void
   saveRamUser: () => Promise<void>
@@ -51,8 +41,6 @@ export function useCloudOperations(options: {
   removeRamAccessKey: (key: RamAccessKey) => void
   checkPermissions: () => Promise<void>
 } {
-  const grantToken = ref('')
-  const grantExpiration = ref('')
   const ramUsers = ref<RamUser[]>([])
   const ramAccessKeys = ref<RamAccessKey[]>([])
   const activeRamUser = ref<RamUser | null>(null)
@@ -63,8 +51,6 @@ export function useCloudOperations(options: {
   let permissionProbeGeneration = 0
 
   function resetCloudOperations(): void {
-    grantToken.value = ''
-    grantExpiration.value = ''
     ramUsers.value = []
     ramAccessKeys.value = []
     activeRamUser.value = null
@@ -85,28 +71,6 @@ export function useCloudOperations(options: {
     if (!result) return
     objectDetails.value = result
     options.setModal('details')
-  }
-
-  async function createGrantToken(): Promise<void> {
-    const bucket = options.getBucket()
-    if (!bucket) return
-    const selected = options.getSelectedObjects()
-    const item = selected.length === 1 ? selected[0] : undefined
-    const result = await options.run(() =>
-      window.ossBrowser.grants.createToken({
-        bucket: bucket.name,
-        key: item?.name || options.getPrefix(),
-        region: bucket.region.replace(/^oss-/, ''),
-        roleArn: options.grantForm.roleArn,
-        privilege: options.grantForm.privilege,
-        durationSeconds: Number(options.grantForm.durationSeconds),
-        isObject: Boolean(item && !item.isDirectory)
-      })
-    )
-    if (!result) return
-    grantToken.value = result.token
-    grantExpiration.value = result.expiration
-    await window.ossBrowser.system.writeClipboard(result.token)
   }
 
   async function openRamUsers(): Promise<void> {
@@ -211,8 +175,6 @@ export function useCloudOperations(options: {
   }
 
   return {
-    grantToken,
-    grantExpiration,
     ramUsers,
     ramAccessKeys,
     activeRamUser,
@@ -222,7 +184,6 @@ export function useCloudOperations(options: {
     permissionChecking,
     resetCloudOperations,
     showDetails,
-    createGrantToken,
     openRamUsers,
     editRamUser,
     saveRamUser,

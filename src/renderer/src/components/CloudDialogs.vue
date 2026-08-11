@@ -7,15 +7,11 @@ import ModalShell from './ModalShell.vue'
 const props = defineProps<{ controller: AppController }>()
 const {
   modal,
-  grantToken,
-  grantExpiration,
   ramUsers,
   ramAccessKeys,
   activeRamUser,
   createdAccessKey,
-  grantForm,
   ramForm,
-  createGrantToken,
   openRamUsers,
   editRamUser,
   saveRamUser,
@@ -28,46 +24,6 @@ const {
 
 <template>
   <div class="contents">
-    <Transition name="modal" appear>
-      <ModalShell
-        v-if="modal === 'grant'"
-        :title="t('生成临时授权码')"
-        width="620px"
-        @close="modal = null"
-      >
-        <label class="field-label">{{ t('RAM 角色 ARN') }}</label>
-        <div class="input-wrap">
-          <input v-model.trim="grantForm.roleArn" placeholder="acs:ram::123456789:role/example" />
-        </div>
-        <label class="field-label">{{ t('权限') }}</label>
-        <div class="select-wrap">
-          <select v-model="grantForm.privilege">
-            <option value="readOnly">{{ t('只读') }}</option>
-            <option value="readWrite">{{ t('读写') }}</option>
-            <option value="all">{{ t('全部权限') }}</option>
-          </select>
-        </div>
-        <label class="field-label">{{ t('有效期（秒）') }}</label>
-        <div class="input-wrap">
-          <input v-model.number="grantForm.durationSeconds" type="number" min="900" max="43200" />
-        </div>
-        <div v-if="grantToken" class="grant-result">
-          <span>{{
-            t('有效期至 {date}', { date: new Date(grantExpiration).toLocaleString() })
-          }}</span>
-          <textarea :value="grantToken" readonly />
-        </div>
-        <p class="modal-hint">{{ t('需要当前账号具备 AssumeRole 权限。生成后自动复制。') }}</p>
-        <template #footer
-          ><AppButton :label="t('关闭')" @click="modal = null" /><AppButton
-            :label="t('生成并复制')"
-            tone="primary"
-            :disabled="!grantForm.roleArn"
-            @click="createGrantToken"
-        /></template>
-      </ModalShell>
-    </Transition>
-
     <Transition name="modal" appear>
       <ModalShell
         v-if="modal === 'ram-users'"

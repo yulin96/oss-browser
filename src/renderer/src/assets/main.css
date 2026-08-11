@@ -397,20 +397,6 @@ input[type='checkbox']:checked::after {
   justify-content: space-between;
   min-height: 450px;
 }
-.token-form {
-  display: flex;
-  flex-direction: column;
-  flex: 1;
-}
-.token-form .textarea-wrap {
-  flex: 1;
-  display: flex;
-  margin-bottom: 50px;
-}
-.token-form textarea {
-  flex: 1;
-  resize: none;
-}
 .login-title {
   font-size: 28px;
   font-weight: 750;
@@ -421,36 +407,13 @@ input[type='checkbox']:checked::after {
   color: var(--muted);
 }
 .login-auth-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  display: flex;
+  justify-content: flex-end;
   align-items: stretch;
-  gap: 12px;
   margin-bottom: 20px;
 }
 .login-auth-row > .app-button {
   min-height: 44px;
-}
-.auth-tabs {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 4px;
-  padding: 4px;
-  border-radius: 8px;
-  background: var(--tab-bg);
-}
-.auth-tabs > div {
-  padding: 8px;
-  border-radius: 6px;
-  color: var(--muted);
-  font-size: 13px;
-  font-weight: 650;
-  text-align: center;
-  cursor: pointer;
-}
-.auth-tabs > div.active {
-  color: var(--tab-active-text);
-  background: transparent;
-  box-shadow: none;
 }
 .textarea-wrap {
   border: 1px solid var(--border);
@@ -3316,25 +3279,6 @@ input[type='checkbox']:checked::after {
   overflow-wrap: anywhere;
   user-select: text;
 }
-.grant-result {
-  display: grid;
-  gap: 7px;
-  margin-top: 14px;
-}
-.grant-result span {
-  color: var(--muted);
-  font-size: 12px;
-}
-.grant-result textarea {
-  min-height: 110px;
-  padding: 10px;
-  resize: vertical;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: #f8fafc;
-  font: 11px/1.5 monospace;
-  user-select: text;
-}
 .modal-toolbar {
   display: flex;
   justify-content: flex-end;
@@ -3564,8 +3508,7 @@ html[data-theme='dark'] .login-theme-switch,
 html[data-theme='dark'] .quick-nav,
 html[data-theme='dark'] .search-wrap,
 html[data-theme='dark'] .view-switch,
-html[data-theme='dark'] .preview-area,
-html[data-theme='dark'] .grant-result textarea {
+html[data-theme='dark'] .preview-area {
   color: var(--muted);
   background: #111b28;
 }

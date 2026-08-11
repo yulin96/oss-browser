@@ -115,21 +115,6 @@ export interface CdnDomainInfo {
   credentialSources: Array<'primary' | 'dedicated'>
 }
 
-export interface GrantOptions {
-  bucket: string
-  key: string
-  region: string
-  roleArn: string
-  privilege: 'readOnly' | 'readWrite' | 'all'
-  durationSeconds: number
-  isObject: boolean
-}
-
-export interface GrantResult {
-  token: string
-  expiration: string
-}
-
 export interface RamUser {
   userName: string
   displayName?: string
@@ -309,9 +294,6 @@ export interface OssBrowserApi {
   }
   settings: {
     update: (settings: AppSettings) => Promise<void>
-  }
-  grants: {
-    createToken: (options: GrantOptions) => Promise<GrantResult>
   }
   ram: {
     listUsers: () => Promise<RamUser[]>

@@ -29,9 +29,6 @@ const api: OssBrowserApi = {
   settings: {
     update: (settings) => ipcRenderer.invoke('settings:update', settings)
   },
-  grants: {
-    createToken: (options) => ipcRenderer.invoke('grants:createToken', options)
-  },
   ram: {
     listUsers: () => ipcRenderer.invoke('ram:listUsers'),
     saveUser: (userName, displayName, comments, originalName) =>

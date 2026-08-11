@@ -19,8 +19,6 @@ import { Switch } from './ui/switch'
 
 const props = defineProps<{ controller: AppController }>()
 const {
-  authMode,
-  authToken,
   showProfilesModal,
   savedProfiles,
   auth,
@@ -28,7 +26,6 @@ const {
   errorMessage,
   themeMode,
   login,
-  loginWithToken,
   clearLoginForm,
   openCdnCredentials,
   changeLocale
@@ -102,168 +99,98 @@ const {
       </div>
     </div>
     <div class="login-card">
-      <!-- <div class="login-title">{{ t('连接 OSS') }}</div>
-        <div class="login-subtitle">{{ t('使用 AccessKey、STS 凭证或授权码登录') }}</div> -->
-      <div class="login-auth-row">
-        <div
-          class="auth-tabs t-tabs"
-          data-count="2"
-          :data-active="authMode === 'access-key' ? '0' : '1'"
-        >
-          <div
-            :class="{ active: authMode === 'access-key' }"
-            role="button"
-            tabindex="0"
-            @click="authMode = 'access-key'"
-          >
-            AccessKey
-          </div>
-          <div
-            :class="{ active: authMode === 'token' }"
-            role="button"
-            tabindex="0"
-            @click="authMode = 'token'"
-          >
-            {{ t('授权码') }}
-          </div>
-        </div>
-        <AppButton
-          v-if="savedProfiles.length"
-          :label="t('已保存账号')"
-          :icon="KeyRound"
-          @click="showProfilesModal = true"
-        />
+      <div v-if="savedProfiles.length" class="login-auth-row">
+        <AppButton :label="t('已保存账号')" :icon="KeyRound" @click="showProfilesModal = true" />
       </div>
 
       <div class="login-form-body">
-        <template v-if="authMode === 'token'">
-          <div class="token-form">
-            <label class="field-label">{{ t('授权码') }}</label>
-            <div class="textarea-wrap">
-              <textarea v-model.trim="authToken" :placeholder="t('粘贴 Base64 授权码')" />
+        <div class="access-key-form">
+          <label class="field-label">Endpoint</label>
+          <div class="field-row" :class="{ 'single-field': auth.endpointMode === 'public' }">
+            <div class="select-wrap compact">
+              <select v-model="auth.endpointMode">
+                <option value="public">{{ t('公共云') }}</option>
+                <option value="custom">{{ t('自定义') }}</option>
+                <option value="cname">CNAME</option>
+                <option value="private">{{ t('私网连接') }}</option>
+              </select>
             </div>
-            <div v-if="errorMessage" :key="errorMessage" class="error-box login-error-shake">
-              <span>{{ errorMessage }}</span>
-              <AppTooltip :label="t('关闭')">
-                <div
-                  class="error-dismiss"
-                  role="button"
-                  tabindex="0"
-                  :aria-label="t('关闭')"
-                  @click="errorMessage = ''"
-                  @keydown.enter="errorMessage = ''"
-                  @keydown.space.prevent="errorMessage = ''"
-                >
-                  <X :size="16" />
-                </div>
-              </AppTooltip>
+            <div v-if="auth.endpointMode !== 'public'" class="input-wrap">
+              <input v-model.trim="auth.endpoint" placeholder="oss-cn-hangzhou.aliyuncs.com" />
             </div>
           </div>
-          <div class="login-actions">
-            <AppButton :label="t('清空')" :icon="Eraser" @click="clearLoginForm" />
-            <AppButton
-              class="login-connect-button"
-              :label="t('使用授权码连接')"
-              tone="primary"
-              :disabled="!authToken || authTask.pending.value"
-              @click="loginWithToken"
-            />
+
+          <label class="field-label">AccessKey ID</label>
+          <div class="input-wrap">
+            <input v-model.trim="auth.accessKeyId" autocomplete="username" />
           </div>
-        </template>
 
-        <template v-else>
-          <div class="access-key-form">
-            <label class="field-label">Endpoint</label>
-            <div class="field-row" :class="{ 'single-field': auth.endpointMode === 'public' }">
-              <div class="select-wrap compact">
-                <select v-model="auth.endpointMode">
-                  <option value="public">{{ t('公共云') }}</option>
-                  <option value="custom">{{ t('自定义') }}</option>
-                  <option value="cname">CNAME</option>
-                  <option value="private">{{ t('私网连接') }}</option>
-                </select>
-              </div>
-              <div v-if="auth.endpointMode !== 'public'" class="input-wrap">
-                <input v-model.trim="auth.endpoint" placeholder="oss-cn-hangzhou.aliyuncs.com" />
+          <label class="field-label">AccessKey Secret</label>
+          <div class="input-wrap">
+            <input v-model="auth.accessKeySecret" type="password" autocomplete="current-password" />
+          </div>
+
+          <div class="grid grid-cols-2 gap-2.5">
+            <div>
+              <label class="field-label">{{ t('账号别名（可选）') }}</label>
+              <div class="input-wrap">
+                <input v-model.trim="auth.alias" :placeholder="t('例如：公司生产环境')" />
               </div>
             </div>
-
-            <label class="field-label">AccessKey ID</label>
-            <div class="input-wrap">
-              <input v-model.trim="auth.accessKeyId" autocomplete="username" />
-            </div>
-
-            <label class="field-label">AccessKey Secret</label>
-            <div class="input-wrap">
-              <input
-                v-model="auth.accessKeySecret"
-                type="password"
-                autocomplete="current-password"
-              />
-            </div>
-
-            <div class="grid grid-cols-2 gap-2.5">
-              <div>
-                <label class="field-label">{{ t('账号别名（可选）') }}</label>
-                <div class="input-wrap">
-                  <input v-model.trim="auth.alias" :placeholder="t('例如：公司生产环境')" />
-                </div>
+            <div>
+              <label class="field-label">{{ t('预设路径（可选）') }}</label>
+              <div class="input-wrap">
+                <input v-model.trim="auth.presetPath" placeholder="oss://bucket/path/" />
               </div>
-              <div>
-                <label class="field-label">{{ t('预设路径（可选）') }}</label>
-                <div class="input-wrap">
-                  <input v-model.trim="auth.presetPath" placeholder="oss://bucket/path/" />
-                </div>
-              </div>
-            </div>
-
-            <template v-if="auth.accessKeyId.startsWith('STS.')">
-              <label class="field-label">STS Token</label>
-              <div class="input-wrap"><input v-model="auth.stsToken" type="password" /></div>
-            </template>
-
-            <div class="login-options">
-              <label><Switch v-model="auth.secure" /> {{ t('使用 HTTPS') }}</label>
-              <label><Switch v-model="auth.remember" /> {{ t('记住登录信息') }}</label>
-            </div>
-            <div v-if="errorMessage" :key="errorMessage" class="error-box login-error-shake">
-              <span>{{ errorMessage }}</span>
-              <AppTooltip :label="t('关闭')">
-                <div
-                  class="error-dismiss"
-                  role="button"
-                  tabindex="0"
-                  :aria-label="t('关闭')"
-                  @click="errorMessage = ''"
-                  @keydown.enter="errorMessage = ''"
-                  @keydown.space.prevent="errorMessage = ''"
-                >
-                  <X :size="16" />
-                </div>
-              </AppTooltip>
             </div>
           </div>
-          <div class="login-actions">
-            <AppButton
-              :label="auth.cdnCredentials ? t('CDN 已配置') : t('CDN 凭证')"
-              :icon="KeyRound"
-              @click="openCdnCredentials()"
-            />
-            <AppButton :label="t('清空')" :icon="Eraser" @click="clearLoginForm" />
-            <AppButton
-              class="login-connect-button"
-              :label="t('连接')"
-              tone="primary"
-              :disabled="
-                (auth.endpointMode !== 'public' && !auth.endpoint) ||
-                !auth.accessKeyId ||
-                !auth.accessKeySecret ||
-                authTask.pending.value
-              "
-              @click="login"
-            />
+
+          <template v-if="auth.accessKeyId.startsWith('STS.')">
+            <label class="field-label">STS Token</label>
+            <div class="input-wrap"><input v-model="auth.stsToken" type="password" /></div>
+          </template>
+
+          <div class="login-options">
+            <label><Switch v-model="auth.secure" /> {{ t('使用 HTTPS') }}</label>
+            <label><Switch v-model="auth.remember" /> {{ t('记住登录信息') }}</label>
           </div>
-        </template>
+          <div v-if="errorMessage" :key="errorMessage" class="error-box login-error-shake">
+            <span>{{ errorMessage }}</span>
+            <AppTooltip :label="t('关闭')">
+              <div
+                class="error-dismiss"
+                role="button"
+                tabindex="0"
+                :aria-label="t('关闭')"
+                @click="errorMessage = ''"
+                @keydown.enter="errorMessage = ''"
+                @keydown.space.prevent="errorMessage = ''"
+              >
+                <X :size="16" />
+              </div>
+            </AppTooltip>
+          </div>
+        </div>
+        <div class="login-actions">
+          <AppButton
+            :label="auth.cdnCredentials ? t('CDN 已配置') : t('CDN 凭证')"
+            :icon="KeyRound"
+            @click="openCdnCredentials()"
+          />
+          <AppButton :label="t('清空')" :icon="Eraser" @click="clearLoginForm" />
+          <AppButton
+            class="login-connect-button"
+            :label="t('连接')"
+            tone="primary"
+            :disabled="
+              (auth.endpointMode !== 'public' && !auth.endpoint) ||
+              !auth.accessKeyId ||
+              !auth.accessKeySecret ||
+              authTask.pending.value
+            "
+            @click="login"
+          />
+        </div>
       </div>
     </div>
   </section>

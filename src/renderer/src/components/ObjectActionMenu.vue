@@ -5,7 +5,6 @@ import {
   Download,
   FileCog,
   Info,
-  KeyRound,
   Link,
   Move,
   Pencil,
@@ -28,7 +27,6 @@ export type ObjectAction =
   | 'symlink'
   | 'restore'
   | 'details'
-  | 'grant'
   | 'cache'
   | 'delete'
 
@@ -57,7 +55,6 @@ onMounted(updatePosition)
 
 function enabled(action: ObjectAction): boolean {
   const count = props.selected.length
-  if (action === 'grant') return count <= 1
   if (action === 'share') return count === 1 && !props.selected[0]?.isDirectory
   if (['rename', 'acl', 'symlink', 'details', 'cache'].includes(action)) return count === 1
   return count > 0
@@ -103,9 +100,6 @@ function select(action: ObjectAction): void {
     </div>
     <div :class="{ disabled: !enabled('details') }" @click="select('details')">
       <Info :size="15" />{{ t('对象详情') }}
-    </div>
-    <div :class="{ disabled: !enabled('grant') }" @click="select('grant')">
-      <KeyRound :size="15" />{{ t('生成授权码') }}
     </div>
     <div :class="{ disabled: !enabled('cache') }" @click="select('cache')">
       <CloudCog :size="15" />{{ t('刷新此项缓存') }}

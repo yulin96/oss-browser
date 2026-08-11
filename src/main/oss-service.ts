@@ -17,7 +17,7 @@ import RamClient, {
   ListUsersRequest,
   UpdateUserRequest
 } from '@alicloud/ram20150501'
-import StsClient, { AssumeRoleRequest } from '@alicloud/sts20150401'
+import StsClient from '@alicloud/sts20150401'
 import OSS from 'ali-oss'
 import { app, nativeImage } from 'electron'
 import mime from 'mime'
@@ -35,8 +35,6 @@ import type {
   CacheRefreshQuota,
   CacheRefreshTask,
   CdnDomainInfo,
-  GrantOptions,
-  GrantResult,
   ImageDimensions,
   MultipartUploadInfo,
   ObjectDetails,
@@ -211,72 +209,6 @@ export class OssService {
         return result.body?.identityType || result.body?.arn
       })
     ])
-  }
-
-  async createGrantToken(options: GrantOptions): Promise<GrantResult> {
-    if (!this.auth) throw new Error('请先登录')
-    const actions =
-      options.privilege === 'readOnly'
-        ? ['oss:Get*', 'oss:List*']
-        : options.privilege === 'readWrite'
-          ? ['oss:Get*', 'oss:List*', 'oss:Put*', 'oss:DeleteObject', 'oss:AbortMultipartUpload']
-          : ['oss:*']
-    const policy = {
-      Version: '1',
-      Statement: [
-        {
-          Effect: 'Allow',
-          Action: ['oss:ListObjects'],
-          Resource: [`acs:oss:*:*:${options.bucket}`],
-          Condition: { StringLike: { 'oss:Prefix': `${options.key}*` } }
-        },
-        {
-          Effect: 'Allow',
-          Action: actions,
-          Resource: [`acs:oss:*:*:${options.bucket}/${options.key}${options.isObject ? '' : '*'}`]
-        }
-      ]
-    }
-    const config = new $OpenApiUtil.Config({
-      accessKeyId: this.auth.accessKeyId,
-      accessKeySecret: this.auth.accessKeySecret,
-      securityToken: this.auth.stsToken,
-      regionId: options.region || 'cn-hangzhou',
-      endpoint: 'sts.aliyuncs.com'
-    })
-    const response = await new StsClient(config).assumeRole(
-      new AssumeRoleRequest({
-        roleArn: options.roleArn,
-        roleSessionName: `oss-browser-${Date.now()}`,
-        policy: JSON.stringify(policy),
-        durationSeconds: options.durationSeconds
-      })
-    )
-    const credentials = response.body?.credentials
-    if (
-      !credentials?.accessKeyId ||
-      !credentials.accessKeySecret ||
-      !credentials.securityToken ||
-      !credentials.expiration
-    ) {
-      throw new Error('STS 未返回完整的临时凭证')
-    }
-    const token = Buffer.from(
-      JSON.stringify({
-        id: credentials.accessKeyId,
-        secret: credentials.accessKeySecret,
-        stoken: credentials.securityToken,
-        expiration: credentials.expiration,
-        region: options.region,
-        osspath: `oss://${options.bucket}/${options.key}`,
-        privilege: options.privilege,
-        eptpl:
-          this.auth.endpointMode === 'public'
-            ? `${this.auth.secure ? 'https' : 'http'}://{region}.aliyuncs.com`
-            : `${this.auth.secure ? 'https' : 'http'}://${this.auth.endpoint}`
-      })
-    ).toString('base64')
-    return { token, expiration: credentials.expiration }
   }
 
   async listRamUsers(): Promise<RamUser[]> {
