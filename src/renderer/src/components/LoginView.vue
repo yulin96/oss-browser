@@ -10,7 +10,9 @@ import {
   Sun,
   X
 } from '@lucide/vue'
+import { computed, ref } from 'vue'
 import appIcon from '../assets/icon.png'
+import type { SavedProfileSummary } from '../../../shared/types'
 import type { AppController } from '../composables/useAppController'
 import { locale, localeLabel, localeOptions, t } from '../i18n'
 import AppButton from './AppButton.vue'
@@ -19,17 +21,48 @@ import { Switch } from './ui/switch'
 
 const props = defineProps<{ controller: AppController }>()
 const {
-  showProfilesModal,
   savedProfiles,
+  selectedLoginProfileId,
   auth,
   authTask,
   errorMessage,
   themeMode,
-  login,
+  loginFromForm,
+  selectProfileForLogin,
+  clearSelectedLoginProfile,
   clearLoginForm,
   openCdnCredentials,
   changeLocale
 } = props.controller
+
+const showProfileSuggestions = ref(false)
+const filteredProfiles = computed(() => {
+  const query = auth.accessKeyId.trim().toLowerCase()
+  if (!query || selectedLoginProfileId.value) return savedProfiles.value
+  return savedProfiles.value.filter((profile) =>
+    [profile.label, profile.alias, profile.accessKeyId, profile.endpoint].some((value) =>
+      value?.toLowerCase().includes(query)
+    )
+  )
+})
+
+function showSavedProfiles(): void {
+  showProfileSuggestions.value = savedProfiles.value.length > 0
+}
+
+function hideSavedProfiles(): void {
+  showProfileSuggestions.value = false
+}
+
+function handleAccessKeyInput(): void {
+  clearSelectedLoginProfile()
+  showSavedProfiles()
+}
+
+function chooseProfile(profile: SavedProfileSummary): void {
+  selectProfileForLogin(profile)
+  hideSavedProfiles()
+}
 </script>
 
 <template>
@@ -99,16 +132,12 @@ const {
       </div>
     </div>
     <div class="login-card">
-      <div v-if="savedProfiles.length" class="login-auth-row">
-        <AppButton :label="t('已保存账号')" :icon="KeyRound" @click="showProfilesModal = true" />
-      </div>
-
       <div class="login-form-body">
         <div class="access-key-form">
           <label class="field-label">Endpoint</label>
           <div class="field-row" :class="{ 'single-field': auth.endpointMode === 'public' }">
             <div class="select-wrap compact">
-              <select v-model="auth.endpointMode">
+              <select v-model="auth.endpointMode" @change="clearSelectedLoginProfile">
                 <option value="public">{{ t('公共云') }}</option>
                 <option value="custom">{{ t('自定义') }}</option>
                 <option value="cname">CNAME</option>
@@ -116,43 +145,102 @@ const {
               </select>
             </div>
             <div v-if="auth.endpointMode !== 'public'" class="input-wrap">
-              <input v-model.trim="auth.endpoint" placeholder="oss-cn-hangzhou.aliyuncs.com" />
+              <input
+                v-model.trim="auth.endpoint"
+                placeholder="oss-cn-hangzhou.aliyuncs.com"
+                @input="clearSelectedLoginProfile"
+              />
             </div>
           </div>
 
           <label class="field-label">AccessKey ID</label>
-          <div class="input-wrap">
-            <input v-model.trim="auth.accessKeyId" autocomplete="username" />
+          <div class="profile-autocomplete">
+            <div class="input-wrap">
+              <input
+                v-model.trim="auth.accessKeyId"
+                autocomplete="username"
+                role="combobox"
+                :aria-expanded="showProfileSuggestions"
+                :aria-controls="savedProfiles.length ? 'saved-profile-suggestions' : undefined"
+                @focus="showSavedProfiles"
+                @blur="hideSavedProfiles"
+                @input="handleAccessKeyInput"
+                @keydown.escape="hideSavedProfiles"
+              />
+            </div>
+            <div
+              v-if="showProfileSuggestions && filteredProfiles.length"
+              id="saved-profile-suggestions"
+              class="saved-profile-dropdown"
+              role="listbox"
+            >
+              <div
+                v-for="profile in filteredProfiles"
+                :key="profile.id"
+                class="saved-profile-option"
+                role="option"
+                :aria-selected="profile.id === selectedLoginProfileId"
+                @mousedown.prevent="chooseProfile(profile)"
+              >
+                <strong>{{ profile.label }}</strong>
+                <span>{{ profile.accessKeyId }}</span>
+                <small>{{
+                  profile.endpointMode === 'public' ? t('公共云') : profile.endpoint
+                }}</small>
+              </div>
+            </div>
           </div>
 
           <label class="field-label">AccessKey Secret</label>
           <div class="input-wrap">
-            <input v-model="auth.accessKeySecret" type="password" autocomplete="current-password" />
+            <input
+              v-model="auth.accessKeySecret"
+              type="password"
+              autocomplete="current-password"
+              :placeholder="selectedLoginProfileId ? t('已安全保存') : ''"
+              @input="clearSelectedLoginProfile"
+            />
           </div>
 
           <div class="grid grid-cols-2 gap-2.5">
             <div>
               <label class="field-label">{{ t('账号别名（可选）') }}</label>
               <div class="input-wrap">
-                <input v-model.trim="auth.alias" :placeholder="t('例如：公司生产环境')" />
+                <input
+                  v-model.trim="auth.alias"
+                  :placeholder="t('例如：公司生产环境')"
+                  @input="clearSelectedLoginProfile"
+                />
               </div>
             </div>
             <div>
               <label class="field-label">{{ t('预设路径（可选）') }}</label>
               <div class="input-wrap">
-                <input v-model.trim="auth.presetPath" placeholder="oss://bucket/path/" />
+                <input
+                  v-model.trim="auth.presetPath"
+                  placeholder="oss://bucket/path/"
+                  @input="clearSelectedLoginProfile"
+                />
               </div>
             </div>
           </div>
 
           <template v-if="auth.accessKeyId.startsWith('STS.')">
             <label class="field-label">STS Token</label>
-            <div class="input-wrap"><input v-model="auth.stsToken" type="password" /></div>
+            <div class="input-wrap">
+              <input v-model="auth.stsToken" type="password" @input="clearSelectedLoginProfile" />
+            </div>
           </template>
 
           <div class="login-options">
-            <label><Switch v-model="auth.secure" /> {{ t('使用 HTTPS') }}</label>
-            <label><Switch v-model="auth.remember" /> {{ t('记住登录信息') }}</label>
+            <label
+              ><Switch v-model="auth.secure" @update:model-value="clearSelectedLoginProfile" />
+              {{ t('使用 HTTPS') }}</label
+            >
+            <label
+              ><Switch v-model="auth.remember" @update:model-value="clearSelectedLoginProfile" />
+              {{ t('记住登录信息') }}</label
+            >
           </div>
           <div v-if="errorMessage" :key="errorMessage" class="error-box login-error-shake">
             <span>{{ errorMessage }}</span>
@@ -185,10 +273,10 @@ const {
             :disabled="
               (auth.endpointMode !== 'public' && !auth.endpoint) ||
               !auth.accessKeyId ||
-              !auth.accessKeySecret ||
+              (!selectedLoginProfileId && !auth.accessKeySecret) ||
               authTask.pending.value
             "
-            @click="login"
+            @click="loginFromForm"
           />
         </div>
       </div>

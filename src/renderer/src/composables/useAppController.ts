@@ -134,6 +134,7 @@ export function useAppController() {
   const toastMessage = ref('')
   const modal = ref<ModalName>(null)
   const showProfilesModal = ref(false)
+  const selectedLoginProfileId = ref<string | null>(null)
   const showUploadActions = ref(false)
   const contextMenu = reactive({ visible: false, x: 0, y: 0 })
   const emptyContextMenu = reactive({ visible: false, x: 0, y: 0 })
@@ -917,6 +918,7 @@ export function useAppController() {
       cdnCredentials: undefined
     })
     Object.assign(cdnCredentialForm, { accessKeyId: '', accessKeySecret: '' })
+    selectedLoginProfileId.value = null
     errorMessage.value = ''
   }
 
@@ -978,6 +980,26 @@ export function useAppController() {
       presetPath: profile.presetPath || '',
       cdnCredentials: undefined
     })
+  }
+
+  function selectProfileForLogin(profile: SavedProfileSummary): void {
+    applyProfileSummary(profile)
+    selectedLoginProfileId.value = profile.id
+    errorMessage.value = ''
+  }
+
+  function clearSelectedLoginProfile(): void {
+    selectedLoginProfileId.value = null
+  }
+
+  async function loginFromForm(): Promise<void> {
+    const profile = savedProfiles.value.find((item) => item.id === selectedLoginProfileId.value)
+    if (profile) {
+      await useProfile(profile)
+      return
+    }
+    selectedLoginProfileId.value = null
+    await login()
   }
 
   async function logout(): Promise<void> {
@@ -1906,6 +1928,7 @@ export function useAppController() {
     toastMessage,
     modal,
     showProfilesModal,
+    selectedLoginProfileId,
     transfers,
     showTransfers,
     activeTransferTab,
@@ -2103,6 +2126,9 @@ export function useAppController() {
     openBucketMenu,
     openBucketAcl,
     login,
+    loginFromForm,
+    selectProfileForLogin,
+    clearSelectedLoginProfile,
     restoreSession,
     saveSession,
     profileId,

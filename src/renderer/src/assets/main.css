@@ -406,14 +406,49 @@ input[type='checkbox']:checked::after {
   margin: 7px 0 28px;
   color: var(--muted);
 }
-.login-auth-row {
-  display: flex;
-  justify-content: flex-end;
-  align-items: stretch;
-  margin-bottom: 20px;
+.profile-autocomplete {
+  position: relative;
 }
-.login-auth-row > .app-button {
-  min-height: 44px;
+.saved-profile-dropdown {
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + 6px);
+  right: 0;
+  left: 0;
+  overflow: auto;
+  max-height: 240px;
+  padding: 5px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--surface);
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.14);
+}
+.saved-profile-option {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 3px 12px;
+  padding: 9px 10px;
+  border-radius: 7px;
+  cursor: pointer;
+}
+.saved-profile-option:hover,
+.saved-profile-option[aria-selected='true'] {
+  background: var(--hover);
+}
+.saved-profile-option strong,
+.saved-profile-option span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.saved-profile-option span {
+  color: var(--muted);
+  font: 11px/1.4 monospace;
+}
+.saved-profile-option small {
+  grid-column: 1 / -1;
+  color: var(--muted);
+  font-size: 11px;
 }
 .textarea-wrap {
   border: 1px solid var(--border);
