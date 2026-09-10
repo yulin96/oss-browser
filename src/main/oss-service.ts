@@ -25,6 +25,7 @@ import { createHash, randomUUID } from 'node:crypto'
 import { createReadStream, type Dirent } from 'node:fs'
 import { mkdir, open, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises'
 import { basename, isAbsolute, join, relative, sep } from 'node:path'
+import { Transform, type Readable } from 'node:stream'
 import { DEFAULT_APP_SETTINGS, validateAppSettings } from '../shared/app-settings'
 import type {
   AppSettings,
@@ -1110,9 +1111,19 @@ export class OssService {
       const checkpointPath = this.checkpointPath(bucket, name, localPath)
       await this.runControlledTransfer(transfer, client, async () => {
         const fileSize = (await stat(localPath)).size
+        const reportBytes = (bytes: number): void => {
+          if (
+            transfer.status !== 'running' ||
+            transfer.cancelRequested ||
+            transfer.pauseRequested ||
+            transfer.batch.cancelled
+          )
+            return
+          this.updateTransfer(transfer, fileSize ? Math.min(bytes / fileSize, 0.99) : 0, 'running')
+        }
         if (fileSize <= this.settings.partSizeMb * 1024 * 1024) {
           for (let attempt = 0; ; attempt += 1) {
-            const stream = createReadStream(localPath)
+            const stream = this.uploadProgressStream(createReadStream(localPath), reportBytes)
             transfer.cancelOperation = () => {
               const error = new Error('cancel')
               error.name = 'CancelError'
@@ -1135,27 +1146,82 @@ export class OssService {
               ) {
                 throw error
               }
+            } finally {
+              stream.destroy()
             }
           }
           await rm(checkpointPath, { force: true })
           return
         }
         const checkpoint = await this.readCheckpoint(checkpointPath)
-        await client.multipartUpload(name, localPath, {
-          checkpoint,
-          headers,
-          parallel: this.settings.multipartParallel,
-          partSize: this.settings.partSizeMb * 1024 * 1024,
-          progress: async (progress: number, nextCheckpoint: unknown) => {
-            this.updateTransfer(transfer, progress, 'running')
-            if (nextCheckpoint) await writeFile(checkpointPath, JSON.stringify(nextCheckpoint))
+        const ranges = new Map<number, { bytes: number }>()
+        let uploadedBytes = 0
+        const saved = checkpoint as
+          | {
+              uploadId: string
+              fileSize: number
+              partSize: number
+              doneParts: { number: number }[]
+            }
+          | undefined
+        if (saved?.uploadId) {
+          for (const part of saved.doneParts) {
+            const start = (part.number - 1) * saved.partSize
+            const bytes = Math.min(saved.partSize, saved.fileSize - start)
+            ranges.set(start, { bytes })
+            uploadedBytes += bytes
           }
-        })
+        }
+        reportBytes(uploadedBytes)
+        // ali-oss 6.23 reports only completed parts; observe its per-attempt streams instead.
+        const streamClient = client as OssClient & {
+          _createStream: (file: string, start: number, end: number) => Readable
+        }
+        const createStream = streamClient._createStream
+        streamClient._createStream = (file, start, end) => {
+          uploadedBytes -= ranges.get(start)?.bytes || 0
+          const range = { bytes: 0 }
+          ranges.set(start, range)
+          reportBytes(uploadedBytes)
+          return this.uploadProgressStream(createStream.call(client, file, start, end), (bytes) => {
+            if (ranges.get(start) !== range) return
+            uploadedBytes += bytes - range.bytes
+            range.bytes = bytes
+            reportBytes(uploadedBytes)
+          })
+        }
+        try {
+          await client.multipartUpload(name, localPath, {
+            checkpoint,
+            headers,
+            parallel: this.settings.multipartParallel,
+            partSize: this.settings.partSizeMb * 1024 * 1024,
+            progress: async (_progress: number, nextCheckpoint: unknown) => {
+              if (nextCheckpoint) await writeFile(checkpointPath, JSON.stringify(nextCheckpoint))
+            }
+          })
+        } finally {
+          streamClient._createStream = createStream
+        }
         await rm(checkpointPath, { force: true })
       })
     }
     await this.runPool(files, this.settings.maxUploadJobs, uploadEntry, () => batch.cancelled)
     return !batch.cancelled && !batch.failed.size && batch.done === batch.total
+  }
+
+  private uploadProgressStream(source: Readable, reportBytes: (bytes: number) => void): Transform {
+    let bytes = 0
+    const stream = new Transform({
+      transform(chunk: Buffer, _encoding, callback) {
+        bytes += chunk.length
+        reportBytes(bytes)
+        callback(null, chunk)
+      }
+    })
+    source.once('error', (error) => stream.destroy(error))
+    stream.once('close', () => source.destroy())
+    return source.pipe(stream)
   }
 
   async download(bucket: string, items: ObjectInfo[], destination: string): Promise<boolean> {

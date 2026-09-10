@@ -1,6 +1,8 @@
 import { mkdtemp, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import type { Readable } from 'node:stream'
+import OSS from 'ali-oss'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('electron', () => ({
@@ -10,7 +12,7 @@ vi.mock('electron', () => ({
 
 import { OssService } from '../src/main/oss-service'
 import { DEFAULT_APP_SETTINGS } from '../src/shared/app-settings'
-import type { AuthConfig, ObjectInfo } from '../src/shared/types'
+import type { AuthConfig, ObjectInfo, TransferItem } from '../src/shared/types'
 
 interface OssClientStub {
   list: ReturnType<typeof vi.fn>
@@ -24,6 +26,123 @@ interface OssClientStub {
   multipartUpload?: ReturnType<typeof vi.fn>
   cancel?: ReturnType<typeof vi.fn>
 }
+
+describe('upload byte progress', () => {
+  it('reports small-file bytes before the upload response without changing the contents', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'oss-browser-byte-progress-'))
+    temporaryDirectories.push(directory)
+    const localPath = join(directory, 'video.mp4')
+    const contents = Buffer.alloc(512 * 1024, 37)
+    await writeFile(localPath, contents)
+    let now = Date.now()
+    vi.spyOn(Date, 'now').mockImplementation(() => (now += 101))
+    const reports: TransferItem[] = []
+    const service = new OssService((item) => reports.push(item))
+    const putStream = vi.fn(async (_name: string, stream: Readable) => {
+      const chunks: Buffer[] = []
+      for await (const chunk of stream) chunks.push(chunk)
+      expect(Buffer.concat(chunks)).toEqual(contents)
+      expect(reports.some((item) => item.progress > 0 && item.progress < 0.99)).toBe(true)
+      expect(reports.at(-1)?.progress).toBe(0.99)
+      expect(reports.every((item) => item.status === 'running')).toBe(true)
+    })
+    useClients(service, { bucket: { list: vi.fn(), copy: vi.fn(), putStream } })
+    expect(await service.upload('bucket', '', [localPath])).toBe(true)
+    expect(reports.at(-1)).toMatchObject({ status: 'done', progress: 1 })
+  })
+
+  it.each([false, true])(
+    'tracks SDK streams with retries and checkpoint resume=%s',
+    async (resume) => {
+      const directory = await mkdtemp(join(tmpdir(), 'oss-browser-part-progress-'))
+      temporaryDirectories.push(directory)
+      const localPath = join(directory, 'video.mp4')
+      const partSize = 1024 * 1024
+      const contents = Buffer.alloc(partSize * 3, 53)
+      await writeFile(localPath, contents)
+      const checkpointPath = join(directory, 'checkpoint.json')
+      if (resume) {
+        await writeFile(
+          checkpointPath,
+          JSON.stringify({
+            file: localPath,
+            fileSize: contents.length,
+            name: 'video.mp4',
+            partSize,
+            uploadId: 'test-upload',
+            doneParts: [{ number: 1, etag: 'part-1' }]
+          })
+        )
+      }
+      let now = Date.now()
+      vi.spyOn(Date, 'now').mockImplementation(() => (now += 101))
+      const reports: TransferItem[] = []
+      const service = new OssService((item) => reports.push(item))
+      service.updateSettings({ ...DEFAULT_APP_SETTINGS, partSizeMb: 1, multipartParallel: 2 })
+      vi.spyOn(
+        service as unknown as { checkpointPath: () => string },
+        'checkpointPath'
+      ).mockReturnValue(checkpointPath)
+      const client = new OSS({
+        region: 'oss-cn-hangzhou',
+        accessKeyId: 'test',
+        accessKeySecret: 'test',
+        retryMax: 5
+      })
+      vi.spyOn(
+        service as unknown as { bucketClient: () => typeof client },
+        'bucketClient'
+      ).mockReturnValue(client)
+      client.initMultipartUpload = vi.fn().mockResolvedValue({ uploadId: 'test-upload', res: {} })
+      const attempts = new Map<number, number>()
+      const streamClient = client as typeof client & {
+        _createStream: unknown
+        _uploadPart: (
+          name: string,
+          id: string,
+          part: number,
+          data: { stream: Readable }
+        ) => Promise<unknown>
+      }
+      const originalCreateStream = streamClient._createStream
+      streamClient._uploadPart = async (_name, _id, part, { stream }) => {
+        const attempt = (attempts.get(part) || 0) + 1
+        attempts.set(part, attempt)
+        const chunks: Buffer[] = []
+        for await (const chunk of stream) {
+          chunks.push(chunk)
+          if (part === 2 && attempt === 1) {
+            throw Object.assign(new Error('simulated connection failure'), { status: -1 })
+          }
+        }
+        expect(Buffer.concat(chunks)).toEqual(
+          contents.subarray((part - 1) * partSize, part * partSize)
+        )
+        return { res: { headers: { etag: `part-${part}` } } }
+      }
+      client.completeMultipartUpload = vi.fn().mockImplementation(async () => {
+        expect(reports.every((item) => item.status === 'running' && item.progress <= 0.99)).toBe(
+          true
+        )
+        expect(
+          reports.some((item) => item.progress > (resume ? 1 / 3 : 0) && item.progress < 0.5)
+        ).toBe(true)
+        expect(reports.at(-1)?.progress).toBe(0.99)
+        return {}
+      })
+      const completed = await service.upload('bucket', '', [localPath])
+      expect(reports.filter((item) => item.status === 'error')).toEqual([])
+      expect(completed).toBe(true)
+      expect(attempts.get(2)).toBe(2)
+      expect(attempts.has(1)).toBe(!resume)
+      expect(streamClient._createStream).toBe(originalCreateStream)
+      expect(reports.at(-1)).toMatchObject({ status: 'done', progress: 1 })
+      expect(
+        reports.some((item, index) => index > 0 && item.progress < reports[index - 1].progress)
+      ).toBe(true)
+    }
+  )
+})
 
 describe('OssService object previews', () => {
   it('uses an opaque expiring token instead of exposing the signed object URL', () => {
@@ -128,6 +247,7 @@ function cdnClient(domains: string[]): CdnClientStub {
 }
 
 afterEach(async () => {
+  vi.restoreAllMocks()
   await Promise.all(
     temporaryDirectories.splice(0).map((directory) => rm(directory, { recursive: true }))
   )
