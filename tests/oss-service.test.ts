@@ -41,7 +41,7 @@ describe('upload byte progress', () => {
     const putStream = vi.fn(async (_name: string, stream: Readable) => {
       const chunks: Buffer[] = []
       for await (const chunk of stream) chunks.push(chunk)
-      expect(Buffer.concat(chunks)).toEqual(contents)
+      expect(Buffer.concat(chunks).equals(contents)).toBe(true)
       expect(reports.some((item) => item.progress > 0 && item.progress < 0.99)).toBe(true)
       expect(reports.at(-1)?.progress).toBe(0.99)
       expect(reports.every((item) => item.status === 'running')).toBe(true)
@@ -119,9 +119,9 @@ describe('upload byte progress', () => {
             throw Object.assign(new Error('simulated connection failure'), { status: -1 })
           }
         }
-        expect(Buffer.concat(chunks)).toEqual(
-          contents.subarray((part - 1) * partSize, part * partSize)
-        )
+        expect(
+          Buffer.concat(chunks).equals(contents.subarray((part - 1) * partSize, part * partSize))
+        ).toBe(true)
         return { res: { headers: { etag: `part-${part}` } } }
       }
       client.completeMultipartUpload = vi.fn().mockImplementation(async () => {
