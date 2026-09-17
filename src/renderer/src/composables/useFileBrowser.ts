@@ -333,6 +333,7 @@ export function useFileBrowser(options: {
 
   async function visit(bucket: BucketInfo, path: string, record = true): Promise<void> {
     const bucketChanged = currentBucket.value?.name !== bucket.name
+    if (bucketChanged || prefix.value !== path) searchText.value = ''
     currentBucket.value = bucket
     if (bucketChanged) {
       bucketStorageStat.value = null
