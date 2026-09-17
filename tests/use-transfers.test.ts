@@ -35,6 +35,7 @@ describe('useTransfers', () => {
           return vi.fn()
         },
         transfers: {
+          restartUpload: vi.fn().mockResolvedValue(undefined),
           cancel: vi.fn().mockResolvedValue(undefined),
           pauseAll: vi.fn().mockResolvedValue(undefined),
           resumeAll: vi.fn().mockResolvedValue(undefined),
@@ -42,6 +43,21 @@ describe('useTransfers', () => {
         }
       }
     })
+  })
+
+  it('requires confirmation before clearing a failed upload checkpoint', async () => {
+    const state = useTransfers((request) => {
+      confirmation = request
+    })
+    state.confirmRestartUpload(transfer({ status: 'running' }))
+    expect(confirmation).toBeUndefined()
+    state.confirmRestartUpload(transfer({ direction: 'download', status: 'error' }))
+    expect(confirmation).toBeUndefined()
+    state.confirmRestartUpload(transfer({ status: 'error' }))
+    expect(window.ossBrowser.transfers.restartUpload).not.toHaveBeenCalled()
+    expect(confirmation?.destructive).toBe(true)
+    await confirmation?.action()
+    expect(window.ossBrowser.transfers.restartUpload).toHaveBeenCalledWith('transfer-1')
   })
 
   it('only opens the panel automatically for a new batch', () => {

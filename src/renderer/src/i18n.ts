@@ -297,6 +297,16 @@ const translations: Record<Exclude<AppLocale, 'zh-CN'>, Record<string, string>> 
     该格式暂不支持直接预览: 'This format cannot be previewed directly',
     在浏览器中打开: 'Open in browser',
     未完成的分片上传: 'Incomplete multipart uploads',
+    清理断点并重试: 'Clear checkpoint and retry',
+    清理并重试: 'Clear and retry',
+    '确定清除「{name}」的本地断点并从头上传吗？远端残留分片可在 Bucket 页终止。':
+      'Clear the local checkpoint for “{name}” and upload from scratch? Remaining remote parts can be aborted on the Bucket page.',
+    批量终止分片上传: 'Abort multipart uploads in bulk',
+    '终止 1 小时前的分片': 'Abort uploads older than 1 hour',
+    '确定终止 {count} 个创建超过 1 小时的分片上传吗？最近 1 小时及创建时间未知的记录不会被终止。':
+      'Abort {count} multipart uploads created over 1 hour ago? Uploads from the last hour or with unknown creation times will be skipped.',
+    '已终止 {aborted} 个，跳过 {skipped} 个，失败 {failed} 个':
+      'Aborted {aborted}, skipped {skipped}, failed {failed}',
     没有未完成的分片上传: 'No incomplete multipart uploads',
     分片上传已终止: 'Multipart upload aborted',
     终止分片上传: 'Abort multipart upload',
@@ -766,6 +776,16 @@ const translations: Record<Exclude<AppLocale, 'zh-CN'>, Record<string, string>> 
     该格式暂不支持直接预览: 'この形式は直接プレビューできません',
     在浏览器中打开: 'ブラウザーで開く',
     未完成的分片上传: '未完了のマルチパートアップロード',
+    清理断点并重试: 'チェックポイントを削除して再試行',
+    清理并重试: '削除して再試行',
+    '确定清除「{name}」的本地断点并从头上传吗？远端残留分片可在 Bucket 页终止。':
+      '「{name}」のローカルチェックポイントを削除して最初からアップロードしますか？サーバーに残ったパートは Bucket ページで中止できます。',
+    批量终止分片上传: 'マルチパートアップロードを一括中止',
+    '终止 1 小时前的分片': '作成から1時間を超えたアップロードを中止',
+    '确定终止 {count} 个创建超过 1 小时的分片上传吗？最近 1 小时及创建时间未知的记录不会被终止。':
+      '作成から1時間を超えた {count} 件のアップロードを中止しますか？直近1時間以内または作成時刻不明のものはスキップします。',
+    '已终止 {aborted} 个，跳过 {skipped} 个，失败 {failed} 个':
+      '中止 {aborted} 件、スキップ {skipped} 件、失敗 {failed} 件',
     没有未完成的分片上传: '未完了のアップロードはありません',
     分片上传已终止: 'マルチパートアップロードを中止しました',
     终止分片上传: 'マルチパートアップロードを中止',

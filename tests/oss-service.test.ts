@@ -70,6 +70,10 @@ describe('upload byte progress', () => {
             name: 'video.mp4',
             partSize,
             uploadId: 'test-upload',
+            localFile: {
+              mtimeMs: (await stat(localPath)).mtimeMs,
+              ctimeMs: (await stat(localPath)).ctimeMs
+            },
             doneParts: [{ number: 1, etag: 'part-1' }]
           })
         )

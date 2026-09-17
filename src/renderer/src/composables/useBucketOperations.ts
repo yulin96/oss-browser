@@ -1,4 +1,4 @@
-import { ref, type Ref } from 'vue'
+import { computed, ref, type ComputedRef, type Ref } from 'vue'
 
 import type { BucketInfo, MultipartUploadInfo } from '../../../shared/types'
 import type { ConfirmationRequest } from './useConfirmation'
@@ -29,15 +29,28 @@ export function useBucketOperations(options: {
   applyBucketAcl: () => Promise<void>
   openMultipart: (bucket: BucketInfo) => Promise<void>
   abortMultipart: (upload: MultipartUploadInfo) => void
+  abortOldMultipart: () => void
+  oldMultipartCount: ComputedRef<number>
+  multipartBusy: Ref<boolean>
+  multipartResult: Ref<string>
 } {
   const multipartUploads = ref<MultipartUploadInfo[]>([])
   const multipartBucket = ref<BucketInfo | null>(null)
   const bucketActionTarget = ref<BucketInfo | null>(null)
+  const multipartBusy = ref(false)
+  const multipartResult = ref('')
+  const oldMultipartCount = computed(
+    () =>
+      multipartUploads.value.filter(
+        (upload) => Date.parse(upload.initiated || '') < Date.now() - 60 * 60 * 1000
+      ).length
+  )
 
   function resetBucketOperations(): void {
     multipartUploads.value = []
     multipartBucket.value = null
     bucketActionTarget.value = null
+    multipartResult.value = ''
   }
 
   async function openBucketAcl(bucket: BucketInfo): Promise<void> {
@@ -95,10 +108,12 @@ export function useBucketOperations(options: {
     if (!result) return
     multipartBucket.value = bucket
     multipartUploads.value = result
+    multipartResult.value = ''
     options.setModal('multipart')
   }
 
   function abortMultipart(upload: MultipartUploadInfo): void {
+    if (multipartBusy.value) return
     options.requestConfirmation({
       title: t('终止分片上传'),
       description: t('确定终止「{name}」的未完成分片上传吗？', { name: upload.name }),
@@ -118,6 +133,50 @@ export function useBucketOperations(options: {
     await openMultipart(bucket)
   }
 
+  function abortOldMultipart(): void {
+    const bucket = multipartBucket.value
+    if (!bucket || multipartBusy.value) return
+    const cutoff = Date.now() - 60 * 60 * 1000
+    const uploads = multipartUploads.value.filter(
+      (upload) => Date.parse(upload.initiated || '') < cutoff
+    )
+    if (!uploads.length) return
+    options.requestConfirmation({
+      title: t('批量终止分片上传'),
+      description: t(
+        '确定终止 {count} 个创建超过 1 小时的分片上传吗？最近 1 小时及创建时间未知的记录不会被终止。',
+        { count: uploads.length }
+      ),
+      confirmLabel: t('终止'),
+      destructive: true,
+      action: async () => {
+        if (multipartBusy.value) return
+        multipartBusy.value = true
+        try {
+          const result = await options.run(() =>
+            window.ossBrowser.buckets.abortMultipartBatch(bucket.name, uploads)
+          )
+          if (!result || multipartBucket.value?.name !== bucket.name) return
+          const remaining = await options.run(() =>
+            window.ossBrowser.buckets.listMultipart(bucket.name)
+          )
+          if (multipartBucket.value?.name !== bucket.name) return
+          if (remaining) multipartUploads.value = remaining
+          multipartResult.value = t('已终止 {aborted} 个，跳过 {skipped} 个，失败 {failed} 个', {
+            aborted: result.aborted,
+            skipped: result.skipped,
+            failed: result.failed.length
+          })
+          if (result.failed.length)
+            multipartResult.value +=
+              '\n' + result.failed.map((item) => `${item.name}: ${item.error}`).join('\n')
+        } finally {
+          multipartBusy.value = false
+        }
+      }
+    })
+  }
+
   return {
     multipartUploads,
     multipartBucket,
@@ -128,6 +187,10 @@ export function useBucketOperations(options: {
     deleteBucket,
     applyBucketAcl,
     openMultipart,
-    abortMultipart
+    abortMultipart,
+    abortOldMultipart,
+    oldMultipartCount,
+    multipartBusy,
+    multipartResult
   }
 }

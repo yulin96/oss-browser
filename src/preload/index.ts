@@ -47,6 +47,8 @@ const api: OssBrowserApi = {
     remove: (name) => ipcRenderer.invoke('buckets:remove', name),
     setAcl: (name, acl) => ipcRenderer.invoke('buckets:setAcl', name, acl),
     listMultipart: (name) => ipcRenderer.invoke('buckets:listMultipart', name),
+    abortMultipartBatch: (bucket, uploads) =>
+      ipcRenderer.invoke('buckets:abortMultipartBatch', bucket, uploads),
     abortMultipart: (bucket, name, uploadId) =>
       ipcRenderer.invoke('buckets:abortMultipart', bucket, name, uploadId)
   },
@@ -97,6 +99,7 @@ const api: OssBrowserApi = {
       ipcRenderer.invoke('files:download', bucket, items, destination)
   },
   transfers: {
+    restartUpload: (id) => ipcRenderer.invoke('transfers:restartUpload', id),
     cancel: (id) => ipcRenderer.invoke('transfers:cancel', id),
     pauseAll: (direction) => ipcRenderer.invoke('transfers:pauseAll', direction),
     resumeAll: (direction) => ipcRenderer.invoke('transfers:resumeAll', direction),

@@ -31,6 +31,7 @@ export function useTransfers(requestConfirmation: (request: ConfirmationRequest)
   resumeAllTransfers: () => Promise<void>
   confirmDeleteAllTransfers: () => void
   cancelTransfer: (id: string) => Promise<void>
+  confirmRestartUpload: (transfer: TransferItem) => void
 } {
   const transfers = ref<TransferItem[]>([])
   const batches = reactive(
@@ -182,6 +183,19 @@ export function useTransfers(requestConfirmation: (request: ConfirmationRequest)
     return window.ossBrowser.transfers.cancel(id)
   }
 
+  function confirmRestartUpload(transfer: TransferItem): void {
+    if (transfer.direction !== 'upload' || transfer.status !== 'error') return
+    requestConfirmation({
+      title: t('清理断点并重试'),
+      description: t('确定清除「{name}」的本地断点并从头上传吗？远端残留分片可在 Bucket 页终止。', {
+        name: transfer.name
+      }),
+      confirmLabel: t('清理并重试'),
+      destructive: true,
+      action: () => window.ossBrowser.transfers.restartUpload(transfer.id)
+    })
+  }
+
   return {
     transfers,
     showTransfers,
@@ -200,6 +214,7 @@ export function useTransfers(requestConfirmation: (request: ConfirmationRequest)
     pauseAllTransfers,
     resumeAllTransfers,
     confirmDeleteAllTransfers,
-    cancelTransfer
+    cancelTransfer,
+    confirmRestartUpload
   }
 }

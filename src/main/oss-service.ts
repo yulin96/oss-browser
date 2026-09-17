@@ -22,7 +22,7 @@ import OSS from 'ali-oss'
 import { app, nativeImage } from 'electron'
 import mime from 'mime'
 import { createHash, randomUUID } from 'node:crypto'
-import { createReadStream, type Dirent } from 'node:fs'
+import { createReadStream, type Dirent, type Stats } from 'node:fs'
 import { mkdir, open, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises'
 import { basename, isAbsolute, join, relative, sep } from 'node:path'
 import { Transform, type Readable } from 'node:stream'
@@ -38,6 +38,7 @@ import type {
   CdnDomainInfo,
   ImageDimensions,
   MultipartUploadInfo,
+  MultipartAbortResult,
   ObjectDetails,
   ObjectInfo,
   ObjectListResult,
@@ -78,6 +79,15 @@ interface DownloadCheckpoint {
   partSize: number
   completed: DownloadRange[]
 }
+interface UploadCheckpoint {
+  file: string
+  name: string
+  fileSize: number
+  partSize: number
+  uploadId: string
+  doneParts: { number: number; etag: string }[]
+  localFile: { mtimeMs: number; ctimeMs: number }
+}
 interface DownloadDiscovery {
   objects: Array<{ name: string; relativePath: string }>
   directories: string[]
@@ -98,6 +108,7 @@ type ActiveTransfer = Omit<TransferItem, 'batchId' | 'batchTotal' | 'batchDone'>
   pauseRequested: boolean
   cancelOperation: () => void
   lastProgressReportAt: number
+  clearUploadCheckpoint?: () => Promise<void>
 }
 
 export class OssService {
@@ -107,7 +118,7 @@ export class OssService {
   private readonly transferBatches = new Map<string, TransferBatch>()
   private readonly retryTransfers = new Map<
     string,
-    { direction: TransferDirection; run: () => Promise<void> }
+    { direction: TransferDirection; run: () => Promise<void>; transfer: ActiveTransfer }
   >()
   private readonly localMediaPreviews = new Map<string, { localPath: string; expiresAt: number }>()
   private readonly remoteObjectPreviews = new Map<string, { url: string; expiresAt: number }>()
@@ -951,12 +962,61 @@ export class OssService {
   }
 
   async listMultipart(bucket: string): Promise<MultipartUploadInfo[]> {
-    const result = await this.bucketClient(bucket).listUploads({ 'max-uploads': 1000 })
-    return (result.uploads || []).map((upload) => ({
-      name: upload.name,
-      uploadId: upload.uploadId,
-      initiated: upload.initiated
-    }))
+    const client = this.bucketClient(bucket)
+    const uploads: MultipartUploadInfo[] = []
+    let keyMarker: string | undefined
+    let uploadIdMarker: string | undefined
+    do {
+      const result = await client.listUploads({
+        'max-uploads': 1000,
+        'key-marker': keyMarker,
+        'upload-id-marker': uploadIdMarker
+      })
+      uploads.push(
+        ...(result.uploads || []).map((upload) => ({
+          name: upload.name,
+          uploadId: upload.uploadId,
+          initiated: upload.initiated
+        }))
+      )
+      if (!result.isTruncated) break
+      keyMarker = result.nextKeyMarker
+      uploadIdMarker = result.nextUploadIdMarker
+    } while (keyMarker || uploadIdMarker)
+    return uploads
+  }
+
+  async abortMultipartBatch(
+    bucket: string,
+    uploads: MultipartUploadInfo[]
+  ): Promise<MultipartAbortResult> {
+    const cutoff = Date.now() - 60 * 60 * 1000
+    const client = this.bucketClient(bucket)
+    const requested = new Set(
+      uploads.map((upload) => JSON.stringify([upload.name, upload.uploadId]))
+    )
+    const current = await this.listMultipart(bucket)
+    const eligible = current.filter(
+      (upload) =>
+        requested.has(JSON.stringify([upload.name, upload.uploadId])) &&
+        Number.isFinite(Date.parse(upload.initiated || '')) &&
+        Date.parse(upload.initiated!) < cutoff
+    )
+    const result: MultipartAbortResult = {
+      aborted: 0,
+      skipped: requested.size - eligible.length,
+      failed: []
+    }
+    await this.runPool(eligible, 3, async (upload) => {
+      try {
+        await client.abortMultipartUpload(upload.name, upload.uploadId)
+        result.aborted += 1
+      } catch (error) {
+        if (this.isMissingUpload(error)) result.skipped += 1
+        else result.failed.push({ ...upload, error: this.transferErrorMessage(error) })
+      }
+    })
+    return result
   }
 
   async abortMultipart(bucket: string, name: string, uploadId: string): Promise<void> {
@@ -1109,8 +1169,10 @@ export class OssService {
         return
       }
       const checkpointPath = this.checkpointPath(bucket, name, localPath)
+      transfer.clearUploadCheckpoint = () => rm(checkpointPath, { force: true })
       await this.runControlledTransfer(transfer, client, async () => {
-        const fileSize = (await stat(localPath)).size
+        const fileStat = await stat(localPath)
+        const fileSize = fileStat.size
         const reportBytes = (bytes: number): void => {
           if (
             transfer.status !== 'running' ||
@@ -1153,55 +1215,116 @@ export class OssService {
           await rm(checkpointPath, { force: true })
           return
         }
-        const checkpoint = await this.readCheckpoint(checkpointPath)
-        const ranges = new Map<number, { bytes: number }>()
-        let uploadedBytes = 0
-        const saved = checkpoint as
-          | {
-              uploadId: string
-              fileSize: number
-              partSize: number
-              doneParts: { number: number }[]
+        let checkpoint = await this.readUploadCheckpoint(checkpointPath, name, localPath, fileStat)
+        for (let attempt = 0; ; attempt += 1) {
+          const multipartClient = this.bucketClient(bucket)
+          transfer.cancelOperation = () => multipartClient.cancel()
+          let acceptingProgress = true
+          let checkpointWrite = Promise.resolve()
+          let uploadId = checkpoint?.uploadId
+          const ranges = new Map<number, { bytes: number }>()
+          let uploadedBytes = 0
+          const saved = checkpoint
+          if (saved?.uploadId) {
+            for (const part of saved.doneParts) {
+              const start = (part.number - 1) * saved.partSize
+              const bytes = Math.min(saved.partSize, saved.fileSize - start)
+              ranges.set(start, { bytes })
+              uploadedBytes += bytes
             }
-          | undefined
-        if (saved?.uploadId) {
-          for (const part of saved.doneParts) {
-            const start = (part.number - 1) * saved.partSize
-            const bytes = Math.min(saved.partSize, saved.fileSize - start)
-            ranges.set(start, { bytes })
-            uploadedBytes += bytes
           }
-        }
-        reportBytes(uploadedBytes)
-        // ali-oss 6.23 reports only completed parts; observe its per-attempt streams instead.
-        const streamClient = client as OssClient & {
-          _createStream: (file: string, start: number, end: number) => Readable
-        }
-        const createStream = streamClient._createStream
-        streamClient._createStream = (file, start, end) => {
-          uploadedBytes -= ranges.get(start)?.bytes || 0
-          const range = { bytes: 0 }
-          ranges.set(start, range)
           reportBytes(uploadedBytes)
-          return this.uploadProgressStream(createStream.call(client, file, start, end), (bytes) => {
-            if (ranges.get(start) !== range) return
-            uploadedBytes += bytes - range.bytes
-            range.bytes = bytes
+          // ali-oss 6.23 reports only completed parts; observe its per-attempt streams instead.
+          const streamClient = multipartClient as OssClient & {
+            _createStream: (file: string, start: number, end: number) => Readable
+          }
+          const createStream = streamClient._createStream
+          streamClient._createStream = (file, start, end) => {
+            uploadedBytes -= ranges.get(start)?.bytes || 0
+            const range = { bytes: 0 }
+            ranges.set(start, range)
             reportBytes(uploadedBytes)
-          })
-        }
-        try {
-          await client.multipartUpload(name, localPath, {
-            checkpoint,
-            headers,
-            parallel: this.settings.multipartParallel,
-            partSize: this.settings.partSizeMb * 1024 * 1024,
-            progress: async (_progress: number, nextCheckpoint: unknown) => {
-              if (nextCheckpoint) await writeFile(checkpointPath, JSON.stringify(nextCheckpoint))
+            return this.uploadProgressStream(
+              createStream.call(multipartClient, file, start, end),
+              (bytes) => {
+                if (!acceptingProgress || ranges.get(start) !== range) return
+                uploadedBytes += bytes - range.bytes
+                range.bytes = bytes
+                reportBytes(uploadedBytes)
+              }
+            )
+          }
+          try {
+            await multipartClient.multipartUpload(name, localPath, {
+              checkpoint,
+              headers,
+              parallel: this.settings.multipartParallel,
+              partSize: this.settings.partSizeMb * 1024 * 1024,
+              progress: async (_progress: number, nextCheckpoint: unknown) => {
+                if (!acceptingProgress || !nextCheckpoint) return
+                const snapshot = structuredClone(nextCheckpoint) as UploadCheckpoint
+                uploadId = snapshot.uploadId
+                checkpointWrite = checkpointWrite.then(async () => {
+                  const current = await stat(localPath)
+                  if (
+                    current.size !== fileSize ||
+                    current.mtimeMs !== fileStat.mtimeMs ||
+                    current.ctimeMs !== fileStat.ctimeMs
+                  ) {
+                    throw new Error('本地文件在上传期间发生变化，请清理断点后重试')
+                  }
+                  const contents = JSON.stringify({
+                    ...snapshot,
+                    localFile: { mtimeMs: fileStat.mtimeMs, ctimeMs: fileStat.ctimeMs }
+                  })
+                  const temporaryPath = `${checkpointPath}.${randomUUID()}.tmp`
+                  try {
+                    await writeFile(temporaryPath, contents)
+                    await rename(temporaryPath, checkpointPath)
+                  } finally {
+                    await rm(temporaryPath, { force: true })
+                  }
+                })
+                await checkpointWrite
+              }
+            })
+            break
+          } catch (error) {
+            acceptingProgress = false
+            multipartClient.cancel()
+            await checkpointWrite
+            if (
+              attempt > 0 ||
+              transfer.cancelRequested ||
+              transfer.pauseRequested ||
+              transfer.batch.cancelled
+            )
+              throw error
+            let missing = this.isMissingUpload(error)
+            // ali-oss replaces all part-level 404 errors with "abort"; verify the upload ID first.
+            if (!missing && uploadId && this.isSdkAbort(error)) {
+              try {
+                await multipartClient.listParts(name, uploadId, { 'max-parts': 1 })
+              } catch (verificationError) {
+                if (!this.isMissingUpload(verificationError)) throw verificationError
+                missing = true
+              }
             }
-          })
-        } finally {
-          streamClient._createStream = createStream
+            if (
+              !missing ||
+              transfer.cancelRequested ||
+              transfer.pauseRequested ||
+              transfer.batch.cancelled
+            )
+              throw error
+            await rm(checkpointPath, { force: true })
+            checkpoint = undefined
+            reportBytes(0)
+          } finally {
+            acceptingProgress = false
+            streamClient._createStream = createStream
+            await checkpointWrite
+          }
         }
         await rm(checkpointPath, { force: true })
       })
@@ -1685,6 +1808,30 @@ export class OssService {
     transfer.cancelOperation()
   }
 
+  async restartUpload(id: string): Promise<void> {
+    const retry = this.retryTransfers.get(id)
+    if (
+      !retry ||
+      retry.direction !== 'upload' ||
+      retry.transfer.status !== 'error' ||
+      !retry.transfer.clearUploadCheckpoint
+    )
+      return
+    this.retryTransfers.delete(id)
+    try {
+      await retry.transfer.clearUploadCheckpoint()
+      if (retry.transfer.batch.cancelled || retry.transfer.generation !== this.transferGeneration)
+        return
+      retry.transfer.progress = 0
+      await retry.run()
+    } catch (error) {
+      if (retry.transfer.batch.cancelled || retry.transfer.generation !== this.transferGeneration)
+        return
+      this.failTransfer(retry.transfer, error)
+      this.retryTransfers.set(id, retry)
+    }
+  }
+
   pauseAllTransfers(direction: TransferDirection): void {
     this.pausedDirections.add(direction)
     for (const transfer of this.activeTransfers.values()) {
@@ -1741,7 +1888,9 @@ export class OssService {
   }
 
   private checkpointPath(bucket: string, name: string, localPath: string): string {
-    const hash = createHash('sha256').update(`${bucket}\n${name}\n${localPath}`).digest('hex')
+    const hash = createHash('sha256')
+      .update(`${this.auth?.endpoint}\n${this.auth?.accessKeyId}\n${bucket}\n${name}\n${localPath}`)
+      .digest('hex')
     return join(app.getPath('userData'), 'upload-checkpoints', `${hash}.json`)
   }
 
@@ -1754,13 +1903,75 @@ export class OssService {
     )
   }
 
-  private async readCheckpoint(path: string): Promise<unknown> {
+  private async readUploadCheckpoint(
+    path: string,
+    name: string,
+    localPath: string,
+    file: Stats
+  ): Promise<UploadCheckpoint | undefined> {
     await mkdir(join(path, '..'), { recursive: true })
+    let saved: UploadCheckpoint | undefined
     try {
-      return JSON.parse(await readFile(path, 'utf8'))
-    } catch {
-      return undefined
+      saved = JSON.parse(await readFile(path, 'utf8'))
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined
+      if (!(error instanceof SyntaxError)) throw error
     }
+    if (
+      saved &&
+      saved.file === localPath &&
+      saved.name === name &&
+      saved.fileSize === file.size &&
+      saved.localFile?.mtimeMs === file.mtimeMs &&
+      saved.localFile?.ctimeMs === file.ctimeMs &&
+      typeof saved.uploadId === 'string' &&
+      saved.uploadId &&
+      Number.isInteger(saved.partSize) &&
+      saved.partSize > 0 &&
+      Array.isArray(saved.doneParts) &&
+      saved.doneParts.every(
+        (part) =>
+          part &&
+          Number.isInteger(part.number) &&
+          part.number > 0 &&
+          part.number <= Math.ceil(file.size / saved.partSize) &&
+          typeof part.etag === 'string'
+      ) &&
+      new Set(saved.doneParts.map((part) => part.number)).size === saved.doneParts.length
+    )
+      return saved
+    await rm(path, { force: true })
+    return undefined
+  }
+
+  private isMissingUpload(error: unknown): boolean {
+    if (!error || typeof error !== 'object') return false
+    return 'code' in error && error.code === 'NoSuchUpload'
+  }
+
+  private isSdkAbort(error: unknown): boolean {
+    if (!error || typeof error !== 'object') return false
+    const detail = error as { code?: string; name?: string; status?: number; message?: string }
+    return (
+      detail.name === 'abort' &&
+      detail.status === 0 &&
+      detail.message === 'upload task has been abort'
+    )
+  }
+
+  private transferErrorMessage(error: unknown): string {
+    if (!error || typeof error !== 'object') return String(error)
+    const detail = error as { code?: unknown; name?: unknown; message?: unknown; status?: unknown }
+    if (this.isMissingUpload(error)) return '分片上传会话已失效（NoSuchUpload），请清理断点后重试'
+    if (this.isSdkAbort(error))
+      return '分片上传已中止，服务端返回 404，请检查上传会话或清理断点后重试'
+    const message = typeof detail.message === 'string' ? detail.message : ''
+    const code = typeof detail.code === 'string' ? detail.code : ''
+    if (message) return code && !message.includes(code) ? `${message} (${code})` : message
+    if (code) return code
+    if (typeof detail.name === 'string') return detail.name
+    if (typeof detail.status === 'number') return `传输失败（HTTP ${detail.status}）`
+    return '传输失败，未返回具体错误信息'
   }
 
   private async deleteObjectNames(client: OssClient, names: string[]): Promise<void> {
@@ -1852,6 +2063,7 @@ export class OssService {
         this.failTransfer(transfer, error)
         this.retryTransfers.set(transfer.id, {
           direction: transfer.direction,
+          transfer,
           run: () => this.runControlledTransfer(transfer, client, operation)
         })
         return
@@ -1911,7 +2123,7 @@ export class OssService {
   private failTransfer(transfer: ActiveTransfer, error: unknown): void {
     transfer.batch.failed.add(transfer.id)
     transfer.status = 'error'
-    transfer.error = error instanceof Error ? error.message : String(error)
+    transfer.error = this.transferErrorMessage(error)
     this.reportActiveTransfer(transfer)
   }
 

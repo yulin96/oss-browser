@@ -214,7 +214,8 @@ export function useAppController() {
     pauseAllTransfers,
     resumeAllTransfers,
     confirmDeleteAllTransfers,
-    cancelTransfer
+    cancelTransfer,
+    confirmRestartUpload
   } = useTransfers(requestConfirmation)
 
   const auth = reactive<AuthConfig>({
@@ -435,7 +436,11 @@ export function useAppController() {
     deleteBucket,
     applyBucketAcl,
     openMultipart,
-    abortMultipart
+    abortMultipart,
+    abortOldMultipart,
+    oldMultipartCount,
+    multipartBusy,
+    multipartResult
   } = useBucketOperations({
     form: bucketForm,
     run,
@@ -2188,11 +2193,16 @@ export function useAppController() {
     savePreviewText,
     openMultipart,
     abortMultipart,
+    abortOldMultipart,
+    oldMultipartCount,
+    multipartBusy,
+    multipartResult,
     formatSize,
     getFileExtension,
     isFavoriteDirectory,
     isHomeDirectory,
     cancelTransfer,
+    confirmRestartUpload,
     openProjectPage,
     openPreviewExternally,
     clearSavedProfile,

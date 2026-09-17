@@ -273,6 +273,12 @@ export interface MultipartUploadInfo {
   initiated?: string
 }
 
+export interface MultipartAbortResult {
+  aborted: number
+  skipped: number
+  failed: (MultipartUploadInfo & { error: string })[]
+}
+
 export type AppPlatform = 'darwin' | 'win32' | 'linux'
 
 export interface OssBrowserApi {
@@ -317,6 +323,10 @@ export interface OssBrowserApi {
     setAcl: (name: string, acl: string) => Promise<void>
     listMultipart: (name: string) => Promise<MultipartUploadInfo[]>
     abortMultipart: (bucket: string, name: string, uploadId: string) => Promise<void>
+    abortMultipartBatch: (
+      bucket: string,
+      uploads: MultipartUploadInfo[]
+    ) => Promise<MultipartAbortResult>
   }
   objects: {
     list: (bucket: string, prefix: string, marker?: string) => Promise<ObjectListResult>
@@ -375,6 +385,7 @@ export interface OssBrowserApi {
     download: (bucket: string, items: ObjectInfo[], destination: string) => Promise<boolean>
   }
   transfers: {
+    restartUpload: (id: string) => Promise<void>
     cancel: (id: string) => Promise<void>
     pauseAll: (direction: TransferItem['direction']) => Promise<void>
     resumeAll: (direction: TransferItem['direction']) => Promise<void>

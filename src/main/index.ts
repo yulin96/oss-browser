@@ -340,6 +340,11 @@ function registerIpc(): void {
   )
   ipcMain.handle('buckets:listMultipart', (_event, name: string) => oss.listMultipart(name))
   ipcMain.handle(
+    'buckets:abortMultipartBatch',
+    (_event, ...args: Parameters<OssService['abortMultipartBatch']>) =>
+      oss.abortMultipartBatch(...args)
+  )
+  ipcMain.handle(
     'buckets:abortMultipart',
     (_event, bucket: string, name: string, uploadId: string) =>
       oss.abortMultipart(bucket, name, uploadId)
@@ -467,6 +472,7 @@ function registerIpc(): void {
       oss.download(bucket, items, destination)
   )
   ipcMain.handle('transfers:cancel', (_event, id: string) => oss.cancelTransfer(id))
+  ipcMain.handle('transfers:restartUpload', (_event, id: string) => oss.restartUpload(id))
   ipcMain.handle('transfers:pauseAll', (_event, direction: TransferItem['direction']) =>
     oss.pauseAllTransfers(direction)
   )

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Download, Pause, Play, Trash2, Upload, X } from '@lucide/vue'
+import { Download, Pause, Play, RotateCcw, Trash2, Upload, X } from '@lucide/vue'
 import { onBeforeUnmount, onMounted } from 'vue'
 import type { AppController } from '../composables/useAppController'
 import { t } from '../i18n'
@@ -24,7 +24,8 @@ const {
   handleDragEnter,
   handleDragLeave,
   handleDrop,
-  cancelTransfer
+  cancelTransfer,
+  confirmRestartUpload
 } = props.controller
 
 onMounted(() => {
@@ -185,6 +186,13 @@ function handleKeydown(event: KeyboardEvent): void {
             :label="t('取消')"
             tone="ghost"
             @click="cancelTransfer(transfer.id)"
+          />
+          <AppButton
+            v-if="transfer.direction === 'upload' && transfer.status === 'error'"
+            :label="t('清理断点并重试')"
+            :icon="RotateCcw"
+            tone="ghost"
+            @click="confirmRestartUpload(transfer)"
           />
         </div>
         <div class="progress"><i :style="{ width: `${transfer.progress * 100}%` }" /></div>

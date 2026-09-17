@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { Trash2 } from '@lucide/vue'
 import type { AppController } from '../composables/useAppController'
 import { t } from '../i18n'
 import AppButton from './AppButton.vue'
@@ -12,7 +13,11 @@ const {
   bucketForm,
   createBucket,
   applyBucketAcl,
-  abortMultipart
+  abortMultipart,
+  abortOldMultipart,
+  oldMultipartCount,
+  multipartBusy,
+  multipartResult
 } = props.controller
 </script>
 
@@ -87,8 +92,25 @@ const {
             <strong>{{ part.name }}</strong
             ><span>{{ part.initiated || part.uploadId }}</span>
           </div>
-          <AppButton :label="t('终止')" tone="danger" @click="abortMultipart(part)" />
+          <AppButton
+            :label="t('终止')"
+            tone="danger"
+            :disabled="multipartBusy"
+            @click="abortMultipart(part)"
+          />
         </div>
+        <p v-if="multipartResult" class="whitespace-pre-wrap break-words text-sm">
+          {{ multipartResult }}
+        </p>
+        <template #footer>
+          <AppButton
+            :label="t('终止 1 小时前的分片')"
+            :icon="Trash2"
+            tone="danger"
+            :disabled="multipartBusy || !oldMultipartCount"
+            @click="abortOldMultipart"
+          />
+        </template>
       </ModalShell>
     </Transition>
   </div>
