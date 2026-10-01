@@ -4,8 +4,7 @@ cask "oss-browser" do
   version :latest
   sha256 :no_check
 
-  url "https://github.com/yulin96/oss-browser/releases/latest/download/oss-browser-latest-#{arch}.dmg",
-      verified: "github.com/yulin96/oss-browser/"
+  url "https://github.com/yulin96/oss-browser/releases/latest/download/oss-browser-latest-#{arch}.dmg"
   name "OSS Browser"
   desc "Independent desktop client for Alibaba Cloud OSS"
   homepage "https://github.com/yulin96/oss-browser"
