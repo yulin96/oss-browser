@@ -105,6 +105,14 @@ The workflow in [`.github/workflows/release.yml`](.github/workflows/release.yml)
 - Linux x64 AppImage and DEB packages
 
 After every platform finishes successfully, the workflow creates a GitHub Release and uploads all packages to it.
+Installers and update manifests are hosted only on the public GitHub Releases page; releases no longer
+require OSS variables or credentials. New releases become public after their files have been uploaded.
+Windows and Linux keep in-app downloads and installation. On macOS, the app checks for updates and
+opens the matching ARM64 or x64 DMG on GitHub for manual installation.
+
+Older versions configured to check OSS must be upgraded manually once to switch to the GitHub update
+source.
+
 Add user-facing changes to the `未发布` section at the top of
 [`release-notes.md`](release-notes.md), then publish with one of:
 

@@ -13,6 +13,7 @@ export function useAppUpdates(requestConfirmation: (request: ConfirmationRequest
   disposeUpdates: () => void
   handleUpdateAction: () => Promise<void>
 } {
+  const manualInstall = window.ossBrowser.system.platform === 'darwin'
   const appVersion = ref('')
   const currentReleaseNotes = ref('')
   const updateState = ref<UpdateState>({ status: 'idle' })
@@ -24,9 +25,10 @@ export function useAppUpdates(requestConfirmation: (request: ConfirmationRequest
   const updateDescription = computed(() => {
     if (updateState.value.status === 'checking') return t('正在检查新版本…')
     if (updateState.value.status === 'available')
-      return t('发现新版本 {version}', {
-        version: updateState.value.version || ''
-      })
+      return t(
+        manualInstall ? '发现新版本 {version}，请前往 GitHub 下载' : '发现新版本 {version}',
+        { version: updateState.value.version || '' }
+      )
     if (updateState.value.status === 'downloading')
       return t('正在下载新版本：{percent}%', { percent: updateState.value.percent || 0 })
     if (updateState.value.status === 'downloaded')
@@ -41,7 +43,7 @@ export function useAppUpdates(requestConfirmation: (request: ConfirmationRequest
 
   const updateButtonLabel = computed(() => {
     if (updateState.value.status === 'checking') return t('检查中')
-    if (updateState.value.status === 'available') return t('下载更新')
+    if (updateState.value.status === 'available') return t(manualInstall ? '手动下载' : '下载更新')
     if (updateState.value.status === 'downloading') return `${updateState.value.percent || 0}%`
     if (updateState.value.status === 'downloaded') return t('重启安装')
     if (updateState.value.status === 'error' && updateState.value.version) return t('手动下载')
@@ -51,11 +53,14 @@ export function useAppUpdates(requestConfirmation: (request: ConfirmationRequest
   function requestAvailableUpdate(): void {
     requestConfirmation({
       title: t('发现新版本'),
-      description: t('新版本 {version} 已发布，是否现在下载？', {
-        version: updateState.value.version || ''
-      }),
+      description: t(
+        manualInstall
+          ? '发现新版本 {version}，请前往 GitHub 下载'
+          : '新版本 {version} 已发布，是否现在下载？',
+        { version: updateState.value.version || '' }
+      ),
       details: updateState.value.releaseNotes,
-      confirmLabel: t('下载更新'),
+      confirmLabel: t(manualInstall ? '手动下载' : '下载更新'),
       action: () => window.ossBrowser.updates.download()
     })
   }

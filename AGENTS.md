@@ -40,6 +40,7 @@ Repository: <https://github.com/yulin96/oss-browser>
 ## Release Rules
 
 - GitHub releases are triggered by semantic version tags such as `v0.2.0`.
+- Publish installation packages and update manifests only to GitHub Releases. Do not upload release files to OSS or require OSS release credentials.
 - The Git tag must match the `package.json` version with a leading `v`.
 - Keep `.github/workflows/release.yml` capable of producing macOS ARM64/x64, Windows x64, and Linux x64 packages.
 - On macOS, check for updates in the app but direct users to GitHub Releases for downloads. Do not download or install updates in the app.

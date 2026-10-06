@@ -15,8 +15,11 @@ files:
   - '!{.env,.env.*,.npmrc,pnpm-lock.yaml}'
   - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}'
 publish:
-  provider: generic
-  url: ${env.OSS_UPDATE_URL}
+  provider: github
+  owner: yulin96
+  repo: oss-browser
+  private: false
+  releaseType: release
 asarUnpack:
   - resources/**
 win:
@@ -31,6 +34,7 @@ mac:
   icon: build/icon.icns
   identity: '-'
   hardenedRuntime: true
+  artifactName: ${name}-${version}-${arch}.${ext}
   target:
     - target: dmg
       arch:

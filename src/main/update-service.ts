@@ -1,4 +1,4 @@
-import { app, BrowserWindow } from 'electron'
+import { app, BrowserWindow, shell } from 'electron'
 import electronUpdater from 'electron-updater'
 import type { UpdateInfo } from 'electron-updater'
 import type { UpdateState } from '../shared/types'
@@ -19,13 +19,17 @@ export class UpdateService {
   private state: UpdateState = { status: 'idle' }
   private initialized = false
 
-  constructor(private readonly getWindow: () => BrowserWindow | null) {}
+  constructor(
+    private readonly getWindow: () => BrowserWindow | null,
+    private readonly platform: NodeJS.Platform = process.platform,
+    private readonly architecture = process.arch
+  ) {}
 
   initialize(): void {
     if (this.initialized || !app.isPackaged) return
     this.initialized = true
     autoUpdater.autoDownload = false
-    autoUpdater.autoInstallOnAppQuit = true
+    autoUpdater.autoInstallOnAppQuit = this.platform !== 'darwin'
 
     autoUpdater.on('checking-for-update', () => this.setState({ status: 'checking' }))
     autoUpdater.on('update-available', (info) =>
@@ -73,6 +77,14 @@ export class UpdateService {
   async download(): Promise<void> {
     if (!app.isPackaged || this.state.status !== 'available') return
     try {
+      if (this.platform === 'darwin') {
+        if (!this.state.version) return
+        const version = encodeURIComponent(this.state.version)
+        await shell.openExternal(
+          `https://github.com/yulin96/oss-browser/releases/download/v${version}/oss-browser-${version}-${this.architecture}.dmg`
+        )
+        return
+      }
       await autoUpdater.downloadUpdate()
     } catch (error) {
       this.setError(error)
@@ -80,7 +92,8 @@ export class UpdateService {
   }
 
   install(): void {
-    if (this.state.status === 'downloaded') autoUpdater.quitAndInstall(false, true)
+    if (this.platform !== 'darwin' && this.state.status === 'downloaded')
+      autoUpdater.quitAndInstall(false, true)
   }
 
   private setError(error: unknown): void {

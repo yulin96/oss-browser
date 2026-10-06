@@ -2,6 +2,8 @@
 
 ## 未发布
 
+- 后续版本的安装包和更新信息统一发布到 GitHub Releases，不再上传 OSS；旧版需手动安装一次新版本以切换更新源。
+- macOS 更新改为前往 GitHub 下载对应架构的 DMG 并手动安装；Windows 和 Linux 保留应用内更新。
 - 移除 Homebrew Cask 已弃用的 URL 参数，消除安装和更新时的 `verified` 弃用警告。
 
 ## v0.5.12
