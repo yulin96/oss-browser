@@ -35,6 +35,7 @@ import type {
   FloatingUploadState,
   FloatingUploadTarget,
   ObjectInfo,
+  ObjectHeaderChanges,
   ObjectPreviewDescriptor,
   SavedProfile,
   SavedProfileSummary
@@ -130,6 +131,7 @@ export function useAppController() {
 
   const loggedIn = ref(false)
   const initializing = ref(true)
+  let accountGeneration = 0
   const directError = ref('')
   const toastMessage = ref('')
   const modal = ref<ModalName>(null)
@@ -216,7 +218,7 @@ export function useAppController() {
     confirmDeleteAllTransfers,
     cancelTransfer,
     confirmRestartUpload
-  } = useTransfers(requestConfirmation)
+  } = useTransfers(requestConfirmation, () => loggedIn.value && !authTask.pending.value)
 
   const auth = reactive<AuthConfig>({
     alias: '',
@@ -334,6 +336,8 @@ export function useAppController() {
     objectPath: ''
   })
   const selectedMediaProcesses = ref<string[]>([])
+  const headerTarget = shallowRef<{ bucket: string; names: string[] } | null>(null)
+  const headersSingleObject = computed(() => headerTarget.value?.names.length === 1)
   const mediaProcessOptions = computed(() =>
     previewType.value === 'image'
       ? imageProcessOptions
@@ -714,6 +718,13 @@ export function useAppController() {
   }
 
   function resetAccountRuntimeState(): void {
+    accountGeneration += 1
+    authTask.reset()
+    browserTask.reset()
+    operationTask.reset()
+    cloudTask.reset()
+    settingsTask.reset()
+    headerTarget.value = null
     releaseObjectPreview()
     fileBrowser.reset()
     errorMessage.value = ''
@@ -890,9 +901,10 @@ export function useAppController() {
   async function login(): Promise<void> {
     if (auth.endpointMode === 'public') auth.endpoint = 'oss-cn-hangzhou.aliyuncs.com'
     const config = authSnapshot()
-    const result = await authTask.run(() => window.ossBrowser.auth.connect(config))
-    if (!result) return
     resetAccountRuntimeState()
+    const generation = accountGeneration
+    const result = await authTask.run(() => window.ossBrowser.auth.connect(config))
+    if (!result || generation !== accountGeneration) return
     buckets.value = result
     loggedIn.value = true
     loadAccountPreferences()
@@ -903,8 +915,11 @@ export function useAppController() {
         config
       }
       await window.ossBrowser.profiles.save(profile)
+      if (generation !== accountGeneration) return
       saveSession()
-      savedProfiles.value = await window.ossBrowser.profiles.list()
+      const profiles = await window.ossBrowser.profiles.list()
+      if (generation !== accountGeneration) return
+      savedProfiles.value = profiles
     } else {
       localStorage.removeItem('oss-browser-session')
     }
@@ -930,19 +945,21 @@ export function useAppController() {
   async function restoreSession(): Promise<void> {
     const raw = localStorage.getItem('oss-browser-session')
     if (!raw) return
+    resetAccountRuntimeState()
+    const generation = accountGeneration
     try {
       const session = JSON.parse(raw) as SessionState
       const profile = savedProfiles.value.find((item) => item.id === session.profileId)
       if (!profile) return
       const connection = await window.ossBrowser.profiles.connect(profile.id)
+      if (generation !== accountGeneration) return
       applyProfileSummary(connection.profile)
-      resetAccountRuntimeState()
       buckets.value = connection.buckets
       loggedIn.value = true
       loadAccountPreferences()
       await openInitialLocation(connection.buckets, auth.presetPath || '')
     } catch {
-      localStorage.removeItem('oss-browser-session')
+      if (generation === accountGeneration) localStorage.removeItem('oss-browser-session')
     }
   }
 
@@ -1008,9 +1025,11 @@ export function useAppController() {
   }
 
   async function logout(): Promise<void> {
-    await window.ossBrowser.auth.disconnect()
     loggedIn.value = false
     resetAccountRuntimeState()
+    const generation = accountGeneration
+    await window.ossBrowser.auth.disconnect()
+    if (generation !== accountGeneration) return
     localStorage.removeItem('oss-browser-session')
   }
 
@@ -1057,12 +1076,19 @@ export function useAppController() {
   }
 
   async function openHeaders(): Promise<void> {
+    if (!currentBucket.value || !selectedObjects.value.length) return
+    const generation = accountGeneration
+    const target = {
+      bucket: currentBucket.value.name,
+      names: selectedObjects.value.map((item) => item.name)
+    }
+    headerTarget.value = target
     Object.assign(objectForm, { cacheControl: '', contentType: '', contentDisposition: '' })
-    if (currentBucket.value && selectedObjects.value.length === 1) {
+    if (target.names.length === 1) {
       const details = await run(() =>
-        window.ossBrowser.objects.details(currentBucket.value!.name, selectedObjects.value[0].name)
+        window.ossBrowser.objects.details(target.bucket, target.names[0])
       )
-      if (!details) return
+      if (!details || generation !== accountGeneration) return
       const headers = Object.fromEntries(
         Object.entries(details.headers).map(([key, value]) => [key.toLowerCase(), value])
       )
@@ -1472,6 +1498,7 @@ export function useAppController() {
 
   async function uploadPaths(paths: string[]): Promise<void> {
     if (!currentBucket.value || !paths.length) return
+    const generation = accountGeneration
     const bucketName = currentBucket.value.name
     const targetPrefix = prefix.value
     let skipNames: string[] = []
@@ -1481,13 +1508,14 @@ export function useAppController() {
       const preparation = await run(() =>
         window.ossBrowser.files.findUploadConflicts(bucketName, targetPrefix, paths)
       )
-      if (preparation === undefined) return
+      if (preparation === undefined || generation !== accountGeneration) return
       preparationId = preparation.id
       const conflicts = preparation.conflicts
       if (settings.uploadConflictPolicy === 'skip') {
         skipNames = conflicts.map((conflict) => conflict.name)
       } else if (conflicts.length) {
         const resolution = await resolveUploadConflicts(conflicts)
+        if (generation !== accountGeneration) return
         if (!resolution) {
           await window.ossBrowser.files.discardUploadPreparation(preparationId)
           return
@@ -1505,12 +1533,14 @@ export function useAppController() {
         preparationId
       })
     )
-    if (done) await loadObjects()
+    if (done && generation === accountGeneration) await loadObjects()
   }
 
   async function upload(kind: 'files' | 'folder'): Promise<void> {
     if (!currentBucket.value) return
+    const generation = accountGeneration
     const paths = await window.ossBrowser.files.pickUpload(kind)
+    if (generation !== accountGeneration) return
     await uploadPaths(paths)
   }
 
@@ -1526,15 +1556,12 @@ export function useAppController() {
 
   async function downloadSelected(): Promise<void> {
     if (!currentBucket.value || !selectedObjects.value.length) return
+    const generation = accountGeneration
+    const bucket = currentBucket.value.name
+    const items = JSON.parse(JSON.stringify(selectedObjects.value)) as ObjectInfo[]
     const destination = await window.ossBrowser.files.pickDownloadFolder()
-    if (!destination) return
-    const done = await run(() =>
-      window.ossBrowser.files.download(
-        currentBucket.value!.name,
-        JSON.parse(JSON.stringify(selectedObjects.value)),
-        destination
-      )
-    )
+    if (!destination || generation !== accountGeneration) return
+    const done = await run(() => window.ossBrowser.files.download(bucket, items, destination))
     if (!done) return
   }
 
@@ -1551,20 +1578,26 @@ export function useAppController() {
   }
 
   async function applyHeaders(): Promise<void> {
-    if (!currentBucket.value || !selectedObjects.value.length) return
-    const headers: Record<string, string> = {}
-    if (objectForm.cacheControl) headers['Cache-Control'] = objectForm.cacheControl
-    if (objectForm.contentType) headers['Content-Type'] = objectForm.contentType
-    if (objectForm.contentDisposition)
-      headers['Content-Disposition'] = objectForm.contentDisposition
+    const target = headerTarget.value
+    if (!target) return
+    const generation = accountGeneration
+    const headers: ObjectHeaderChanges = {}
+    for (const [name, value] of [
+      ['Cache-Control', objectForm.cacheControl],
+      ['Content-Type', objectForm.contentType],
+      ['Content-Disposition', objectForm.contentDisposition]
+    ]) {
+      if (value) headers[name] = value
+      else if (target.names.length === 1) headers[name] = null
+    }
     const done = await run(() =>
       Promise.all(
-        selectedObjects.value.map((item) =>
-          window.ossBrowser.objects.setHeaders(currentBucket.value!.name, item.name, headers)
+        target.names.map((name) =>
+          window.ossBrowser.objects.setHeaders(target.bucket, name, headers)
         )
       ).then(() => undefined)
     )
-    if (done === undefined && errorMessage.value) return
+    if (generation !== accountGeneration || (done === undefined && errorMessage.value)) return
     modal.value = null
   }
 
@@ -1881,18 +1914,19 @@ export function useAppController() {
   }
 
   async function useProfile(profile: SavedProfileSummary): Promise<void> {
+    resetAccountRuntimeState()
+    const generation = accountGeneration
     const connection = await authTask.run(() => window.ossBrowser.profiles.connect(profile.id))
+    if (generation !== accountGeneration) return
     if (!connection) {
       if (loggedIn.value) {
         const message = errorMessage.value
         loggedIn.value = false
-        resetAccountRuntimeState()
         errorMessage.value = message
         localStorage.removeItem('oss-browser-session')
       }
       return
     }
-    resetAccountRuntimeState()
     applyProfileSummary(connection.profile)
     buckets.value = connection.buckets
     loggedIn.value = true
@@ -2014,6 +2048,7 @@ export function useAppController() {
     OSS_REGIONS,
     bucketForm,
     objectForm,
+    headersSingleObject,
     ramForm,
     cacheForm,
     selectedMediaProcesses,

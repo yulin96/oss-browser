@@ -22,8 +22,20 @@ import OSS from 'ali-oss'
 import { app, nativeImage } from 'electron'
 import mime from 'mime'
 import { createHash, randomUUID } from 'node:crypto'
-import { createReadStream, type Dirent, type Stats } from 'node:fs'
-import { mkdir, open, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises'
+import { constants, createReadStream, type Dirent, type Stats } from 'node:fs'
+import {
+  copyFile,
+  link,
+  lstat,
+  mkdir,
+  open,
+  readFile,
+  readdir,
+  rename,
+  rm,
+  stat,
+  writeFile
+} from 'node:fs/promises'
 import { basename, isAbsolute, join, relative, sep } from 'node:path'
 import { Transform, type Readable } from 'node:stream'
 import { DEFAULT_APP_SETTINGS, validateAppSettings } from '../shared/app-settings'
@@ -40,6 +52,7 @@ import type {
   MultipartUploadInfo,
   MultipartAbortResult,
   ObjectDetails,
+  ObjectHeaderChanges,
   ObjectInfo,
   ObjectListResult,
   ObjectScanResult,
@@ -62,6 +75,7 @@ interface UploadEntry {
   name: string
 }
 interface PreparedUpload {
+  generation: number
   bucket: string
   prefix: string
   paths: string[]
@@ -129,12 +143,21 @@ export class OssService {
     download: []
   }
   private transferGeneration = 0
+  private readonly transferSlots: Record<TransferDirection, number> = { upload: 0, download: 0 }
+  private readonly slotWaiters: Record<TransferDirection, Array<() => void>> = {
+    upload: [],
+    download: []
+  }
   private readonly bucketRegions = new Map<string, string>()
 
-  constructor(private readonly reportTransfer: TransferReporter) {}
+  constructor(
+    private readonly reportTransfer: TransferReporter,
+    private readonly confirmDownloadOverwrite?: (paths: string[]) => Promise<boolean>
+  ) {}
 
   async connect(config: AuthConfig): Promise<BucketInfo[]> {
     this.resetActiveTransfers()
+    const generation = this.transferGeneration
     this.preparedUploads.clear()
     this.remoteObjectPreviews.clear()
     this.auth = config
@@ -144,17 +167,23 @@ export class OssService {
         if (config.endpointMode === 'public') {
           try {
             const buckets = await this.listBuckets()
+            this.assertCurrentSession(generation)
             const matchedBucket = buckets.find((item) => item.name === bucket)
             if (matchedBucket?.region) this.bucketRegions.set(bucket, matchedBucket.region)
           } catch {
+            this.assertCurrentSession(generation)
             await this.discoverPublicBucketRegion(bucket)
           }
         }
         await this.bucketClient(bucket).list({ prefix, 'max-keys': 1 })
+        this.assertCurrentSession(generation)
         return [{ name: bucket, region: this.bucketRegions.get(bucket) || '' }]
       }
-      return await this.listBuckets()
+      const buckets = await this.listBuckets()
+      this.assertCurrentSession(generation)
+      return buckets
     } catch (error) {
+      if (generation !== this.transferGeneration) throw error
       this.auth = null
       this.bucketRegions.clear()
       throw error
@@ -181,6 +210,8 @@ export class OssService {
 
   updateSettings(settings: AppSettings): void {
     this.settings = validateAppSettings(settings)
+    this.wakeTransferSlots('upload')
+    this.wakeTransferSlots('download')
   }
 
   getUploadConflictPolicy(): AppSettings['uploadConflictPolicy'] {
@@ -284,10 +315,13 @@ export class OssService {
   }
 
   async removeRamUser(userName: string): Promise<void> {
+    const generation = this.transferGeneration
     const client = this.ramClient()
     const policies = await client.listPoliciesForUser(new ListPoliciesForUserRequest({ userName }))
+    this.assertCurrentSession(generation)
     for (const policy of policies.body?.policies?.policy || []) {
       if (policy.policyName && policy.policyType) {
+        this.assertCurrentSession(generation)
         await client.detachPolicyFromUser(
           new DetachPolicyFromUserRequest({
             userName,
@@ -297,14 +331,19 @@ export class OssService {
         )
       }
     }
+    this.assertCurrentSession(generation)
     for (const key of await this.listRamAccessKeys(userName)) {
+      this.assertCurrentSession(generation)
       await this.removeRamAccessKey(userName, key.accessKeyId)
     }
+    this.assertCurrentSession(generation)
     await client.deleteUser(new DeleteUserRequest({ userName }))
   }
 
   async listBuckets(): Promise<BucketInfo[]> {
+    const generation = this.transferGeneration
     const result = await this.client().listBuckets()
+    this.assertCurrentSession(generation)
     const buckets = (result.buckets || []).map((bucket) => ({
       name: bucket.name,
       region: bucket.region,
@@ -352,12 +391,10 @@ export class OssService {
   }
 
   async createBucket(name: string, region: string, acl: string): Promise<void> {
-    const client = this.client() as unknown as {
+    const client = this.client(undefined, region) as unknown as {
       putBucket: (name: string, options: Record<string, string>) => Promise<unknown>
-      putBucketACL: (name: string, acl: string) => Promise<unknown>
     }
-    await client.putBucket(name, { region })
-    if (acl) await client.putBucketACL(name, acl)
+    await client.putBucket(name, { acl })
   }
 
   async getBucketAcl(name: string): Promise<string> {
@@ -879,7 +916,7 @@ export class OssService {
   async setObjectHeaders(
     bucket: string,
     name: string,
-    headers: Record<string, string>
+    headers: ObjectHeaderChanges
   ): Promise<void> {
     const client = this.bucketClient(bucket)
     const current = await client.head(name)
@@ -888,7 +925,8 @@ export class OssService {
     )
     const preservedHeaders = this.preservedObjectHeaders(responseHeaders)
     for (const [key, value] of Object.entries(headers)) {
-      preservedHeaders[key.toLowerCase()] = value
+      if (value === null) delete preservedHeaders[key.toLowerCase()]
+      else preservedHeaders[key.toLowerCase()] = value
     }
     const etag = responseHeaders.etag
     if (!etag) throw new Error('OSS 未返回对象 ETag，无法安全更新 HTTP 头')
@@ -1028,8 +1066,10 @@ export class OssService {
     prefix: string,
     paths: string[]
   ): Promise<UploadPreparation> {
+    const generation = this.transferGeneration
     this.localMediaPreviews.clear()
     const entries = await this.prepareUploadEntries(prefix, paths)
+    this.assertCurrentSession(generation)
     const files = entries.filter((entry) => !entry.isDirectory)
     const client = this.bucketClient(bucket)
     const conflictNames = new Set<string>()
@@ -1064,8 +1104,10 @@ export class OssService {
       })
     )
     await this.runPool(checks, conflictConcurrency, async (check) => {
+      this.assertCurrentSession(generation)
       await check()
     })
+    this.assertCurrentSession(generation)
     const returnedNames = new Set<string>()
     const conflicts = files.flatMap((file) => {
       if (!conflictNames.has(file.name) || returnedNames.has(file.name)) return []
@@ -1105,6 +1147,7 @@ export class OssService {
     })
     const id = randomUUID()
     this.preparedUploads.set(id, {
+      generation,
       bucket,
       prefix,
       paths: [...paths],
@@ -1135,11 +1178,15 @@ export class OssService {
     options: UploadOptions = {},
     onBatchCreated?: (batchId: string) => void
   ): Promise<boolean> {
+    const generation = this.transferGeneration
     const skippedNames = new Set(options.skipNames || [])
     const prepared = options.preparationId
       ? this.preparedUploads.get(options.preparationId)
       : undefined
     if (options.preparationId) this.preparedUploads.delete(options.preparationId)
+    if (options.preparationId && (!prepared || prepared.generation !== generation)) {
+      throw new Error('上传准备结果已失效，请重新选择上传内容')
+    }
     if (
       prepared &&
       (prepared.bucket !== bucket ||
@@ -1150,12 +1197,14 @@ export class OssService {
       throw new Error('上传准备结果与当前任务不匹配')
     }
     const entries = prepared?.entries || (await this.prepareUploadEntries(prefix, paths))
+    if (generation !== this.transferGeneration) return false
     const files = entries.filter((file) => !skippedNames.has(file.name))
     if (!files.length) return true
     const batch = this.newTransferBatch('upload', files.length)
     onBatchCreated?.(batch.id)
 
     const uploadEntry = async ({ localPath, isDirectory, name }: UploadEntry): Promise<void> => {
+      if (batch.cancelled || generation !== this.transferGeneration) return
       const transfer = this.newTransfer('upload', name, batch)
       const client = this.bucketClient(bucket)
       const headers =
@@ -1172,6 +1221,7 @@ export class OssService {
       transfer.clearUploadCheckpoint = () => rm(checkpointPath, { force: true })
       await this.runControlledTransfer(transfer, client, async () => {
         const fileStat = await stat(localPath)
+        this.assertCurrentSession(generation)
         const fileSize = fileStat.size
         const reportBytes = (bytes: number): void => {
           if (
@@ -1217,6 +1267,7 @@ export class OssService {
         }
         let checkpoint = await this.readUploadCheckpoint(checkpointPath, name, localPath, fileStat)
         for (let attempt = 0; ; attempt += 1) {
+          this.assertCurrentSession(generation)
           const multipartClient = this.bucketClient(bucket)
           transfer.cancelOperation = () => multipartClient.cancel()
           let acceptingProgress = true
@@ -1348,6 +1399,7 @@ export class OssService {
   }
 
   async download(bucket: string, items: ObjectInfo[], destination: string): Promise<boolean> {
+    const generation = this.transferGeneration
     const listClient = this.bucketClient(bucket)
     const objects: Array<{ name: string; relativePath: string }> = []
     const directories = new Set<string>()
@@ -1356,11 +1408,14 @@ export class OssService {
       items.map((item, index) => ({ item, index })),
       Math.min(this.settings.maxDownloadJobs, 4),
       async ({ item, index }) => {
+        if (generation !== this.transferGeneration) return
         const discovery = discoveries[index]
         if (item.isDirectory) {
           const folderName = item.displayName.replace(/\/$/, '')
           discovery.directories.push(folderName)
-          for (const name of await this.listAllObjectNames(listClient, item.name)) {
+          const names = await this.listAllObjectNames(listClient, item.name)
+          if (generation !== this.transferGeneration) return
+          for (const name of names) {
             const subPath = name.slice(item.name.length)
             if (name.endsWith('/')) {
               const directoryPath = subPath.replace(/\/$/, '')
@@ -1373,13 +1428,33 @@ export class OssService {
           discovery.objects.push({ name: item.name, relativePath: item.displayName })
         }
       }
-    )
+    ).catch((error) => {
+      if (generation !== this.transferGeneration) return
+      throw error
+    })
+    if (generation !== this.transferGeneration) return false
     for (const discovery of discoveries) {
       objects.push(...discovery.objects)
       for (const directory of discovery.directories) directories.add(directory)
     }
+    const overwritePaths = new Set<string>()
+    for (const object of objects) {
+      const localPath = this.resolveDownloadPath(destination, object.relativePath)
+      try {
+        await lstat(localPath)
+        overwritePaths.add(localPath)
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
+      }
+      if (generation !== this.transferGeneration) return false
+    }
+    if (overwritePaths.size && !(await this.confirmDownloadOverwrite?.([...overwritePaths]))) {
+      return false
+    }
+    if (generation !== this.transferGeneration) return false
     for (const directory of [...directories].sort((left, right) => left.length - right.length)) {
       await mkdir(this.resolveDownloadPath(destination, directory), { recursive: true })
+      if (generation !== this.transferGeneration) return false
     }
     const batch = this.newTransferBatch('download', objects.length)
 
@@ -1387,6 +1462,7 @@ export class OssService {
       name: string
       relativePath: string
     }): Promise<void> => {
+      if (batch.cancelled || generation !== this.transferGeneration) return
       const localPath = this.resolveDownloadPath(destination, object.relativePath)
       const partialPath = `${localPath}.ossbrowser.part`
       const checkpointPath = `${partialPath}.json`
@@ -1394,7 +1470,9 @@ export class OssService {
       const client = this.bucketClient(bucket)
       await this.runControlledTransfer(transfer, client, async () => {
         await mkdir(join(localPath, '..'), { recursive: true })
+        this.assertCurrentSession(generation)
         const metadata = await client.getObjectMeta(object.name)
+        this.assertCurrentSession(generation)
         const total = Number(metadata.res.headers['content-length'] || 0)
         const etag = String(metadata.res.headers.etag || '')
         if (!Number.isSafeInteger(total) || total < 0) throw new Error('OSS 返回的对象大小无效')
@@ -1402,9 +1480,9 @@ export class OssService {
 
         if (total === 0) {
           await writeFile(partialPath, '')
+          this.assertCurrentSession(generation)
+          await this.commitDownload(partialPath, localPath, overwritePaths.has(localPath))
           await rm(checkpointPath, { force: true })
-          await rm(localPath, { force: true })
-          await rename(partialPath, localPath)
           return
         }
 
@@ -1539,6 +1617,7 @@ export class OssService {
                   return
                 }
                 try {
+                  this.assertCurrentSession(generation)
                   const result = await client.getStream(object.name, {
                     headers: {
                       Range: `bytes=${range.start}-${range.end - 1}`,
@@ -1597,9 +1676,9 @@ export class OssService {
         }
 
         if ((await stat(partialPath)).size !== total) throw new Error('下载文件大小与预期不一致')
+        this.assertCurrentSession(generation)
+        await this.commitDownload(partialPath, localPath, overwritePaths.has(localPath))
         await rm(checkpointPath, { force: true })
-        await rm(localPath, { force: true })
-        await rename(partialPath, localPath)
       })
     }
     await this.runPool(
@@ -1611,10 +1690,41 @@ export class OssService {
     return !batch.cancelled && !batch.failed.size && batch.done === batch.total
   }
 
-  private client(bucket?: string): OssClient {
+  private async commitDownload(
+    partialPath: string,
+    localPath: string,
+    overwrite: boolean
+  ): Promise<void> {
+    if (overwrite) {
+      await rename(partialPath, localPath)
+      return
+    }
+    try {
+      try {
+        await link(partialPath, localPath)
+      } catch (error) {
+        if (
+          !['ENOTSUP', 'EOPNOTSUPP', 'ENOSYS', 'EPERM'].includes(
+            (error as NodeJS.ErrnoException).code || ''
+          )
+        )
+          throw error
+        await copyFile(partialPath, localPath, constants.COPYFILE_EXCL | constants.COPYFILE_FICLONE)
+      }
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'EEXIST') {
+        throw new Error(`本地文件已存在，未覆盖：${localPath}`)
+      }
+      throw error
+    }
+    await rm(partialPath, { force: true })
+  }
+
+  private client(bucket?: string, region?: string): OssClient {
     if (!this.auth) throw new Error('请先登录')
-    const endpoint =
-      this.auth.endpointMode === 'public' && bucket && this.bucketRegions.has(bucket)
+    const endpoint = region
+      ? `${region}${this.auth.endpointMode === 'private' ? '-internal' : ''}.aliyuncs.com`
+      : this.auth.endpointMode === 'public' && bucket && this.bucketRegions.has(bucket)
         ? `${this.bucketRegions.get(bucket)}.aliyuncs.com`
         : this.auth.endpoint.replace(/^https?:\/\//, '')
     return new OSS({
@@ -1623,7 +1733,8 @@ export class OssService {
       stsToken: this.auth.stsToken,
       endpoint,
       secure: this.auth.secure,
-      cname: this.auth.endpointMode === 'cname',
+      cname: !region && this.auth.endpointMode === 'cname',
+      ...(region ? { region } : {}),
       timeout: this.settings.timeoutSeconds * 1000,
       retryMax: this.settings.retryTimes,
       bucket
@@ -1678,12 +1789,14 @@ export class OssService {
   }
 
   private async discoverPublicBucketRegion(bucket: string): Promise<void> {
+    const generation = this.transferGeneration
     if (!this.auth) throw new Error('请先登录')
     const endpoint = this.auth.endpoint.replace(/^https?:\/\//, '')
     const response = await fetch(
       `${this.auth.secure ? 'https' : 'http'}://${bucket}.${endpoint}/?location`
     )
     const body = await response.text()
+    this.assertCurrentSession(generation)
     const endpointMatch = /<Endpoint>([^<]+)<\/Endpoint>/.exec(body)
     if (!endpointMatch) return
     const region = endpointMatch[1].replace(/\.aliyuncs\.com$/, '')
@@ -1691,10 +1804,12 @@ export class OssService {
   }
 
   private async listAllObjectNames(client: OssClient, prefix: string): Promise<string[]> {
+    const generation = this.transferGeneration
     const names: string[] = []
     let marker: string | undefined
     do {
       const result = await client.list({ prefix, marker, 'max-keys': 1000 })
+      this.assertCurrentSession(generation)
       names.push(...(result.objects || []).map((object) => object.name))
       marker = result.isTruncated ? result.nextMarker : undefined
     } while (marker)
@@ -1806,6 +1921,8 @@ export class OssService {
     transfer.cancelRequested = true
     this.updateTransfer(transfer, transfer.progress, 'cancelled')
     transfer.cancelOperation()
+    this.wakeDirection(transfer.direction)
+    this.wakeTransferSlots(transfer.direction)
   }
 
   async restartUpload(id: string): Promise<void> {
@@ -1840,11 +1957,13 @@ export class OssService {
       this.updateTransfer(transfer, transfer.progress, 'paused')
       transfer.cancelOperation()
     }
+    this.wakeTransferSlots(direction)
   }
 
   resumeAllTransfers(direction: TransferDirection): void {
     this.pausedDirections.delete(direction)
     this.wakeDirection(direction)
+    this.wakeTransferSlots(direction)
     const retries = [...this.retryTransfers.entries()].filter(
       ([, retry]) => retry.direction === direction
     )
@@ -1867,6 +1986,7 @@ export class OssService {
     }
     this.pausedDirections.delete(direction)
     this.wakeDirection(direction)
+    this.wakeTransferSlots(direction)
     for (const transfer of this.activeTransfers.values()) {
       if (transfer.direction === direction) transfer.cancelOperation()
     }
@@ -1881,6 +2001,8 @@ export class OssService {
     this.pausedDirections.clear()
     this.wakeDirection('upload')
     this.wakeDirection('download')
+    this.wakeTransferSlots('upload')
+    this.wakeTransferSlots('download')
     for (const transfer of this.activeTransfers.values()) transfer.cancelOperation()
     this.activeTransfers.clear()
     this.retryTransfers.clear()
@@ -2016,23 +2138,32 @@ export class OssService {
     operation: () => Promise<void>
   ): Promise<void> {
     while (!transfer.batch.cancelled) {
-      if (this.pausedDirections.has(transfer.direction)) {
-        this.updateTransfer(transfer, transfer.progress, 'paused')
-      }
-      await this.waitWhilePaused(transfer.direction)
-      if (transfer.batch.cancelled) return
-      if (transfer.cancelRequested) {
-        this.updateTransfer(transfer, transfer.progress, 'cancelled')
-        return
-      }
-      transfer.cancelRequested = false
-      transfer.error = undefined
-      if (transfer.status !== 'running') {
-        this.updateTransfer(transfer, transfer.progress, 'running')
-      }
-      transfer.cancelOperation = () => client.cancel()
       this.activeTransfers.set(transfer.id, transfer)
+      let acquiredSlot = false
       try {
+        if (this.pausedDirections.has(transfer.direction)) {
+          this.updateTransfer(transfer, transfer.progress, 'paused')
+        }
+        if (!transfer.cancelRequested) await this.waitWhilePaused(transfer.direction)
+        if (transfer.batch.cancelled) return
+        if (transfer.cancelRequested) {
+          this.updateTransfer(transfer, transfer.progress, 'cancelled')
+          return
+        }
+        acquiredSlot = await this.acquireTransferSlot(transfer)
+        if (!acquiredSlot) continue
+        if (transfer.batch.cancelled) return
+        if (transfer.cancelRequested) {
+          this.updateTransfer(transfer, transfer.progress, 'cancelled')
+          return
+        }
+        if (this.pausedDirections.has(transfer.direction)) continue
+        transfer.pauseRequested = false
+        transfer.error = undefined
+        if (transfer.status !== 'running') {
+          this.updateTransfer(transfer, transfer.progress, 'running')
+        }
+        transfer.cancelOperation = () => client.cancel()
         await operation()
         if (transfer.pauseRequested) {
           transfer.pauseRequested = false
@@ -2069,8 +2200,35 @@ export class OssService {
         return
       } finally {
         this.activeTransfers.delete(transfer.id)
+        if (acquiredSlot) {
+          this.transferSlots[transfer.direction] -= 1
+          this.wakeTransferSlots(transfer.direction)
+        }
       }
     }
+  }
+
+  private async acquireTransferSlot(transfer: ActiveTransfer): Promise<boolean> {
+    const direction = transfer.direction
+    while (!transfer.batch.cancelled && !transfer.cancelRequested) {
+      if (this.pausedDirections.has(direction)) return false
+      const limit =
+        direction === 'upload' ? this.settings.maxUploadJobs : this.settings.maxDownloadJobs
+      if (this.transferSlots[direction] < limit) {
+        this.transferSlots[direction] += 1
+        return true
+      }
+      await new Promise<void>((resolve) => this.slotWaiters[direction].push(resolve))
+    }
+    return false
+  }
+
+  private wakeTransferSlots(direction: TransferDirection): void {
+    for (const resolve of this.slotWaiters[direction].splice(0)) resolve()
+  }
+
+  private assertCurrentSession(generation: number): void {
+    if (generation !== this.transferGeneration) throw new Error('账号已切换，当前任务已取消')
   }
 
   private async waitWhilePaused(direction: TransferDirection): Promise<void> {

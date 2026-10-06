@@ -16,6 +16,8 @@ const translations: Record<Exclude<AppLocale, 'zh-CN'>, Record<string, string>> 
   'zh-TW': zhTW,
   'ko-KR': koKR,
   'en-US': {
+    '清空字段将删除该 HTTP 头。': 'Clearing a field removes that HTTP header.',
+    '空字段保持原值。': 'Empty fields keep their existing values.',
     '快速、安全地管理阿里云对象存储': 'Manage Alibaba Cloud Object Storage quickly and securely',
     '原生支持 Apple Silicon': 'Native Apple Silicon support',
     文件与文件夹批量传输: 'Batch file and folder transfers',
@@ -498,6 +500,8 @@ const translations: Record<Exclude<AppLocale, 'zh-CN'>, Record<string, string>> 
     深度冷归档: 'Deep Cold Archive'
   },
   'ja-JP': {
+    '清空字段将删除该 HTTP 头。': '空にしたフィールドの HTTP ヘッダーは削除されます。',
+    '空字段保持原值。': '空のフィールドは元の値を保持します。',
     '快速、安全地管理阿里云对象存储': 'Alibaba Cloud Object Storage をすばやく安全に管理',
     '原生支持 Apple Silicon': 'Apple Silicon にネイティブ対応',
     文件与文件夹批量传输: 'ファイルとフォルダーの一括転送',

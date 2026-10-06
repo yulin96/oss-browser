@@ -32,6 +32,7 @@ export class FloatingUploadManager {
   private window: BrowserWindow | null = null
   private tray: Tray | null = null
   private accountId: string | null = null
+  private accountGeneration = 0
   private activeBatchId: string | null = null
   private readonly transferItems = new Map<string, TransferItem>()
   private pendingRequest: FloatingUploadRequest | null = null
@@ -66,10 +67,15 @@ export class FloatingUploadManager {
   }
 
   async setAccount(accountId: string | null): Promise<void> {
+    const generation = ++this.accountGeneration
+    if (this.resetTimer) clearTimeout(this.resetTimer)
+    this.resetTimer = undefined
     this.accountId = accountId
     this.destroyWindow()
     this.destroyTray()
     this.pendingRequest = null
+    if (this.pendingPreparationId) this.oss.discardUploadPreparation(this.pendingPreparationId)
+    this.pendingPreparationId = null
     this.activeBatchId = null
     this.transferItems.clear()
     this.state = {
@@ -86,6 +92,7 @@ export class FloatingUploadManager {
       return
     }
     const settings = await this.store.get(accountId)
+    if (generation !== this.accountGeneration) return
     this.state.target = settings.target
     if (settings.position) {
       const display = screen.getDisplayNearestPoint(settings.position)
@@ -99,12 +106,14 @@ export class FloatingUploadManager {
   }
 
   async toggle(suggestedTarget?: FloatingUploadTarget): Promise<FloatingUploadState> {
+    const generation = this.accountGeneration
     if (this.isVisible()) {
       await this.close()
       return this.getState()
     }
     this.assertAccount()
     const settings = await this.store.get(this.accountId!)
+    if (generation !== this.accountGeneration) return this.getState()
     if (suggestedTarget) {
       await this.setTarget(suggestedTarget)
     } else if (!settings.target) {
@@ -112,7 +121,9 @@ export class FloatingUploadManager {
     } else {
       this.state.target = settings.target
     }
+    if (generation !== this.accountGeneration) return this.getState()
     await this.store.update(this.accountId!, { enabled: true })
+    if (generation !== this.accountGeneration) return this.getState()
     await this.show(settings.position)
     return this.getState()
   }
@@ -126,8 +137,10 @@ export class FloatingUploadManager {
   }
 
   async close(): Promise<void> {
+    const generation = this.accountGeneration
     const restoreMainWindow = !this.getMainWindow()?.isVisible()
     if (this.accountId) await this.store.update(this.accountId, { enabled: false })
+    if (generation !== this.accountGeneration) return
     this.destroyWindow()
     this.destroyTray()
     this.state.visible = false
@@ -227,6 +240,7 @@ export class FloatingUploadManager {
   }
 
   async upload(paths: string[]): Promise<void> {
+    const generation = this.accountGeneration
     const target = this.state.target
     if (!target || !paths.length) return
     if (
@@ -243,6 +257,10 @@ export class FloatingUploadManager {
       let preparationId: string | undefined
       if (policy !== 'replace') {
         const preparation = await this.oss.findUploadConflicts(target.bucket, target.prefix, paths)
+        if (generation !== this.accountGeneration) {
+          this.oss.discardUploadPreparation(preparation.id)
+          return
+        }
         preparationId = preparation.id
         const conflicts = preparation.conflicts
         if (policy === 'skip') skipNames = conflicts.map((item) => item.name)
@@ -257,6 +275,7 @@ export class FloatingUploadManager {
       }
       await this.performUpload(paths, skipNames, preparationId)
     } catch (error) {
+      if (generation !== this.accountGeneration) return
       this.setStatus('error', error instanceof Error ? error.message : String(error))
       throw error
     }
@@ -306,6 +325,7 @@ export class FloatingUploadManager {
     skipNames: string[],
     preparationId?: string
   ): Promise<void> {
+    const generation = this.accountGeneration
     const target = this.state.target
     if (!target) {
       if (preparationId) this.oss.discardUploadPreparation(preparationId)
@@ -327,15 +347,19 @@ export class FloatingUploadManager {
           this.activeBatchId = batchId
         }
       )
+      if (generation !== this.accountGeneration) return
       this.state.progress = completed ? 1 : this.state.progress
       this.state.completed = completed ? this.state.total : this.state.completed
       this.setStatus(completed ? 'success' : 'error', completed ? '上传完成' : '部分文件上传失败')
     } catch (error) {
+      if (generation !== this.accountGeneration) return
       this.setStatus('error', error instanceof Error ? error.message : String(error))
       throw error
     } finally {
-      this.activeBatchId = null
-      this.transferItems.clear()
+      if (generation === this.accountGeneration) {
+        this.activeBatchId = null
+        this.transferItems.clear()
+      }
     }
   }
 

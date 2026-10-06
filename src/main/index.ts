@@ -23,6 +23,7 @@ import type {
   CacheRefreshRequest,
   CdnCredentials,
   ObjectInfo,
+  ObjectHeaderChanges,
   SavedProfile,
   TransferItem,
   UploadOptions
@@ -54,10 +55,26 @@ protocol.registerSchemesAsPrivileged([
 
 let mainWindow: BrowserWindow | null = null
 let isQuitting = false
-const oss = new OssService((item: TransferItem) => {
-  mainWindow?.webContents.send('transfer:progress', item)
-  floatingUpload?.handleTransfer(item)
-})
+let authGeneration = 0
+const oss = new OssService(
+  (item: TransferItem) => {
+    mainWindow?.webContents.send('transfer:progress', item)
+    floatingUpload?.handleTransfer(item)
+  },
+  async (paths) => {
+    const result = await dialog.showMessageBox(mainWindow!, {
+      type: 'warning',
+      title: '覆盖本地文件',
+      message: `下载目录中已有 ${paths.length} 个同名文件，是否覆盖？`,
+      detail: paths.slice(0, 10).join('\n'),
+      buttons: ['取消', '覆盖并下载'],
+      defaultId: 0,
+      cancelId: 0,
+      noLink: true
+    })
+    return result.response === 1
+  }
+)
 const profiles = new ProfileStore()
 const floatingUploadStore = new FloatingUploadStore()
 const windowStateStore = new WindowStateStore()
@@ -271,16 +288,23 @@ function registerIpc(): void {
     BrowserWindow.fromWebContents(event.sender)
 
   ipcMain.handle('auth:connect', async (_event, config: AuthConfig) => {
+    const generation = ++authGeneration
+    oss.disconnect()
+    await floatingUpload.setAccount(null)
+    if (generation !== authGeneration) throw new Error('账号已切换，当前登录已取消')
     try {
       const buckets = await oss.connect(config)
+      if (generation !== authGeneration) throw new Error('账号已切换，当前登录已取消')
       await floatingUpload.setAccount(`${config.endpoint}|${config.accessKeyId}`)
+      if (generation !== authGeneration) throw new Error('账号已切换，当前登录已取消')
       return buckets
     } catch (error) {
-      await floatingUpload.setAccount(null)
+      if (generation === authGeneration) await floatingUpload.setAccount(null)
       throw error
     }
   })
   ipcMain.handle('auth:disconnect', async () => {
+    authGeneration += 1
     oss.disconnect()
     await floatingUpload.setAccount(null)
   })
@@ -291,13 +315,20 @@ function registerIpc(): void {
   ipcMain.handle('auth:probePermissions', () => oss.probePermissions())
   ipcMain.handle('profiles:list', () => profiles.list())
   ipcMain.handle('profiles:connect', async (_event, id: string) => {
+    const generation = ++authGeneration
+    oss.disconnect()
+    await floatingUpload.setAccount(null)
+    if (generation !== authGeneration) throw new Error('账号已切换，当前登录已取消')
     const profile = await profiles.get(id)
+    if (generation !== authGeneration) throw new Error('账号已切换，当前登录已取消')
     try {
       const buckets = await oss.connect(profile.config)
+      if (generation !== authGeneration) throw new Error('账号已切换，当前登录已取消')
       await floatingUpload.setAccount(profile.id)
+      if (generation !== authGeneration) throw new Error('账号已切换，当前登录已取消')
       return { profile: toSavedProfileSummary(profile), buckets }
     } catch (error) {
-      await floatingUpload.setAccount(null)
+      if (generation === authGeneration) await floatingUpload.setAccount(null)
       throw error
     }
   })
@@ -383,7 +414,7 @@ function registerIpc(): void {
   )
   ipcMain.handle(
     'objects:setHeaders',
-    (_event, bucket: string, name: string, headers: Record<string, string>) =>
+    (_event, bucket: string, name: string, headers: ObjectHeaderChanges) =>
       oss.setObjectHeaders(bucket, name, headers)
   )
   ipcMain.handle(

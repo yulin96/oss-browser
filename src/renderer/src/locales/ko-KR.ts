@@ -1,4 +1,6 @@
 const koKR: Record<string, string> = {
+  '清空字段将删除该 HTTP 头。': '필드를 비우면 해당 HTTP 헤더가 삭제됩니다.',
+  '空字段保持原值。': '빈 필드는 기존 값을 유지합니다.',
   '快速、安全地管理阿里云对象存储': 'Alibaba Cloud Object Storage를 빠르고 안전하게 관리하세요',
   '原生支持 Apple Silicon': '기본 Apple Silicon 지원',
   文件与文件夹批量传输: '배치 파일 및 폴더 전송',

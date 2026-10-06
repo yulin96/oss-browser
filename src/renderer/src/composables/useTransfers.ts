@@ -12,7 +12,10 @@ export interface TransferSummary {
   progress: number
 }
 
-export function useTransfers(requestConfirmation: (request: ConfirmationRequest) => void): {
+export function useTransfers(
+  requestConfirmation: (request: ConfirmationRequest) => void,
+  acceptTransfer: () => boolean = () => true
+): {
   transfers: Ref<TransferItem[]>
   showTransfers: Ref<boolean>
   activeTransferTab: Ref<TransferItem['direction']>
@@ -89,6 +92,7 @@ export function useTransfers(requestConfirmation: (request: ConfirmationRequest)
   function initializeTransfers(): void {
     removeTransferListener?.()
     removeTransferListener = window.ossBrowser.onTransfer((item) => {
+      if (!acceptTransfer()) return
       if (ignoredBatchIds.has(item.batchId)) return
       const isNewBatch = !batches.has(item.batchId)
       const index = transfers.value.findIndex((transfer) => transfer.id === item.id)
@@ -129,9 +133,9 @@ export function useTransfers(requestConfirmation: (request: ConfirmationRequest)
   }
 
   function resetTransfers(): void {
+    for (const batchId of batches.keys()) ignoredBatchIds.add(batchId)
     transfers.value = []
     batches.clear()
-    ignoredBatchIds.clear()
     showTransfers.value = false
     activeTransferTab.value = 'upload'
   }

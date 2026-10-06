@@ -21,6 +21,24 @@ function transfer(overrides: Partial<TransferItem> = {}): TransferItem {
 }
 
 describe('useTransfers', () => {
+  it('ignores old batch progress after resetting the account and ignores progress while connecting', () => {
+    let accept = true
+    const state = useTransfers(
+      () => undefined,
+      () => accept
+    )
+    state.initializeTransfers()
+    listener(transfer())
+    state.resetTransfers()
+    listener(transfer({ progress: 0.5 }))
+    expect(state.transfers.value).toEqual([])
+    accept = false
+    listener(transfer({ batchId: 'new-batch' }))
+    expect(state.transfers.value).toEqual([])
+    accept = true
+    listener(transfer({ batchId: 'new-batch' }))
+    expect(state.transfers.value.map((item) => item.batchId)).toEqual(['new-batch'])
+  })
   let listener: (item: TransferItem) => void
   let confirmation: ConfirmationRequest | undefined
   const cancelAll = vi.fn().mockResolvedValue(undefined)

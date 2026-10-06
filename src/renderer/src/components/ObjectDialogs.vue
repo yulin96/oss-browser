@@ -18,7 +18,8 @@ const {
   createSymlink,
   restoreSelected,
   applyAcl,
-  applyHeaders
+  applyHeaders,
+  headersSingleObject
 } = props.controller
 </script>
 
@@ -114,6 +115,9 @@ const {
 
     <Transition name="modal" appear>
       <ModalShell v-if="modal === 'headers'" :title="t('设置 HTTP 头')" @close="modal = null">
+        <p class="modal-hint">
+          {{ t(headersSingleObject ? '清空字段将删除该 HTTP 头。' : '空字段保持原值。') }}
+        </p>
         <label class="field-label">Cache-Control</label>
         <div class="input-wrap">
           <input v-model.trim="objectForm.cacheControl" :placeholder="t('例如 max-age=3600')" />

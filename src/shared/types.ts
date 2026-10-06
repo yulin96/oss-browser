@@ -155,6 +155,8 @@ export interface ObjectDetails {
   metadata: Record<string, string>
 }
 
+export type ObjectHeaderChanges = Record<string, string | null>
+
 export interface ImageDimensions {
   width: number
   height: number
@@ -348,7 +350,7 @@ export interface OssBrowserApi {
     ) => Promise<void>
     isPublic: (bucket: string, name: string) => Promise<boolean>
     setAcl: (bucket: string, name: string, acl: string) => Promise<void>
-    setHeaders: (bucket: string, name: string, headers: Record<string, string>) => Promise<void>
+    setHeaders: (bucket: string, name: string, headers: ObjectHeaderChanges) => Promise<void>
     signedUrl: (bucket: string, name: string, expires: number, process?: string) => Promise<string>
     preparePreview: (bucket: string, name: string) => Promise<string>
     discardPreview: (url: string) => Promise<void>

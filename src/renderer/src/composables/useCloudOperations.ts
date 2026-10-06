@@ -49,8 +49,10 @@ export function useCloudOperations(options: {
   const permissionResults = ref<PermissionProbeItem[]>([])
   const permissionChecking = ref(false)
   let permissionProbeGeneration = 0
+  let accountGeneration = 0
 
   function resetCloudOperations(): void {
+    accountGeneration += 1
     ramUsers.value = []
     ramAccessKeys.value = []
     activeRamUser.value = null
@@ -62,20 +64,22 @@ export function useCloudOperations(options: {
   }
 
   async function showDetails(): Promise<void> {
+    const generation = accountGeneration
     const bucket = options.getBucket()
     const selected = options.getSelectedObjects()
     if (!bucket || selected.length !== 1) return
     const result = await options.runCloudTask(() =>
       window.ossBrowser.objects.details(bucket.name, selected[0].name)
     )
-    if (!result) return
+    if (!result || generation !== accountGeneration) return
     objectDetails.value = result
     options.setModal('details')
   }
 
   async function openRamUsers(): Promise<void> {
+    const generation = accountGeneration
     const result = await options.runCloudTask(() => window.ossBrowser.ram.listUsers())
-    if (!result) return
+    if (!result || generation !== accountGeneration) return
     ramUsers.value = result
     options.setModal('ram-users')
   }
@@ -89,6 +93,7 @@ export function useCloudOperations(options: {
   }
 
   async function saveRamUser(): Promise<void> {
+    const generation = accountGeneration
     const done = await options.runCloudTask(() =>
       window.ossBrowser.ram.saveUser(
         options.ramForm.ramUserName,
@@ -97,31 +102,37 @@ export function useCloudOperations(options: {
         activeRamUser.value?.userName
       )
     )
-    if (done === undefined && options.getError()) return
+    if (generation !== accountGeneration || (done === undefined && options.getError())) return
     await openRamUsers()
   }
 
   function removeRamUser(user: RamUser): void {
+    const generation = accountGeneration
     options.requestConfirmation({
       title: t('删除 RAM 用户'),
       description: t('确定删除 RAM 用户「{name}」及其 AccessKey 吗？', { name: user.userName }),
       confirmLabel: t('删除'),
       destructive: true,
-      action: () => performRemoveRamUser(user)
+      action: async () => {
+        if (generation !== accountGeneration) return
+        await performRemoveRamUser(user)
+      }
     })
   }
 
   async function performRemoveRamUser(user: RamUser): Promise<void> {
+    const generation = accountGeneration
     const done = await options.runCloudTask(() => window.ossBrowser.ram.removeUser(user.userName))
-    if (done === undefined && options.getError()) return
+    if (generation !== accountGeneration || (done === undefined && options.getError())) return
     await openRamUsers()
   }
 
   async function openRamKeys(user: RamUser): Promise<void> {
+    const generation = accountGeneration
     const result = await options.runCloudTask(() =>
       window.ossBrowser.ram.listAccessKeys(user.userName)
     )
-    if (!result) return
+    if (!result || generation !== accountGeneration) return
     activeRamUser.value = user
     ramAccessKeys.value = result
     createdAccessKey.value = null
@@ -130,16 +141,28 @@ export function useCloudOperations(options: {
 
   async function createRamAccessKey(): Promise<void> {
     if (!activeRamUser.value) return
+    const generation = accountGeneration
+    const user = activeRamUser.value
     const result = await options.runCloudTask(() =>
-      window.ossBrowser.ram.createAccessKey(activeRamUser.value!.userName)
+      window.ossBrowser.ram.createAccessKey(user.userName)
     )
-    if (!result) return
+    if (
+      !result ||
+      generation !== accountGeneration ||
+      activeRamUser.value?.userName !== user.userName
+    )
+      return
     createdAccessKey.value = result
-    ramAccessKeys.value = await window.ossBrowser.ram.listAccessKeys(activeRamUser.value.userName)
+    const keys = await options.runCloudTask(() =>
+      window.ossBrowser.ram.listAccessKeys(user.userName)
+    )
+    if (keys && generation === accountGeneration && activeRamUser.value?.userName === user.userName)
+      ramAccessKeys.value = keys
   }
 
   function removeRamAccessKey(key: RamAccessKey): void {
     if (!activeRamUser.value) return
+    const generation = accountGeneration
     options.requestConfirmation({
       title: t('删除 AccessKey'),
       description: t('确定删除 AccessKey「{name}」吗？删除后无法恢复。', {
@@ -147,17 +170,22 @@ export function useCloudOperations(options: {
       }),
       confirmLabel: t('删除'),
       destructive: true,
-      action: () => performRemoveRamAccessKey(key)
+      action: async () => {
+        if (generation !== accountGeneration) return
+        await performRemoveRamAccessKey(key)
+      }
     })
   }
 
   async function performRemoveRamAccessKey(key: RamAccessKey): Promise<void> {
     if (!activeRamUser.value) return
+    const generation = accountGeneration
+    const user = activeRamUser.value
     const done = await options.runCloudTask(() =>
-      window.ossBrowser.ram.removeAccessKey(activeRamUser.value!.userName, key.accessKeyId)
+      window.ossBrowser.ram.removeAccessKey(user.userName, key.accessKeyId)
     )
-    if (done === undefined && options.getError()) return
-    await openRamKeys(activeRamUser.value)
+    if (generation !== accountGeneration || (done === undefined && options.getError())) return
+    await openRamKeys(user)
   }
 
   async function checkPermissions(): Promise<void> {
@@ -168,7 +196,8 @@ export function useCloudOperations(options: {
       const results = await window.ossBrowser.auth.probePermissions()
       if (generation === permissionProbeGeneration) permissionResults.value = results
     } catch (error) {
-      options.setError(error instanceof Error ? error.message : String(error))
+      if (generation === permissionProbeGeneration)
+        options.setError(error instanceof Error ? error.message : String(error))
     } finally {
       if (generation === permissionProbeGeneration) permissionChecking.value = false
     }
