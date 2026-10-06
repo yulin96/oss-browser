@@ -7,6 +7,6 @@
   },
   "[json]": {
     "editor.defaultFormatter": "esbenp.prettier-vscode"
-  },
-  "git.postCommitCommand": "none"
+  }
+  // "git.postCommitCommand": "none"
 }
