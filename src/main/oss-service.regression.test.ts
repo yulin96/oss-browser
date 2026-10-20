@@ -1,5 +1,6 @@
 import OSS from 'ali-oss'
-import { link, mkdtemp, readFile, rename, rm, stat, writeFile } from 'node:fs/promises'
+import { app } from 'electron'
+import { link, mkdtemp, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Readable } from 'node:stream'
@@ -8,7 +9,7 @@ import { DEFAULT_APP_SETTINGS } from '../shared/app-settings'
 import type { AuthConfig, ObjectInfo, TransferItem } from '../shared/types'
 import { OssService } from './oss-service'
 
-vi.mock('electron', () => ({ app: { getPath: () => tmpdir() }, nativeImage: {} }))
+vi.mock('electron', () => ({ app: { getPath: vi.fn(() => tmpdir()) }, nativeImage: {} }))
 vi.mock('node:fs/promises', async (importOriginal) => {
   const actual = await importOriginal<typeof import('node:fs/promises')>()
   return { ...actual, rename: vi.fn(actual.rename), link: vi.fn(actual.link) }
@@ -32,6 +33,7 @@ function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
 async function directory(): Promise<string> {
   const value = await mkdtemp(join(tmpdir(), 'oss-browser-regression-'))
   directories.push(value)
+  vi.mocked(app.getPath).mockReturnValue(value)
   return value
 }
 
@@ -58,6 +60,146 @@ function downloadClient(): {
 }
 
 describe('download protection and session isolation', () => {
+  it.each([0, 6])('preserves independent sidecar files when downloading %i bytes', async (size) => {
+    const destination = await directory()
+    const partialPath = join(destination, 'file.txt.ossbrowser.part')
+    const sidecarPath = `${partialPath}.json`
+    await writeFile(partialPath, 'independent file')
+    await writeFile(sidecarPath, 'independent json')
+    const confirm = vi.fn(async () => false)
+    const service = new OssService(vi.fn(), confirm)
+    const client = downloadClient()
+    client.getObjectMeta.mockResolvedValue({
+      res: { headers: { 'content-length': size, etag: 'remote-etag' } }
+    })
+    installClient(service, client)
+
+    expect(await service.download('bucket', [{ ...file, size }], destination)).toBe(true)
+    expect(await readFile(partialPath, 'utf8')).toBe('independent file')
+    expect(await readFile(sidecarPath, 'utf8')).toBe('independent json')
+    expect(await readFile(join(destination, 'file.txt'), 'utf8')).toBe(size ? 'remote' : '')
+    expect(confirm).not.toHaveBeenCalled()
+    expect(
+      (await readdir(destination)).filter((name) => name.startsWith('.oss-browser-download-'))
+    ).toEqual([])
+  })
+
+  it('rejects concurrent writes to one destination without disturbing the active download', async () => {
+    const destination = await directory()
+    const pending = deferred<{ stream: Readable }>()
+    const started = deferred<void>()
+    const service = new OssService(vi.fn())
+    const client = downloadClient()
+    client.getStream.mockImplementationOnce(() => {
+      started.resolve()
+      return pending.promise
+    })
+    installClient(service, client)
+    const first = service.download('bucket', [file], destination)
+    await started.promise
+    const second = await service.download('another-bucket', [file], destination)
+    pending.resolve({ stream: Readable.from([Buffer.from('remote')]) })
+
+    expect(second).toBe(false)
+    expect(await first).toBe(true)
+    expect(client.getObjectMeta).toHaveBeenCalledOnce()
+    expect(await readFile(join(destination, 'file.txt'), 'utf8')).toBe('remote')
+  })
+
+  it.runIf(process.platform === 'win32')(
+    'rejects Windows destination aliases before writing files',
+    async () => {
+      const destination = await directory()
+      const service = new OssService(vi.fn())
+      const client = downloadClient()
+      installClient(service, client)
+      await expect(
+        service.download(
+          'bucket',
+          [
+            { ...file, name: 'one', displayName: 'folder/file.txt' },
+            { ...file, name: 'two', displayName: 'FOLDER\\FILE.TXT' }
+          ],
+          destination
+        )
+      ).rejects.toThrow('多个下载对象指向同一本地文件')
+      expect(client.getObjectMeta).not.toHaveBeenCalled()
+    }
+  )
+
+  it('resumes completed ranges from an owned workspace in a new service instance', async () => {
+    const destination = await directory()
+    const partSize = 1024 * 1024
+    const first = new OssService(vi.fn())
+    first.updateSettings({ ...DEFAULT_APP_SETTINGS, partSizeMb: 1, multipartParallel: 1 })
+    const firstClient = {
+      cancel: vi.fn(),
+      getObjectMeta: vi.fn(async () => ({
+        res: { headers: { 'content-length': partSize + 3, etag: 'v1' } }
+      })),
+      getStream: vi
+        .fn()
+        .mockResolvedValueOnce({ stream: Readable.from([Buffer.alloc(partSize, 65)]) })
+        .mockRejectedValueOnce(new Error('network interrupted'))
+    }
+    installClient(first, firstClient)
+    expect(await first.download('bucket', [file], destination)).toBe(false)
+
+    const second = new OssService(vi.fn())
+    const secondClient = {
+      ...firstClient,
+      getStream: vi.fn(async () => ({ stream: Readable.from([Buffer.from('end')]) }))
+    }
+    installClient(second, secondClient)
+    expect(await second.download('bucket', [file], destination)).toBe(true)
+    expect(secondClient.getStream).toHaveBeenCalledExactlyOnceWith('file.txt', {
+      headers: { Range: `bytes=${partSize}-${partSize + 2}`, 'If-Match': 'v1' }
+    })
+    const content = await readFile(join(destination, 'file.txt'))
+    expect(content.subarray(0, partSize).equals(Buffer.alloc(partSize, 65))).toBe(true)
+    expect(content.subarray(partSize).toString()).toBe('end')
+    expect(await readdir(join(destination, 'download-checkpoints'))).toEqual([])
+  })
+
+  it('does not reuse a workspace whose ownership marker does not match', async () => {
+    const destination = await directory()
+    const first = new OssService(vi.fn())
+    const client = downloadClient()
+    client.getStream.mockRejectedValueOnce(new Error('network interrupted'))
+    installClient(first, client)
+    expect(await first.download('bucket', [file], destination)).toBe(false)
+    const [checkpointName] = await readdir(join(destination, 'download-checkpoints'))
+    const checkpoint = JSON.parse(
+      await readFile(join(destination, 'download-checkpoints', checkpointName), 'utf8')
+    )
+    await writeFile(join(checkpoint.directory, 'owner'), 'another owner')
+    await writeFile(join(checkpoint.directory, 'data.part'), 'independent data')
+
+    const second = new OssService(vi.fn())
+    installClient(second, downloadClient())
+    expect(await second.download('bucket', [file], destination)).toBe(true)
+    expect(await readFile(join(checkpoint.directory, 'data.part'), 'utf8')).toBe('independent data')
+    expect(await readFile(join(checkpoint.directory, 'owner'), 'utf8')).toBe('another owner')
+  })
+
+  it('restarts an owned checkpoint with malformed ranges', async () => {
+    const destination = await directory()
+    const first = new OssService(vi.fn())
+    const client = downloadClient()
+    client.getStream.mockRejectedValueOnce(new Error('network interrupted'))
+    installClient(first, client)
+    expect(await first.download('bucket', [file], destination)).toBe(false)
+    const [checkpointName] = await readdir(join(destination, 'download-checkpoints'))
+    const checkpointPath = join(destination, 'download-checkpoints', checkpointName)
+    const checkpoint = JSON.parse(await readFile(checkpointPath, 'utf8'))
+    await writeFile(checkpointPath, JSON.stringify({ ...checkpoint, completed: [null] }))
+    const second = new OssService(vi.fn())
+    installClient(second, downloadClient())
+    expect(await second.download('bucket', [file], destination)).toBe(true)
+    expect(await readFile(join(destination, 'file.txt'), 'utf8')).toBe('remote')
+    await expect(stat(checkpoint.directory)).rejects.toMatchObject({ code: 'ENOENT' })
+  })
+
   it('stops directory pagination when the account changes during a page request', async () => {
     const destination = await directory()
     const pending = deferred<{
@@ -109,12 +251,18 @@ describe('download protection and session isolation', () => {
     await writeFile(localPath, 'original')
     const service = new OssService(vi.fn(), async () => true)
     installClient(service, downloadClient())
-    vi.mocked(rename).mockRejectedValueOnce(
-      Object.assign(new Error('rename denied'), { code: 'EACCES' })
-    )
+    const actual = await vi.importActual<typeof import('node:fs/promises')>('node:fs/promises')
+    vi.mocked(rename).mockImplementation(async (source, target) => {
+      if (target === localPath) throw Object.assign(new Error('rename denied'), { code: 'EACCES' })
+      await actual.rename(source, target)
+    })
     expect(await service.download('bucket', [file], destination)).toBe(false)
     expect(await readFile(localPath, 'utf8')).toBe('original')
-    expect(await readFile(`${localPath}.ossbrowser.part`, 'utf8')).toBe('remote')
+    const [checkpointName] = await readdir(join(destination, 'download-checkpoints'))
+    const checkpoint = JSON.parse(
+      await readFile(join(destination, 'download-checkpoints', checkpointName), 'utf8')
+    )
+    expect(await readFile(join(checkpoint.directory, 'data.part'), 'utf8')).toBe('remote')
   })
   it('keeps the original local file and makes no download request when overwrite is declined', async () => {
     const destination = await directory()
@@ -361,6 +509,40 @@ describe('global file transfer limits', () => {
 })
 
 describe('region and HTTP header contracts', () => {
+  it.each([
+    [
+      'public',
+      'oss-cn-hangzhou.aliyuncs.com',
+      'oss-cn-shanghai',
+      'test-bucket.oss-cn-shanghai.aliyuncs.com'
+    ],
+    ['custom', 'https://custom.example.com', '', 'test-bucket.custom.example.com'],
+    ['cname', 'assets.example.com', '', 'assets.example.com'],
+    [
+      'private',
+      'oss-cn-shanghai-internal.aliyuncs.com',
+      '',
+      'test-bucket.oss-cn-shanghai-internal.aliyuncs.com'
+    ]
+  ] as const)(
+    'uses the SDK host as the default domain for %s endpoints',
+    (endpointMode, endpoint, region, expected) => {
+      const service = new OssService(vi.fn())
+      const state = service as unknown as { auth: AuthConfig; bucketRegions: Map<string, string> }
+      state.auth = {
+        endpoint,
+        endpointMode,
+        accessKeyId: 'test-id',
+        accessKeySecret: 'test-secret',
+        secure: true,
+        remember: false
+      }
+      if (region) state.bucketRegions.set('test-bucket', region)
+      expect(service.defaultObjectDomain('test-bucket')).toBe(expected)
+      expect(new URL(service.signedUrl('test-bucket', 'file.txt', 60)).host).toBe(expected)
+    }
+  )
+
   it('does not clear a newer connection when an old bucket listing fails', async () => {
     let rejectOld!: (error: Error) => void
     const old = new Promise<unknown>((_resolve, reject) => {

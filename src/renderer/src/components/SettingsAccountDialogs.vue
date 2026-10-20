@@ -3,6 +3,7 @@ import { GitFork, Monitor, Moon, RefreshCw, ShieldCheck, Star, Sun, Trash2 } fro
 import type { AppController } from '../composables/useAppController'
 import { t } from '../i18n'
 import AppButton from './AppButton.vue'
+import AppTooltip from './AppTooltip.vue'
 import ModalShell from './ModalShell.vue'
 import { Switch } from './ui/switch'
 

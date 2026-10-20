@@ -364,6 +364,7 @@ function cacheTaskStatusClass(status: string): string {
             />
             <CodePreview
               v-else-if="objectPreview.kind === 'code'"
+              :key="objectPreview.name"
               :content="previewText"
               :language="objectPreview.language"
               editable

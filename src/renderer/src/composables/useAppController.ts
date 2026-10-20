@@ -1116,22 +1116,31 @@ export function useAppController() {
   }
 
   async function prepareAddressModal(): Promise<void> {
+    const generation = accountGeneration
     previewUrl.value = ''
     shareCopied.value = false
     selectedMediaProcesses.value = []
     sharePreparing.value = true
     try {
       await loadDomainOptions()
-      if (!currentBucket.value || selectedObjects.value.length !== 1) return
+      if (
+        generation !== accountGeneration ||
+        !currentBucket.value ||
+        selectedObjects.value.length !== 1
+      )
+        return
       const item = selectedObjects.value[0]
       const needsExpiry = await run(() =>
         getAddressNeedsExpiry(currentBucket.value!.name, item.name)
       )
-      if (needsExpiry === undefined) return
+      if (generation !== accountGeneration || needsExpiry === undefined) return
       shareNeedsExpiry.value = needsExpiry
       if (!shareNeedsExpiry.value) await createShareLink()
+    } catch (reason) {
+      if (generation === accountGeneration)
+        errorMessage.value = reason instanceof Error ? reason.message : String(reason)
     } finally {
-      sharePreparing.value = false
+      if (generation === accountGeneration) sharePreparing.value = false
     }
   }
 
@@ -1179,21 +1188,25 @@ export function useAppController() {
   function loadDomainOptions(): Promise<void> {
     if (!currentBucket.value) return Promise.resolve()
     const bucket = currentBucket.value
+    const generation = accountGeneration
     if (domainOptionsBucket === bucket.name && domainOptions.value.length) return Promise.resolve()
     if (domainOptionsBucket === bucket.name && domainOptionsPromise) return domainOptionsPromise
 
     domainOptionsBucket = bucket.name
     domainOptions.value = []
+    selectedDomain.value = ''
     const request = (async () => {
-      const standardDomain = `${bucket.name}.${bucket.region}.aliyuncs.com`
-      const domains = await window.ossBrowser.objects.domains(bucket.name).catch(() => [])
-      if (domainOptionsBucket !== bucket.name) return
-      domainOptions.value = [standardDomain, ...(domains || [])].filter(
+      const [defaultDomain, domains] = await Promise.all([
+        window.ossBrowser.objects.defaultDomain(bucket.name),
+        window.ossBrowser.objects.domains(bucket.name).catch(() => [])
+      ])
+      if (generation !== accountGeneration || domainOptionsBucket !== bucket.name) return
+      domainOptions.value = [defaultDomain, ...(domains || [])].filter(
         (item, index, values) => values.indexOf(item) === index
       )
       const remembered = localStorage.getItem(`oss-browser-domain:${profileId()}:${bucket.name}`)
       selectedDomain.value =
-        remembered && domainOptions.value.includes(remembered) ? remembered : standardDomain
+        remembered && domainOptions.value.includes(remembered) ? remembered : defaultDomain
     })()
     const promise = request.finally(() => {
       if (domainOptionsPromise === promise) domainOptionsPromise = undefined
@@ -1602,7 +1615,7 @@ export function useAppController() {
   }
 
   async function createShareLink(): Promise<void> {
-    if (!currentBucket.value || selectedObjects.value.length !== 1) return
+    if (!currentBucket.value || selectedObjects.value.length !== 1 || !selectedDomain.value) return
     const process = buildMediaProcess()
     let url = ''
     if (shareNeedsExpiry.value) {
@@ -1625,9 +1638,12 @@ export function useAppController() {
       if (process) url += `?x-oss-process=${process}`
     }
     const domain = selectedDomain.value
-    previewUrl.value = domain
-      ? url.replace(/\/\/[^/]+\//, `//${domain.replace(/^https?:\/\//, '').replace(/\/$/, '')}/`)
-      : url
+    if (shareNeedsExpiry.value && domain && domain !== domainOptions.value[0]) {
+      const address = new URL(url)
+      address.host = domain
+      url = address.href
+    }
+    previewUrl.value = url
     shareCopied.value = false
     if (selectedDomain.value && currentBucket.value) {
       localStorage.setItem(

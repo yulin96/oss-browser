@@ -181,7 +181,11 @@ function fileNameParts(item: ObjectInfo): {
             <span class="file-icon" :class="getObjectVisual(item).kind">
               <span v-thumbnail="item" class="thumbnail-observer-target" />
               <img
-                v-if="thumbnailUrls[item.name] && !failedThumbnailNames.has(item.name)"
+                v-if="
+                  settings.showImagePreview &&
+                  thumbnailUrls[item.name] &&
+                  !failedThumbnailNames.has(item.name)
+                "
                 :src="thumbnailUrls[item.name]"
                 loading="lazy"
                 @error="markThumbnailFailed(item.name)"
@@ -282,7 +286,11 @@ function fileNameParts(item: ObjectInfo): {
               <div class="object-preview" :class="getObjectVisual(item).kind">
                 <span v-thumbnail="item" class="thumbnail-observer-target" />
                 <img
-                  v-if="thumbnailUrls[item.name] && !failedThumbnailNames.has(item.name)"
+                  v-if="
+                    settings.showImagePreview &&
+                    thumbnailUrls[item.name] &&
+                    !failedThumbnailNames.has(item.name)
+                  "
                   :src="thumbnailUrls[item.name]"
                   :alt="item.displayName"
                   loading="lazy"

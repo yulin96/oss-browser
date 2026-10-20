@@ -352,6 +352,7 @@ export interface OssBrowserApi {
     setAcl: (bucket: string, name: string, acl: string) => Promise<void>
     setHeaders: (bucket: string, name: string, headers: ObjectHeaderChanges) => Promise<void>
     signedUrl: (bucket: string, name: string, expires: number, process?: string) => Promise<string>
+    defaultDomain: (bucket: string) => Promise<string>
     preparePreview: (bucket: string, name: string) => Promise<string>
     discardPreview: (url: string) => Promise<void>
     imageDimensions: (bucket: string, name: string) => Promise<ImageDimensions>

@@ -25,6 +25,7 @@ const highlighted = ref(highlightCode(props.content, props.language))
 const editorHighlight = ref<HTMLElement | null>(null)
 let copiedTimer: ReturnType<typeof setTimeout> | undefined
 let highlightTimer: ReturnType<typeof setTimeout> | undefined
+let submittedContent: string | undefined
 
 const dirty = computed(() => draft.value !== props.content)
 
@@ -43,6 +44,7 @@ function toggleEditing(): void {
 
 function saveContent(): void {
   if (!dirty.value || props.saving) return
+  submittedContent = draft.value
   emit('save', draft.value)
 }
 
@@ -67,8 +69,9 @@ function syncEditorScroll(event: Event): void {
 
 watch(
   () => props.content,
-  (content) => {
-    draft.value = content
+  (content, previousContent) => {
+    if (content !== submittedContent && draft.value === previousContent) draft.value = content
+    submittedContent = undefined
   }
 )
 
@@ -100,7 +103,7 @@ onBeforeUnmount(() => {
     <div class="preview-toolbar">
       <div class="code-toolbar-meta">
         <span class="preview-toolbar-label">{{ language || t('纯文本') }}</span>
-        <span v-if="saved" class="code-save-status is-saved">
+        <span v-if="saved && !dirty" class="code-save-status is-saved">
           <CircleCheck :size="14" />
           {{ t('已保存') }}
         </span>

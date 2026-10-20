@@ -453,6 +453,9 @@ function registerIpc(): void {
     oss.getObjectDetails(bucket, name)
   )
   ipcMain.handle('objects:domains', (_event, bucket: string) => oss.listCnameDomains(bucket))
+  ipcMain.handle('objects:defaultDomain', (_event, bucket: string) =>
+    oss.defaultObjectDomain(bucket)
+  )
   ipcMain.handle('cache:domains', () => oss.listCdnDomains())
   ipcMain.handle('cache:refresh', (_event, request: CacheRefreshRequest) =>
     oss.refreshCdnCache(request)
