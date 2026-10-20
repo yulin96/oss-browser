@@ -54,6 +54,8 @@ describe('useTransfers', () => {
         },
         transfers: {
           restartUpload: vi.fn().mockResolvedValue(undefined),
+          retry: vi.fn().mockResolvedValue(undefined),
+          retryFailed: vi.fn().mockResolvedValue(undefined),
           cancel: vi.fn().mockResolvedValue(undefined),
           pauseAll: vi.fn().mockResolvedValue(undefined),
           resumeAll: vi.fn().mockResolvedValue(undefined),
@@ -76,6 +78,30 @@ describe('useTransfers', () => {
     expect(confirmation?.destructive).toBe(true)
     await confirmation?.action()
     expect(window.ossBrowser.transfers.restartUpload).toHaveBeenCalledWith('transfer-1')
+  })
+
+  it('separates paused tasks from failed retries and preserves checkpoints for ordinary retry', async () => {
+    const state = useTransfers((request) => {
+      confirmation = request
+    })
+    state.initializeTransfers()
+    listener(transfer({ status: 'error' }))
+    expect(state.canResumeTransfers.value).toBe(false)
+    expect(state.canRetryTransfers.value).toBe(true)
+    await state.retryTransfer('transfer-1')
+    await state.retryFailedTransfers()
+    expect(window.ossBrowser.transfers.retry).toHaveBeenCalledWith('transfer-1')
+    expect(window.ossBrowser.transfers.retryFailed).toHaveBeenCalledWith('upload')
+    expect(window.ossBrowser.transfers.restartUpload).not.toHaveBeenCalled()
+    expect(confirmation).toBeUndefined()
+    listener(transfer({ status: 'paused' }))
+    expect(state.canResumeTransfers.value).toBe(true)
+    expect(state.canRetryTransfers.value).toBe(false)
+    await state.resumeAllTransfers()
+    expect(window.ossBrowser.transfers.resumeAll).toHaveBeenCalledWith('upload')
+    state.activeTransferTab.value = 'download'
+    await state.retryFailedTransfers()
+    expect(window.ossBrowser.transfers.retryFailed).toHaveBeenLastCalledWith('download')
   })
 
   it('only opens the panel automatically for a new batch', () => {

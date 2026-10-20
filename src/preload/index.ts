@@ -101,6 +101,8 @@ const api: OssBrowserApi = {
   },
   transfers: {
     restartUpload: (id) => ipcRenderer.invoke('transfers:restartUpload', id),
+    retry: (id) => ipcRenderer.invoke('transfers:retry', id),
+    retryFailed: (direction) => ipcRenderer.invoke('transfers:retryFailed', direction),
     cancel: (id) => ipcRenderer.invoke('transfers:cancel', id),
     pauseAll: (direction) => ipcRenderer.invoke('transfers:pauseAll', direction),
     resumeAll: (direction) => ipcRenderer.invoke('transfers:resumeAll', direction),

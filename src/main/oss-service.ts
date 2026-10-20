@@ -78,6 +78,10 @@ interface UploadEntry {
   isDirectory: boolean
   name: string
 }
+interface UploadTarget {
+  key: string
+  localPath: string
+}
 interface PreparedUpload {
   generation: number
   bucket: string
@@ -129,6 +133,8 @@ type ActiveTransfer = Omit<TransferItem, 'batchId' | 'batchTotal' | 'batchDone'>
   cancelOperation: () => void
   lastProgressReportAt: number
   clearUploadCheckpoint?: () => Promise<void>
+  clearUploadCheckpointRequested?: boolean
+  uploadTarget?: UploadTarget
 }
 
 export class OssService {
@@ -156,6 +162,7 @@ export class OssService {
   }
   private readonly bucketRegions = new Map<string, string>()
   private readonly activeDownloadPaths = new Set<string>()
+  private readonly uploadTargets = new Map<string, UploadTarget>()
 
   constructor(
     private readonly reportTransfer: TransferReporter,
@@ -1211,25 +1218,47 @@ export class OssService {
     if (generation !== this.transferGeneration) return false
     const files = entries.filter((file) => !skippedNames.has(file.name))
     if (!files.length) return true
+    const targets = new Map(
+      files.map((file) => [
+        file.name,
+        {
+          key: JSON.stringify([this.auth?.endpoint, this.auth?.accessKeyId, bucket, file.name]),
+          localPath: file.localPath
+        }
+      ])
+    )
+    for (const [name, target] of targets) {
+      const existing = this.uploadTargets.get(target.key)
+      if (existing) {
+        throw new Error(
+          existing.localPath === target.localPath
+            ? `该文件已有上传任务：${name}`
+            : `目标已有其他上传任务，请等待其结束后重新检查同名文件：${name}`
+        )
+      }
+    }
+    for (const target of targets.values()) this.uploadTargets.set(target.key, target)
     const batch = this.newTransferBatch('upload', files.length)
-    onBatchCreated?.(batch.id)
 
     const uploadEntry = async ({ localPath, isDirectory, name }: UploadEntry): Promise<void> => {
       if (batch.cancelled || generation !== this.transferGeneration) return
       const transfer = this.newTransfer('upload', name, batch)
-      const client = this.bucketClient(bucket)
+      transfer.uploadTarget = targets.get(name)
+      const client = this.bucketClient(bucket, 0)
       const headers =
         prepared && !prepared.conflictNames.has(name)
           ? { 'x-oss-forbid-overwrite': 'true' }
           : undefined
       if (isDirectory) {
+        targets.delete(name)
         await this.runControlledTransfer(transfer, client, async () => {
-          await client.put(name, Buffer.alloc(0), { headers })
+          await this.retryUpload(transfer, () => client.put(name, Buffer.alloc(0), { headers }))
         })
         return
       }
       const checkpointPath = this.checkpointPath(bucket, name, localPath)
       transfer.clearUploadCheckpoint = () => rm(checkpointPath, { force: true })
+      targets.delete(name)
       await this.runControlledTransfer(transfer, client, async () => {
         const fileStat = await stat(localPath)
         this.assertCurrentSession(generation)
@@ -1244,8 +1273,17 @@ export class OssService {
             return
           this.updateTransfer(transfer, fileSize ? Math.min(bytes / fileSize, 0.99) : 0, 'running')
         }
-        if (fileSize <= this.settings.partSizeMb * 1024 * 1024) {
-          for (let attempt = 0; ; attempt += 1) {
+        let missingSessionRestarted = false
+        await this.retryUpload(transfer, async () => {
+          const current = await stat(localPath)
+          if (
+            current.size !== fileSize ||
+            current.mtimeMs !== fileStat.mtimeMs ||
+            current.ctimeMs !== fileStat.ctimeMs
+          ) {
+            throw new Error('本地文件在上传期间发生变化，请清理断点后重试')
+          }
+          if (fileSize <= this.settings.partSizeMb * 1024 * 1024) {
             const stream = this.uploadProgressStream(createReadStream(localPath), reportBytes)
             transfer.cancelOperation = () => {
               const error = new Error('cancel')
@@ -1258,141 +1296,165 @@ export class OssService {
                 mime: mime.getType(localPath) || undefined,
                 headers
               })
-              break
+              return
             } catch (error) {
               if (
-                transfer.cancelRequested ||
-                transfer.batch.cancelled ||
-                this.pausedDirections.has(transfer.direction) ||
-                attempt >= this.settings.retryTimes ||
-                !this.isRetryableRequestError(error)
+                headers &&
+                error &&
+                typeof error === 'object' &&
+                'code' in error &&
+                error.code === 'FileAlreadyExists'
               ) {
-                throw error
+                throw new Error(
+                  '目标对象已存在，未覆盖；此前上传的响应可能丢失，请核实远端文件后重试'
+                )
               }
+              throw error
             } finally {
               stream.destroy()
             }
           }
-          await rm(checkpointPath, { force: true })
-          return
-        }
-        let checkpoint = await this.readUploadCheckpoint(checkpointPath, name, localPath, fileStat)
-        for (let attempt = 0; ; attempt += 1) {
-          this.assertCurrentSession(generation)
-          const multipartClient = this.bucketClient(bucket)
-          transfer.cancelOperation = () => multipartClient.cancel()
-          let acceptingProgress = true
-          let checkpointWrite = Promise.resolve()
-          let uploadId = checkpoint?.uploadId
-          const ranges = new Map<number, { bytes: number }>()
-          let uploadedBytes = 0
-          const saved = checkpoint
-          if (saved?.uploadId) {
-            for (const part of saved.doneParts) {
-              const start = (part.number - 1) * saved.partSize
-              const bytes = Math.min(saved.partSize, saved.fileSize - start)
-              ranges.set(start, { bytes })
-              uploadedBytes += bytes
+          let checkpoint = await this.readUploadCheckpoint(
+            checkpointPath,
+            name,
+            localPath,
+            fileStat
+          )
+          for (let attempt = 0; ; attempt += 1) {
+            this.assertCurrentSession(generation)
+            const multipartClient = this.bucketClient(bucket, 0)
+            transfer.cancelOperation = () => multipartClient.cancel()
+            let acceptingProgress = true
+            let checkpointWrite = Promise.resolve()
+            let uploadId = checkpoint?.uploadId
+            const ranges = new Map<number, { bytes: number }>()
+            let uploadedBytes = 0
+            const saved = checkpoint
+            if (saved?.uploadId) {
+              for (const part of saved.doneParts) {
+                const start = (part.number - 1) * saved.partSize
+                const bytes = Math.min(saved.partSize, saved.fileSize - start)
+                ranges.set(start, { bytes })
+                uploadedBytes += bytes
+              }
             }
-          }
-          reportBytes(uploadedBytes)
-          // ali-oss 6.23 reports only completed parts; observe its per-attempt streams instead.
-          const streamClient = multipartClient as OssClient & {
-            _createStream: (file: string, start: number, end: number) => Readable
-          }
-          const createStream = streamClient._createStream
-          streamClient._createStream = (file, start, end) => {
-            uploadedBytes -= ranges.get(start)?.bytes || 0
-            const range = { bytes: 0 }
-            ranges.set(start, range)
             reportBytes(uploadedBytes)
-            return this.uploadProgressStream(
-              createStream.call(multipartClient, file, start, end),
-              (bytes) => {
-                if (!acceptingProgress || ranges.get(start) !== range) return
-                uploadedBytes += bytes - range.bytes
-                range.bytes = bytes
-                reportBytes(uploadedBytes)
-              }
-            )
-          }
-          try {
-            await multipartClient.multipartUpload(name, localPath, {
-              checkpoint,
-              headers,
-              parallel: this.settings.multipartParallel,
-              partSize: this.settings.partSizeMb * 1024 * 1024,
-              progress: async (_progress: number, nextCheckpoint: unknown) => {
-                if (!acceptingProgress || !nextCheckpoint) return
-                const snapshot = structuredClone(nextCheckpoint) as UploadCheckpoint
-                uploadId = snapshot.uploadId
-                checkpointWrite = checkpointWrite.then(async () => {
-                  const current = await stat(localPath)
-                  if (
-                    current.size !== fileSize ||
-                    current.mtimeMs !== fileStat.mtimeMs ||
-                    current.ctimeMs !== fileStat.ctimeMs
-                  ) {
-                    throw new Error('本地文件在上传期间发生变化，请清理断点后重试')
-                  }
-                  const contents = JSON.stringify({
-                    ...snapshot,
-                    localFile: { mtimeMs: fileStat.mtimeMs, ctimeMs: fileStat.ctimeMs }
-                  })
-                  const temporaryPath = `${checkpointPath}.${randomUUID()}.tmp`
-                  try {
-                    await writeFile(temporaryPath, contents)
-                    await rename(temporaryPath, checkpointPath)
-                  } finally {
-                    await rm(temporaryPath, { force: true })
-                  }
-                })
-                await checkpointWrite
-              }
-            })
-            break
-          } catch (error) {
-            acceptingProgress = false
-            multipartClient.cancel()
-            await checkpointWrite
-            if (
-              attempt > 0 ||
-              transfer.cancelRequested ||
-              transfer.pauseRequested ||
-              transfer.batch.cancelled
-            )
-              throw error
-            let missing = this.isMissingUpload(error)
-            // ali-oss replaces all part-level 404 errors with "abort"; verify the upload ID first.
-            if (!missing && uploadId && this.isSdkAbort(error)) {
-              try {
-                await multipartClient.listParts(name, uploadId, { 'max-parts': 1 })
-              } catch (verificationError) {
-                if (!this.isMissingUpload(verificationError)) throw verificationError
-                missing = true
-              }
+            // ali-oss 6.23 reports only completed parts; observe its per-attempt streams instead.
+            const streamClient = multipartClient as OssClient & {
+              _createStream: (file: string, start: number, end: number) => Readable
             }
-            if (
-              !missing ||
-              transfer.cancelRequested ||
-              transfer.pauseRequested ||
-              transfer.batch.cancelled
-            )
-              throw error
-            await rm(checkpointPath, { force: true })
-            checkpoint = undefined
-            reportBytes(0)
-          } finally {
-            acceptingProgress = false
-            streamClient._createStream = createStream
-            await checkpointWrite
+            const createStream = streamClient._createStream
+            streamClient._createStream = (file, start, end) => {
+              uploadedBytes -= ranges.get(start)?.bytes || 0
+              const range = { bytes: 0 }
+              ranges.set(start, range)
+              reportBytes(uploadedBytes)
+              return this.uploadProgressStream(
+                createStream.call(multipartClient, file, start, end),
+                (bytes) => {
+                  if (!acceptingProgress || ranges.get(start) !== range) return
+                  uploadedBytes += bytes - range.bytes
+                  range.bytes = bytes
+                  reportBytes(uploadedBytes)
+                }
+              )
+            }
+            try {
+              await multipartClient.multipartUpload(name, localPath, {
+                checkpoint,
+                headers,
+                parallel: this.settings.multipartParallel,
+                partSize: this.settings.partSizeMb * 1024 * 1024,
+                progress: async (_progress: number, nextCheckpoint: unknown) => {
+                  if (!acceptingProgress || !nextCheckpoint) return
+                  const snapshot = structuredClone(nextCheckpoint) as UploadCheckpoint
+                  uploadId = snapshot.uploadId
+                  checkpointWrite = checkpointWrite.then(async () => {
+                    const current = await stat(localPath)
+                    if (
+                      current.size !== fileSize ||
+                      current.mtimeMs !== fileStat.mtimeMs ||
+                      current.ctimeMs !== fileStat.ctimeMs
+                    ) {
+                      throw new Error('本地文件在上传期间发生变化，请清理断点后重试')
+                    }
+                    const contents = JSON.stringify({
+                      ...snapshot,
+                      localFile: { mtimeMs: fileStat.mtimeMs, ctimeMs: fileStat.ctimeMs }
+                    })
+                    const temporaryPath = `${checkpointPath}.${randomUUID()}.tmp`
+                    try {
+                      await writeFile(temporaryPath, contents)
+                      await rename(temporaryPath, checkpointPath)
+                      checkpoint = snapshot
+                    } finally {
+                      await rm(temporaryPath, { force: true })
+                    }
+                  })
+                  await checkpointWrite
+                }
+              })
+              break
+            } catch (error) {
+              acceptingProgress = false
+              multipartClient.cancel()
+              await checkpointWrite
+              if (
+                attempt > 0 ||
+                transfer.cancelRequested ||
+                transfer.pauseRequested ||
+                transfer.batch.cancelled
+              )
+                throw error
+              let missing = this.isMissingUpload(error)
+              // ali-oss replaces all part-level 404 errors with "abort"; verify the upload ID first.
+              if (!missing && uploadId && this.isSdkAbort(error)) {
+                try {
+                  await multipartClient.listParts(name, uploadId, { 'max-parts': 1 })
+                } catch (verificationError) {
+                  if (!this.isMissingUpload(verificationError)) throw verificationError
+                  missing = true
+                }
+              }
+              if (
+                !missing ||
+                transfer.cancelRequested ||
+                transfer.pauseRequested ||
+                transfer.batch.cancelled
+              )
+                throw error
+              if (
+                checkpoint &&
+                checkpoint.doneParts.length === Math.ceil(fileSize / checkpoint.partSize)
+              ) {
+                throw new Error(
+                  '上传完成请求的响应可能丢失，分片会话已不存在；请核实远端文件，确认后再清理断点重传'
+                )
+              }
+              if (missingSessionRestarted) throw error
+              missingSessionRestarted = true
+              await rm(checkpointPath, { force: true })
+              checkpoint = undefined
+              reportBytes(0)
+            } finally {
+              acceptingProgress = false
+              streamClient._createStream = createStream
+              await checkpointWrite
+            }
           }
-        }
+        })
         await rm(checkpointPath, { force: true })
       })
     }
-    await this.runPool(files, this.settings.maxUploadJobs, uploadEntry, () => batch.cancelled)
-    return !batch.cancelled && !batch.failed.size && batch.done === batch.total
+    try {
+      onBatchCreated?.(batch.id)
+      await this.runPool(files, this.settings.maxUploadJobs, uploadEntry, () => batch.cancelled)
+      return !batch.cancelled && !batch.failed.size && batch.done === batch.total
+    } finally {
+      for (const target of targets.values()) {
+        if (this.uploadTargets.get(target.key) === target) this.uploadTargets.delete(target.key)
+      }
+    }
   }
 
   private uploadProgressStream(source: Readable, reportBytes: (bytes: number) => void): Transform {
@@ -1407,6 +1469,86 @@ export class OssService {
     source.once('error', (error) => stream.destroy(error))
     stream.once('close', () => source.destroy())
     return source.pipe(stream)
+  }
+
+  private assertUploadRunning(transfer: ActiveTransfer): void {
+    this.assertCurrentSession(transfer.generation)
+    if (
+      transfer.cancelRequested ||
+      transfer.pauseRequested ||
+      transfer.batch.cancelled ||
+      this.pausedDirections.has('upload')
+    ) {
+      const error = new Error('cancel')
+      error.name = 'CancelError'
+      throw error
+    }
+  }
+
+  private async retryUpload(
+    transfer: ActiveTransfer,
+    operation: () => Promise<unknown>
+  ): Promise<void> {
+    const retryLimit = this.settings.retryTimes
+    for (let attempt = 0; ; attempt += 1) {
+      this.assertUploadRunning(transfer)
+      transfer.error = undefined
+      this.reportActiveTransfer(transfer)
+      try {
+        await operation()
+        return
+      } catch (error) {
+        this.assertUploadRunning(transfer)
+        if (attempt >= retryLimit || !this.isRetryableUploadError(error)) throw error
+        const delay = Math.min(30000, 1000 * 2 ** attempt * (0.5 + Math.random()))
+        await new Promise<void>((resolve) => {
+          const finish = (): void => {
+            clearTimeout(timer)
+            resolve()
+          }
+          const timer = setTimeout(finish, delay)
+          transfer.cancelOperation = finish
+          transfer.error = `等待重试（${attempt + 1}/${retryLimit}）：${this.transferErrorMessage(error)}`
+          this.reportActiveTransfer(transfer)
+          if (
+            transfer.cancelRequested ||
+            transfer.pauseRequested ||
+            transfer.batch.cancelled ||
+            transfer.generation !== this.transferGeneration
+          )
+            finish()
+        })
+      }
+    }
+  }
+
+  private isRetryableUploadError(error: unknown): boolean {
+    if (!error || typeof error !== 'object') return false
+    const detail = error as { status?: number; code?: string; name?: string }
+    if (detail.name === 'CancelError' || detail.name === 'abort') return false
+    if ([408, 429, 500, 502, 503, 504].includes(detail.status || 0)) return true
+    if ((detail.status || 0) >= 400) return false
+    return (
+      detail.status === -1 ||
+      detail.status === -2 ||
+      [
+        'ECONNRESET',
+        'ECONNREFUSED',
+        'ETIMEDOUT',
+        'EAI_AGAIN',
+        'EPIPE',
+        'ENETUNREACH',
+        'EHOSTUNREACH',
+        'ConnectionTimeout',
+        'ConnectionTimeoutError',
+        'RequestTimeout',
+        'RequestTimeoutError',
+        'SlowDown',
+        'ServerBusy',
+        'ServiceUnavailable',
+        'InternalError'
+      ].some((code) => code === detail.code || code === detail.name)
+    )
   }
 
   async download(bucket: string, items: ObjectInfo[], destination: string): Promise<boolean> {
@@ -1759,7 +1901,7 @@ export class OssService {
     await rm(partialPath, { force: true })
   }
 
-  private client(bucket?: string, region?: string): OssClient {
+  private client(bucket?: string, region?: string, retryMax = this.settings.retryTimes): OssClient {
     if (!this.auth) throw new Error('请先登录')
     const endpoint = region
       ? `${region}${this.auth.endpointMode === 'private' ? '-internal' : ''}.aliyuncs.com`
@@ -1775,7 +1917,7 @@ export class OssService {
       cname: !region && this.auth.endpointMode === 'cname',
       ...(region ? { region } : {}),
       timeout: this.settings.timeoutSeconds * 1000,
-      retryMax: this.settings.retryTimes,
+      retryMax,
       bucket
     })
   }
@@ -1823,8 +1965,8 @@ export class OssService {
     return localPath
   }
 
-  private bucketClient(bucket: string): OssClient {
-    return this.client(bucket)
+  private bucketClient(bucket: string, retryMax = this.settings.retryTimes): OssClient {
+    return this.client(bucket, undefined, retryMax)
   }
 
   private async discoverPublicBucketRegion(bucket: string): Promise<void> {
@@ -1974,18 +2116,29 @@ export class OssService {
     )
       return
     this.retryTransfers.delete(id)
-    try {
-      await retry.transfer.clearUploadCheckpoint()
-      if (retry.transfer.batch.cancelled || retry.transfer.generation !== this.transferGeneration)
-        return
-      retry.transfer.progress = 0
-      await retry.run()
-    } catch (error) {
-      if (retry.transfer.batch.cancelled || retry.transfer.generation !== this.transferGeneration)
-        return
-      this.failTransfer(retry.transfer, error)
-      this.retryTransfers.set(id, retry)
-    }
+    retry.transfer.clearUploadCheckpointRequested = true
+    await retry.run()
+  }
+
+  async retryTransfer(id: string): Promise<void> {
+    const retry = this.retryTransfers.get(id)
+    if (!retry || retry.transfer.status !== 'error') return
+    this.retryTransfers.delete(id)
+    await retry.run()
+  }
+
+  retryFailedTransfers(direction: TransferDirection): void {
+    const retries = [...this.retryTransfers.entries()].filter(
+      ([, retry]) => retry.direction === direction && retry.transfer.status === 'error'
+    )
+    for (const [id] of retries) this.retryTransfers.delete(id)
+    void this.runPool(
+      retries,
+      direction === 'upload' ? this.settings.maxUploadJobs : this.settings.maxDownloadJobs,
+      async ([, retry]) => retry.run()
+    ).catch((error) => {
+      console.error(`[transfers] Failed to retry ${direction} tasks`, error)
+    })
   }
 
   pauseAllTransfers(direction: TransferDirection): void {
@@ -2003,15 +2156,6 @@ export class OssService {
     this.pausedDirections.delete(direction)
     this.wakeDirection(direction)
     this.wakeTransferSlots(direction)
-    const retries = [...this.retryTransfers.entries()].filter(
-      ([, retry]) => retry.direction === direction
-    )
-    for (const [id] of retries) this.retryTransfers.delete(id)
-    const concurrency =
-      direction === 'upload' ? this.settings.maxUploadJobs : this.settings.maxDownloadJobs
-    void this.runPool(retries, concurrency, async ([, retry]) => retry.run()).catch((error) => {
-      console.error(`[transfers] Failed to resume ${direction} tasks`, error)
-    })
   }
 
   cancelAllTransfers(direction: TransferDirection): void {
@@ -2053,15 +2197,6 @@ export class OssService {
       .update(`${this.auth?.endpoint}\n${this.auth?.accessKeyId}\n${bucket}\n${name}\n${localPath}`)
       .digest('hex')
     return join(app.getPath('userData'), 'upload-checkpoints', `${hash}.json`)
-  }
-
-  private isRetryableRequestError(error: unknown): boolean {
-    return Boolean(
-      error &&
-      typeof error === 'object' &&
-      'status' in error &&
-      (error.status === -1 || error.status === -2)
-    )
   }
 
   private async readUploadCheckpoint(
@@ -2176,73 +2311,97 @@ export class OssService {
     client: OssClient,
     operation: () => Promise<void>
   ): Promise<void> {
-    while (!transfer.batch.cancelled) {
-      this.activeTransfers.set(transfer.id, transfer)
-      let acquiredSlot = false
-      try {
-        if (this.pausedDirections.has(transfer.direction)) {
-          this.updateTransfer(transfer, transfer.progress, 'paused')
-        }
-        if (!transfer.cancelRequested) await this.waitWhilePaused(transfer.direction)
-        if (transfer.batch.cancelled) return
-        if (transfer.cancelRequested) {
-          this.updateTransfer(transfer, transfer.progress, 'cancelled')
-          return
-        }
-        acquiredSlot = await this.acquireTransferSlot(transfer)
-        if (!acquiredSlot) continue
-        if (transfer.batch.cancelled) return
-        if (transfer.cancelRequested) {
-          this.updateTransfer(transfer, transfer.progress, 'cancelled')
-          return
-        }
-        if (this.pausedDirections.has(transfer.direction)) continue
-        transfer.pauseRequested = false
-        transfer.error = undefined
-        if (transfer.status !== 'running') {
-          this.updateTransfer(transfer, transfer.progress, 'running')
-        }
-        transfer.cancelOperation = () => client.cancel()
-        await operation()
-        if (transfer.pauseRequested) {
-          transfer.pauseRequested = false
-          continue
-        }
-        if (transfer.batch.cancelled || transfer.cancelRequested) return
-        transfer.batch.failed.delete(transfer.id)
-        this.retryTransfers.delete(transfer.id)
-        this.updateTransfer(transfer, 1, 'done')
-        return
-      } catch (error) {
-        if (transfer.batch.cancelled) return
-        if (transfer.pauseRequested) {
-          transfer.pauseRequested = false
+    try {
+      while (!transfer.batch.cancelled) {
+        this.activeTransfers.set(transfer.id, transfer)
+        let acquiredSlot = false
+        try {
           if (this.pausedDirections.has(transfer.direction)) {
             this.updateTransfer(transfer, transfer.progress, 'paused')
           }
-          continue
-        }
-        if (transfer.cancelRequested) {
-          this.updateTransfer(transfer, transfer.progress, 'cancelled')
+          if (!transfer.cancelRequested) await this.waitWhilePaused(transfer.direction)
+          if (transfer.batch.cancelled) return
+          if (transfer.cancelRequested) {
+            this.updateTransfer(transfer, transfer.progress, 'cancelled')
+            return
+          }
+          if (this.pausedDirections.has(transfer.direction)) continue
+          const target = transfer.uploadTarget
+          if (target) {
+            const existing = this.uploadTargets.get(target.key)
+            if (existing && existing !== target) {
+              throw new Error(`目标已有上传任务，请等待其结束后重试：${transfer.name}`)
+            }
+            this.uploadTargets.set(target.key, target)
+          }
+          acquiredSlot = await this.acquireTransferSlot(transfer)
+          if (!acquiredSlot) continue
+          if (transfer.batch.cancelled) return
+          if (transfer.cancelRequested) {
+            this.updateTransfer(transfer, transfer.progress, 'cancelled')
+            return
+          }
+          if (this.pausedDirections.has(transfer.direction)) continue
+          transfer.pauseRequested = false
+          transfer.error = undefined
+          if (transfer.status !== 'running') {
+            this.updateTransfer(transfer, transfer.progress, 'running')
+          }
+          transfer.cancelOperation = () => client.cancel()
+          if (transfer.clearUploadCheckpointRequested) {
+            await transfer.clearUploadCheckpoint?.()
+            transfer.clearUploadCheckpointRequested = false
+            transfer.progress = 0
+            if (transfer.batch.cancelled || transfer.cancelRequested) return
+            if (transfer.pauseRequested || this.pausedDirections.has(transfer.direction)) continue
+          }
+          await operation()
+          if (transfer.pauseRequested) {
+            transfer.pauseRequested = false
+            continue
+          }
+          if (transfer.batch.cancelled || transfer.cancelRequested) return
+          transfer.batch.failed.delete(transfer.id)
+          this.retryTransfers.delete(transfer.id)
+          this.updateTransfer(transfer, 1, 'done')
           return
+        } catch (error) {
+          if (transfer.batch.cancelled) return
+          if (transfer.pauseRequested) {
+            transfer.pauseRequested = false
+            if (this.pausedDirections.has(transfer.direction)) {
+              this.updateTransfer(transfer, transfer.progress, 'paused')
+            }
+            continue
+          }
+          if (transfer.cancelRequested) {
+            this.updateTransfer(transfer, transfer.progress, 'cancelled')
+            return
+          }
+          if (this.pausedDirections.has(transfer.direction)) {
+            this.updateTransfer(transfer, transfer.progress, 'paused')
+            continue
+          }
+          this.failTransfer(transfer, error)
+          this.retryTransfers.set(transfer.id, {
+            direction: transfer.direction,
+            transfer,
+            run: () => this.runControlledTransfer(transfer, client, operation)
+          })
+          return
+        } finally {
+          this.activeTransfers.delete(transfer.id)
+          if (acquiredSlot) {
+            this.transferSlots[transfer.direction] -= 1
+            this.wakeTransferSlots(transfer.direction)
+          }
         }
-        if (this.pausedDirections.has(transfer.direction)) {
-          this.updateTransfer(transfer, transfer.progress, 'paused')
-          continue
-        }
-        this.failTransfer(transfer, error)
-        this.retryTransfers.set(transfer.id, {
-          direction: transfer.direction,
-          transfer,
-          run: () => this.runControlledTransfer(transfer, client, operation)
-        })
-        return
-      } finally {
-        this.activeTransfers.delete(transfer.id)
-        if (acquiredSlot) {
-          this.transferSlots[transfer.direction] -= 1
-          this.wakeTransferSlots(transfer.direction)
-        }
+      }
+    } finally {
+      transfer.clearUploadCheckpointRequested = false
+      const target = transfer.uploadTarget
+      if (target && this.uploadTargets.get(target.key) === target) {
+        this.uploadTargets.delete(target.key)
       }
     }
   }

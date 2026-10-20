@@ -507,6 +507,10 @@ function registerIpc(): void {
   )
   ipcMain.handle('transfers:cancel', (_event, id: string) => oss.cancelTransfer(id))
   ipcMain.handle('transfers:restartUpload', (_event, id: string) => oss.restartUpload(id))
+  ipcMain.handle('transfers:retry', (_event, id: string) => oss.retryTransfer(id))
+  ipcMain.handle('transfers:retryFailed', (_event, direction: TransferItem['direction']) =>
+    oss.retryFailedTransfers(direction)
+  )
   ipcMain.handle('transfers:pauseAll', (_event, direction: TransferItem['direction']) =>
     oss.pauseAllTransfers(direction)
   )

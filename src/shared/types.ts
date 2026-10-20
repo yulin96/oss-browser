@@ -389,6 +389,8 @@ export interface OssBrowserApi {
   }
   transfers: {
     restartUpload: (id: string) => Promise<void>
+    retry: (id: string) => Promise<void>
+    retryFailed: (direction: TransferItem['direction']) => Promise<void>
     cancel: (id: string) => Promise<void>
     pauseAll: (direction: TransferItem['direction']) => Promise<void>
     resumeAll: (direction: TransferItem['direction']) => Promise<void>

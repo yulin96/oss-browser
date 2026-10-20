@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Download, Pause, Play, RotateCcw, Trash2, Upload, X } from '@lucide/vue'
+import { Download, Pause, Play, RefreshCw, RotateCcw, Trash2, Upload, X } from '@lucide/vue'
 import { onBeforeUnmount, onMounted } from 'vue'
 import type { AppController } from '../composables/useAppController'
 import { t } from '../i18n'
@@ -16,10 +16,13 @@ const {
   hasCompletedTransfers,
   hasVisibleTransfers,
   canResumeTransfers,
+  canRetryTransfers,
   canPauseTransfers,
   clearCompletedTransferRecords,
   pauseAllTransfers,
   resumeAllTransfers,
+  retryFailedTransfers,
+  retryTransfer,
   confirmDeleteAllTransfers,
   handleDragEnter,
   handleDragLeave,
@@ -100,7 +103,7 @@ function handleKeydown(event: KeyboardEvent): void {
             {{ activeTransferSummary.total }}</span
           >
           <div class="transfer-head-actions">
-            <AppTooltip :label="t('开始全部')">
+            <AppTooltip :label="t('恢复暂停任务')">
               <div
                 class="transfer-action"
                 :class="{ disabled: !canResumeTransfers }"
@@ -110,6 +113,18 @@ function handleKeydown(event: KeyboardEvent): void {
                 @click="canResumeTransfers && resumeAllTransfers()"
               >
                 <Play :size="16" />
+              </div>
+            </AppTooltip>
+            <AppTooltip :label="t('重试失败任务')">
+              <div
+                class="transfer-action"
+                :class="{ disabled: !canRetryTransfers }"
+                :aria-disabled="!canRetryTransfers"
+                role="button"
+                tabindex="0"
+                @click="canRetryTransfers && retryFailedTransfers()"
+              >
+                <RefreshCw :size="16" />
               </div>
             </AppTooltip>
             <AppTooltip :label="t('暂停全部')">
@@ -186,6 +201,13 @@ function handleKeydown(event: KeyboardEvent): void {
             :label="t('取消')"
             tone="ghost"
             @click="cancelTransfer(transfer.id)"
+          />
+          <AppButton
+            v-if="transfer.status === 'error'"
+            :label="t('重试')"
+            :icon="RefreshCw"
+            tone="ghost"
+            @click="retryTransfer(transfer.id)"
           />
           <AppButton
             v-if="transfer.direction === 'upload' && transfer.status === 'error'"

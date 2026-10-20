@@ -25,6 +25,7 @@ export function useTransfers(
   hasCompletedTransfers: ComputedRef<boolean>
   hasVisibleTransfers: ComputedRef<boolean>
   canResumeTransfers: ComputedRef<boolean>
+  canRetryTransfers: ComputedRef<boolean>
   canPauseTransfers: ComputedRef<boolean>
   initializeTransfers: () => void
   disposeTransfers: () => void
@@ -32,6 +33,8 @@ export function useTransfers(
   clearCompletedTransferRecords: () => void
   pauseAllTransfers: () => Promise<void>
   resumeAllTransfers: () => Promise<void>
+  retryFailedTransfers: () => Promise<void>
+  retryTransfer: (id: string) => Promise<void>
   confirmDeleteAllTransfers: () => void
   cancelTransfer: (id: string) => Promise<void>
   confirmRestartUpload: (transfer: TransferItem) => void
@@ -81,9 +84,10 @@ export function useTransfers(
   const hasCompletedTransfers = computed(() => activeTransferSummary.value.done > 0)
   const hasVisibleTransfers = computed(() => activeTransferSummary.value.total > 0)
   const canResumeTransfers = computed(() =>
-    visibleTransfers.value.some(
-      (transfer) => transfer.status === 'paused' || transfer.status === 'error'
-    )
+    visibleTransfers.value.some((transfer) => transfer.status === 'paused')
+  )
+  const canRetryTransfers = computed(() =>
+    visibleTransfers.value.some((transfer) => transfer.status === 'error')
   )
   const canPauseTransfers = computed(() =>
     visibleTransfers.value.some((transfer) => transfer.status === 'running')
@@ -159,6 +163,14 @@ export function useTransfers(
     await window.ossBrowser.transfers.resumeAll(activeTransferTab.value)
   }
 
+  async function retryFailedTransfers(): Promise<void> {
+    await window.ossBrowser.transfers.retryFailed(activeTransferTab.value)
+  }
+
+  function retryTransfer(id: string): Promise<void> {
+    return window.ossBrowser.transfers.retry(id)
+  }
+
   function confirmDeleteAllTransfers(): void {
     const direction = activeTransferTab.value
     requestConfirmation({
@@ -210,6 +222,7 @@ export function useTransfers(
     hasCompletedTransfers,
     hasVisibleTransfers,
     canResumeTransfers,
+    canRetryTransfers,
     canPauseTransfers,
     initializeTransfers,
     disposeTransfers,
@@ -217,6 +230,8 @@ export function useTransfers(
     clearCompletedTransferRecords,
     pauseAllTransfers,
     resumeAllTransfers,
+    retryFailedTransfers,
+    retryTransfer,
     confirmDeleteAllTransfers,
     cancelTransfer,
     confirmRestartUpload

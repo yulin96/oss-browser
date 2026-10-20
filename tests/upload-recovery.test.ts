@@ -13,6 +13,7 @@ import type { MultipartUploadInfo, TransferItem } from '../src/shared/types'
 
 const directories: string[] = []
 afterEach(async () => {
+  vi.useRealTimers()
   vi.restoreAllMocks()
   await Promise.all(directories.splice(0).map((path) => rm(path, { recursive: true, force: true })))
 })
@@ -57,12 +58,12 @@ async function setup(): Promise<{
     .fn()
     .mockRejectedValue({ code: 'NoSuchUpload', status: 404, message: 'Missing upload' })
   vi.spyOn(service as unknown as { bucketClient: () => OSS }, 'bucketClient').mockImplementation(
-    () => {
+    (_bucket: string, retryMax = 0) => {
       const client = new OSS({
         region: 'oss-cn-hangzhou',
         accessKeyId: 'test',
         accessKeySecret: 'test',
-        retryMax: 0
+        retryMax
       })
       client.initMultipartUpload = init as unknown as typeof client.initMultipartUpload
       client.completeMultipartUpload = complete
@@ -195,6 +196,158 @@ it('does not complete an upload when the local file changes during transfer', as
   expect(await f.service.upload('bucket', '', [f.file])).toBe(false)
   expect(f.complete).not.toHaveBeenCalled()
   expect(f.reports.at(-1)?.error).toContain('本地文件在上传期间发生变化')
+})
+
+it.each([-1, 429, 503])(
+  'automatically resumes saved parts after transient status %i',
+  async (status) => {
+    const f = await setup()
+    await f.saveCheckpoint({ doneParts: [{ number: 1, etag: 'part-1' }] })
+    f.service.updateSettings({
+      ...DEFAULT_APP_SETTINGS,
+      partSizeMb: 1,
+      multipartParallel: 1,
+      retryTimes: 1
+    })
+    f.part.mockRejectedValueOnce({ status, message: 'temporary failure' })
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    vi.spyOn(Math, 'random').mockReturnValue(0.5)
+    const uploading = f.service.upload('bucket', '', [f.file])
+    await vi.waitFor(() => expect(f.reports.at(-1)?.error).toContain('等待重试（1/1）'))
+    expect(f.part).toHaveBeenCalledTimes(1)
+    expect(await stat(f.checkpointPath)).toBeDefined()
+    await vi.advanceTimersByTimeAsync(1000)
+    expect(await uploading).toBe(true)
+    expect(f.part).toHaveBeenCalledTimes(2)
+    expect(f.part.mock.calls.every((call) => call[2] === 2 && call[1] === 'old-session')).toBe(true)
+    expect(f.init).not.toHaveBeenCalled()
+    expect(f.reports.at(-1)?.error).toBeUndefined()
+  }
+)
+
+it('bounds automatic retries across the SDK and file layers and keeps the final error', async () => {
+  const f = await setup()
+  await f.saveCheckpoint({ doneParts: [{ number: 1, etag: 'part-1' }] })
+  f.service.updateSettings({ ...DEFAULT_APP_SETTINGS, partSizeMb: 1, retryTimes: 2 })
+  f.part.mockImplementation(async () => {
+    throw Object.assign(new Error('connection reset'), { status: -1, code: 'ECONNRESET' })
+  })
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+  vi.spyOn(Math, 'random').mockReturnValue(0.5)
+  const uploading = f.service.upload('bucket', '', [f.file])
+  await vi.waitFor(() => expect(f.reports.at(-1)?.error).toContain('等待重试（1/2）'))
+  await vi.advanceTimersByTimeAsync(1000)
+  await vi.waitFor(() => expect(f.reports.at(-1)?.error).toContain('等待重试（2/2）'))
+  await vi.advanceTimersByTimeAsync(2000)
+  expect(await uploading).toBe(false)
+  expect(f.part).toHaveBeenCalledTimes(3)
+  expect(f.reports.at(-1)?.status).toBe('error')
+  expect(f.reports.at(-1)?.error).toContain('connection reset')
+  expect(f.reports.at(-1)?.error).toContain('ECONNRESET')
+  expect(f.reports.at(-1)?.error).not.toContain('等待重试')
+  expect(JSON.parse(await readFile(f.checkpointPath, 'utf8')).doneParts).toHaveLength(1)
+})
+
+it.each([400, 403, 409])('does not automatically retry permanent status %i', async (status) => {
+  const f = await setup()
+  await f.saveCheckpoint({ doneParts: [{ number: 1, etag: 'part-1' }] })
+  f.service.updateSettings({ ...DEFAULT_APP_SETTINGS, partSizeMb: 1, retryTimes: 5 })
+  f.part.mockRejectedValue({ status, message: 'permanent failure' })
+  expect(await f.service.upload('bucket', '', [f.file])).toBe(false)
+  expect(f.part).toHaveBeenCalledTimes(1)
+  expect(f.init).not.toHaveBeenCalled()
+})
+
+it.each(['cancel', 'cancel-all', 'disconnect'])(
+  'interrupts retry backoff immediately on %s',
+  async (action) => {
+    const f = await setup()
+    await f.saveCheckpoint({ doneParts: [{ number: 1, etag: 'part-1' }] })
+    f.service.updateSettings({ ...DEFAULT_APP_SETTINGS, partSizeMb: 1, retryTimes: 5 })
+    f.part.mockRejectedValue({ status: -1, message: 'offline' })
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    const uploading = f.service.upload('bucket', '', [f.file])
+    await vi.waitFor(() => expect(f.reports.at(-1)?.error).toContain('等待重试'))
+    if (action === 'cancel') f.service.cancelTransfer(f.reports.at(-1)!.id)
+    else if (action === 'cancel-all') f.service.cancelAllTransfers('upload')
+    else f.service.disconnect()
+    expect(await uploading).toBe(false)
+    expect(vi.getTimerCount()).toBe(0)
+    expect(f.part).toHaveBeenCalledTimes(1)
+    expect(JSON.parse(await readFile(f.checkpointPath, 'utf8')).uploadId).toBe('old-session')
+  }
+)
+
+it('pauses retry backoff immediately and resumes from the checkpoint', async () => {
+  const f = await setup()
+  await f.saveCheckpoint({ doneParts: [{ number: 1, etag: 'part-1' }] })
+  f.service.updateSettings({ ...DEFAULT_APP_SETTINGS, partSizeMb: 1, retryTimes: 1 })
+  f.part.mockRejectedValueOnce({ status: -1, message: 'offline' })
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+  const uploading = f.service.upload('bucket', '', [f.file])
+  await vi.waitFor(() => expect(f.reports.at(-1)?.error).toContain('等待重试'))
+  f.service.pauseAllTransfers('upload')
+  await vi.waitFor(() => expect(f.reports.at(-1)?.status).toBe('paused'))
+  expect(vi.getTimerCount()).toBe(0)
+  expect(f.part).toHaveBeenCalledTimes(1)
+  f.service.resumeAllTransfers('upload')
+  expect(await uploading).toBe(true)
+  expect(f.init).not.toHaveBeenCalled()
+  expect(f.part.mock.calls.every((call) => call[2] === 2)).toBe(true)
+})
+
+it('retries a single failed task without clearing its checkpoint or duplicating the retry', async () => {
+  const f = await setup()
+  await f.saveCheckpoint({ doneParts: [{ number: 1, etag: 'part-1' }] })
+  f.part.mockRejectedValueOnce({ status: -1, message: 'offline' })
+  expect(await f.service.upload('bucket', '', [f.file])).toBe(false)
+  const id = f.reports.at(-1)!.id
+  await Promise.all([f.service.retryTransfer(id), f.service.retryTransfer(id)])
+  expect(f.part).toHaveBeenCalledTimes(2)
+  expect(f.part.mock.calls.every((call) => call[2] === 2)).toBe(true)
+  expect(f.init).not.toHaveBeenCalled()
+  expect(f.reports.at(-1)?.status).toBe('done')
+})
+
+it('only retries failed tasks through the explicit retry operation', async () => {
+  const f = await setup()
+  await f.saveCheckpoint({ doneParts: [{ number: 1, etag: 'part-1' }] })
+  f.part.mockRejectedValueOnce({ status: -1, message: 'offline' })
+  expect(await f.service.upload('bucket', '', [f.file])).toBe(false)
+  f.service.resumeAllTransfers('upload')
+  await Promise.resolve()
+  expect(f.part).toHaveBeenCalledTimes(1)
+  f.service.retryFailedTransfers('download')
+  await Promise.resolve()
+  expect(f.part).toHaveBeenCalledTimes(1)
+  f.service.retryFailedTransfers('upload')
+  f.service.retryFailedTransfers('upload')
+  await vi.waitFor(() => expect(f.reports.at(-1)?.status).toBe('done'))
+  expect(f.part).toHaveBeenCalledTimes(2)
+  expect(f.init).not.toHaveBeenCalled()
+})
+
+it('preserves a completed checkpoint when the completion response was lost and the session vanished', async () => {
+  const f = await setup()
+  await f.saveCheckpoint({
+    doneParts: [
+      { number: 1, etag: 'part-1' },
+      { number: 2, etag: 'part-2' }
+    ]
+  })
+  f.service.updateSettings({ ...DEFAULT_APP_SETTINGS, partSizeMb: 1, retryTimes: 1 })
+  f.complete
+    .mockRejectedValueOnce({ status: -1, message: 'response lost' })
+    .mockRejectedValueOnce({ status: 404, code: 'NoSuchUpload' })
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+  const uploading = f.service.upload('bucket', '', [f.file])
+  await vi.waitFor(() => expect(f.reports.at(-1)?.error).toContain('等待重试'))
+  await vi.advanceTimersByTimeAsync(1500)
+  expect(await uploading).toBe(false)
+  expect(f.init).not.toHaveBeenCalled()
+  expect(f.part).not.toHaveBeenCalled()
+  expect(f.reports.at(-1)?.error).toContain('核实远端文件')
+  expect(JSON.parse(await readFile(f.checkpointPath, 'utf8')).doneParts).toHaveLength(2)
 })
 
 it('paginates multipart uploads and enforces the one-hour cutoff using server timestamps', async () => {
