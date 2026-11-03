@@ -1,8 +1,20 @@
 <script setup lang="ts">
-import { computed } from 'vue'
-import { Folder, FolderPlus, Home, LoaderCircle, Star, Upload, X } from '@lucide/vue'
+import { computed, ref, watch } from 'vue'
+import {
+  Folder,
+  FolderPlus,
+  Home,
+  LoaderCircle,
+  Square,
+  SquareCheck,
+  SquareMinus,
+  Star,
+  Upload,
+  X
+} from '@lucide/vue'
 import type { ObjectInfo } from '../../../shared/types'
 import type { AppController } from '../composables/useAppController'
+import { useMarqueeSelection } from '../composables/useMarqueeSelection'
 import { locale, storageClassLabel, t } from '../i18n'
 import AppButton from './AppButton.vue'
 import AppTooltip from './AppTooltip.vue'
@@ -47,9 +59,17 @@ interface ObjectGroup {
   key: string
   label: string
   items: ObjectInfo[]
+  selection: boolean | 'mixed'
 }
 
-const objectGroups = computed<ObjectGroup[]>(() => {
+const selectionSurface = ref<HTMLElement | null>(null)
+const { marqueeStyle, startMarquee, suppressMarqueeClick, cancelMarquee } = useMarqueeSelection(
+  selectionSurface,
+  selectedNames
+)
+watch([filteredObjects, viewMode, groupMode], cancelMarquee, { flush: 'sync' })
+
+const objectGroups = computed(() => {
   if (groupMode.value === 'none') {
     return [{ key: 'all', label: '', items: filteredObjects.value }]
   }
@@ -77,7 +97,7 @@ const objectGroups = computed<ObjectGroup[]>(() => {
     else days.set(timestamp, [item])
   }
 
-  const groups: ObjectGroup[] = []
+  const groups: Omit<ObjectGroup, 'selection'>[] = []
   if (directories.length) {
     groups.push({ key: 'directories', label: t('文件夹'), items: directories })
   }
@@ -98,6 +118,22 @@ const objectGroups = computed<ObjectGroup[]>(() => {
   }
   return groups
 })
+
+const selectableGroups = computed<ObjectGroup[]>(() =>
+  objectGroups.value.map((group) => {
+    const count = group.items.filter((item) => selectedNames.value.has(item.name)).length
+    return { ...group, selection: count === group.items.length ? true : count ? 'mixed' : false }
+  })
+)
+
+function toggleGroup(group: ObjectGroup): void {
+  const next = new Set(selectedNames.value)
+  for (const item of group.items) {
+    if (group.selection === true) next.delete(item.name)
+    else next.add(item.name)
+  }
+  selectedNames.value = next
+}
 
 function fileNameParts(item: ObjectInfo): {
   start: string
@@ -139,7 +175,16 @@ function fileNameParts(item: ObjectInfo): {
       <LoaderCircle :size="30" />
       <span>{{ t('正在加载文件列表') }}</span>
     </div>
-    <div v-else-if="viewMode === 'list'" key="list" class="file-table" @click="handleBlankClick">
+    <div
+      v-else-if="viewMode === 'list'"
+      key="list"
+      ref="selectionSurface"
+      class="file-table"
+      @pointerdown="startMarquee"
+      @click.capture="suppressMarqueeClick"
+      @dragstart.prevent
+      @click="handleBlankClick"
+    >
       <div class="table-row table-head">
         <div>
           <input
@@ -153,15 +198,38 @@ function fileNameParts(item: ObjectInfo): {
         <div>{{ t('存储类型') }}</div>
         <div>{{ t('更新时间') }}</div>
       </div>
-      <template v-for="group in objectGroups" :key="group.key">
+      <template v-for="group in selectableGroups" :key="group.key">
         <div v-if="groupMode === 'day'" class="object-group-heading table-group-heading">
           <strong>{{ group.label }}</strong>
-          <span>{{ t('{count} 个对象', { count: group.items.length }) }}</span>
+          <div
+            class="object-group-select"
+            role="checkbox"
+            tabindex="0"
+            :aria-checked="group.selection"
+            :aria-label="`${group.label}：${t('选择此组全部对象')}`"
+            :title="t(group.selection === true ? '取消选择此组全部对象' : '选择此组全部对象')"
+            @click.stop="toggleGroup(group)"
+            @keydown.enter.prevent="toggleGroup(group)"
+            @keydown.space.prevent="toggleGroup(group)"
+          >
+            <component
+              :is="
+                group.selection === true
+                  ? SquareCheck
+                  : group.selection === 'mixed'
+                    ? SquareMinus
+                    : Square
+              "
+              :size="14"
+            />
+            {{ t('{count} 个对象', { count: group.items.length }) }}
+          </div>
         </div>
         <div
           v-for="item in group.items"
           :key="item.name"
           class="table-row"
+          :data-object-name="item.name"
           :class="{
             selected: selectedNames.has(item.name),
             'favorite-location': isFavoriteDirectory(item),
@@ -255,19 +323,52 @@ function fileNameParts(item: ObjectInfo): {
       >
         {{ t('加载更多') }}
       </div>
+      <div v-if="marqueeStyle" class="object-selection-marquee" :style="marqueeStyle" />
     </div>
-    <div v-else key="grid" class="object-grid-scroll" @click="handleBlankClick">
+    <div
+      v-else
+      key="grid"
+      ref="selectionSurface"
+      class="object-grid-scroll"
+      @pointerdown="startMarquee"
+      @click.capture="suppressMarqueeClick"
+      @dragstart.prevent
+      @click="handleBlankClick"
+    >
       <div v-if="filteredObjects.length" class="object-groups">
-        <section v-for="group in objectGroups" :key="group.key" class="object-group">
+        <section v-for="group in selectableGroups" :key="group.key" class="object-group">
           <div v-if="groupMode === 'day'" class="object-group-heading">
             <strong>{{ group.label }}</strong>
-            <span>{{ t('{count} 个对象', { count: group.items.length }) }}</span>
+            <div
+              class="object-group-select"
+              role="checkbox"
+              tabindex="0"
+              :aria-checked="group.selection"
+              :aria-label="`${group.label}：${t('选择此组全部对象')}`"
+              :title="t(group.selection === true ? '取消选择此组全部对象' : '选择此组全部对象')"
+              @click.stop="toggleGroup(group)"
+              @keydown.enter.prevent="toggleGroup(group)"
+              @keydown.space.prevent="toggleGroup(group)"
+            >
+              <component
+                :is="
+                  group.selection === true
+                    ? SquareCheck
+                    : group.selection === 'mixed'
+                      ? SquareMinus
+                      : Square
+                "
+                :size="14"
+              />
+              {{ t('{count} 个对象', { count: group.items.length }) }}
+            </div>
           </div>
           <div class="object-grid">
             <div
               v-for="item in group.items"
               :key="item.name"
               class="object-card"
+              :data-object-name="item.name"
               :class="{
                 selected: selectedNames.has(item.name),
                 'favorite-location': isFavoriteDirectory(item),
@@ -373,6 +474,7 @@ function fileNameParts(item: ObjectInfo): {
       >
         {{ t('加载更多') }}
       </div>
+      <div v-if="marqueeStyle" class="object-selection-marquee" :style="marqueeStyle" />
     </div>
   </Transition>
   <div v-if="dragActive && currentBucket" class="drop-overlay">
