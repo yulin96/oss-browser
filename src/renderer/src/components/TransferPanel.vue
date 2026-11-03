@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import ErrorMessage from './ErrorMessage.vue'
 import { Download, Pause, Play, RefreshCw, RotateCcw, Trash2, Upload, X } from '@lucide/vue'
 import { onBeforeUnmount, onMounted } from 'vue'
 import type { AppController } from '../composables/useAppController'
@@ -93,9 +94,17 @@ function handleKeydown(event: KeyboardEvent): void {
               >
             </div>
           </div>
-          <div class="icon-button" role="button" tabindex="0" @click="showTransfers = false">
-            <X :size="18" />
-          </div>
+          <AppTooltip :label="t('关闭')">
+            <div
+              class="icon-button"
+              role="button"
+              tabindex="0"
+              :aria-label="t('关闭')"
+              @click="showTransfers = false"
+            >
+              <X :size="18" />
+            </div>
+          </AppTooltip>
         </div>
         <div class="transfer-toolbar">
           <span
@@ -139,7 +148,7 @@ function handleKeydown(event: KeyboardEvent): void {
                 <Pause :size="16" />
               </div>
             </AppTooltip>
-            <AppTooltip :label="t('删除已完成')">
+            <AppTooltip :label="t('清除已完成记录')">
               <div
                 class="transfer-action"
                 :class="{ disabled: !hasCompletedTransfers }"
@@ -151,7 +160,7 @@ function handleKeydown(event: KeyboardEvent): void {
                 <Trash2 :size="16" />
               </div>
             </AppTooltip>
-            <AppTooltip :label="t('删除全部')">
+            <AppTooltip :label="t('清除全部任务')">
               <div
                 class="transfer-action danger"
                 :class="{ disabled: !hasVisibleTransfers }"
@@ -211,14 +220,15 @@ function handleKeydown(event: KeyboardEvent): void {
           />
           <AppButton
             v-if="transfer.direction === 'upload' && transfer.status === 'error'"
-            :label="t('清理断点并重试')"
+            :label="t('从头上传')"
+            :title="t('清理断点并重试')"
             :icon="RotateCcw"
             tone="ghost"
             @click="confirmRestartUpload(transfer)"
           />
         </div>
         <div class="progress"><i :style="{ width: `${transfer.progress * 100}%` }" /></div>
-        <div v-if="transfer.error" class="transfer-error">{{ transfer.error }}</div>
+        <ErrorMessage v-if="transfer.error" class="transfer-error" :message="transfer.error" />
       </div>
     </aside>
   </div>

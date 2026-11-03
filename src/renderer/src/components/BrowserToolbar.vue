@@ -34,6 +34,7 @@ const {
   showUploadActions,
   copyBuffer,
   selectedNames,
+  hasMoreObjects,
   searchText,
   searchingObjects,
   searchScannedCount,
@@ -80,7 +81,18 @@ const {
     <AppButton :label="t('新建文件夹')" :icon="FolderPlus" @click="openModal('create-folder')" />
     <div class="toolbar-divider" />
     <AppButton
-      :label="t('全选')"
+      :label="
+        t(
+          selectedNames.size === filteredObjects.length && filteredObjects.length > 0
+            ? '取消全选'
+            : '全选'
+        )
+      "
+      :title="
+        hasMoreObjects && !searchText
+          ? t('选择范围为已加载的 {count} 项', { count: filteredObjects.length })
+          : undefined
+      "
       :icon="
         selectedNames.size === filteredObjects.length && filteredObjects.length > 0
           ? SquareCheck
@@ -147,7 +159,7 @@ const {
           }}<Check v-if="groupMode === 'none'" class="sort-check" :size="14" />
         </div>
         <div :class="{ active: groupMode === 'day' }" @click="setGroupMode('day')">
-          <CalendarDays :size="15" />{{ t('按天分组')
+          <CalendarDays :size="15" />{{ t('按修改日期分组')
           }}<Check v-if="groupMode === 'day'" class="sort-check" :size="14" />
         </div>
       </div>
@@ -167,7 +179,7 @@ const {
           }}<Check v-if="sortField === 'name'" class="sort-check" :size="14" />
         </div>
         <div :class="{ active: sortField === 'modified' }" @click="setSortField('modified')">
-          <CalendarClock :size="15" />{{ t('修改日期')
+          <CalendarClock :size="15" />{{ t('修改时间')
           }}<Check v-if="sortField === 'modified'" class="sort-check" :size="14" />
         </div>
         <div :class="{ active: sortField === 'type' }" @click="setSortField('type')">

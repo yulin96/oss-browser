@@ -50,7 +50,7 @@ function booleanSetting(source: Record<string, unknown>, key: string): boolean {
 function conflictPolicySetting(source: Record<string, unknown>): UploadConflictPolicy {
   const value = source.uploadConflictPolicy
   if (value !== 'ask' && value !== 'replace' && value !== 'skip') {
-    throw new Error('上传同名文件设置无效')
+    throw new Error('同名文件处理设置无效')
   }
   return value
 }

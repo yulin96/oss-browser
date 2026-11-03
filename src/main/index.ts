@@ -18,6 +18,7 @@ import { dirname, join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import icon from '../../resources/icon.png?asset'
 import type {
+  AppLocale,
   AppSettings,
   AuthConfig,
   CacheRefreshRequest,
@@ -28,6 +29,7 @@ import type {
   TransferItem,
   UploadOptions
 } from '../shared/types'
+import { translate } from '../shared/i18n'
 import { extractVersionReleaseNotes } from '../shared/release-notes.mjs'
 import { OssService } from './oss-service'
 import { FloatingUploadManager } from './floating-upload-manager'
@@ -56,6 +58,7 @@ protocol.registerSchemesAsPrivileged([
 let mainWindow: BrowserWindow | null = null
 let isQuitting = false
 let authGeneration = 0
+let appLocale: AppLocale = 'zh-CN'
 const oss = new OssService(
   (item: TransferItem) => {
     mainWindow?.webContents.send('transfer:progress', item)
@@ -64,10 +67,12 @@ const oss = new OssService(
   async (paths) => {
     const result = await dialog.showMessageBox(mainWindow!, {
       type: 'warning',
-      title: '覆盖本地文件',
-      message: `下载目录中已有 ${paths.length} 个同名文件，是否覆盖？`,
+      title: translate(appLocale, '覆盖本地文件'),
+      message: translate(appLocale, '下载目录中已有 {count} 个同名文件，是否覆盖？', {
+        count: paths.length
+      }),
       detail: paths.slice(0, 10).join('\n'),
-      buttons: ['取消', '覆盖并下载'],
+      buttons: [translate(appLocale, '取消'), translate(appLocale, '覆盖并下载')],
       defaultId: 0,
       cancelId: 0,
       noLink: true
@@ -469,7 +474,7 @@ function registerIpc(): void {
     const properties: Electron.OpenDialogOptions['properties'] =
       kind === 'folder' ? ['openDirectory'] : ['openFile', 'multiSelections']
     const result = await dialog.showOpenDialog(mainWindow!, {
-      title: '选择上传内容',
+      title: translate(appLocale, '选择上传内容'),
       defaultPath: lastUploadDirectory,
       properties
     })
@@ -479,7 +484,7 @@ function registerIpc(): void {
   })
   ipcMain.handle('files:pickDownloadFolder', async () => {
     const result = await dialog.showOpenDialog(mainWindow!, {
-      title: '选择下载位置',
+      title: translate(appLocale, '选择下载位置'),
       defaultPath: lastDownloadDirectory,
       properties: ['openDirectory', 'createDirectory']
     })
@@ -543,6 +548,15 @@ function registerIpc(): void {
     floatingUpload.resolveRequest(skipNames)
   )
 
+  ipcMain.handle('system:setLocale', (_event, locale: unknown) => {
+    if (
+      typeof locale !== 'string' ||
+      !['zh-CN', 'zh-TW', 'en-US', 'ja-JP', 'ko-KR'].includes(locale)
+    )
+      throw new Error('Unsupported language')
+    appLocale = locale as AppLocale
+    floatingUpload.setLocale(appLocale)
+  })
   ipcMain.handle('system:getVersion', () => app.getVersion())
   ipcMain.handle('system:getReleaseNotes', async () => {
     const path = app.isPackaged

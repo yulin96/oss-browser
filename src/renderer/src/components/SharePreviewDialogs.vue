@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import ErrorMessage from './ErrorMessage.vue'
 import { ref, watch } from 'vue'
 import { CircleCheck, Copy, LoaderCircle, RefreshCw, TriangleAlert } from '@lucide/vue'
 import type { ObjectPreviewKind } from '../../../shared/object-preview'
@@ -19,6 +20,7 @@ const {
   objectPreview,
   previewLoading,
   previewError,
+  previewCanRetry,
   previewSaving,
   previewSaved,
   previewSaveError,
@@ -51,7 +53,8 @@ const {
   copyShareUrl,
   openPreview,
   savePreviewText,
-  openPreviewExternally
+  openPreviewExternally,
+  downloadSelected
 } = props.controller
 
 const mediaError = ref('')
@@ -324,8 +327,18 @@ function cacheTaskStatusClass(status: string): string {
           <div v-else-if="previewError || mediaError" class="preview-status is-error">
             <TriangleAlert :size="30" />
             <strong>{{ t('无法预览此文件') }}</strong>
-            <span>{{ previewError || mediaError }}</span>
-            <AppButton :label="t('重试')" @click="openPreview" />
+            <ErrorMessage :message="previewError || mediaError" />
+            <div class="flex gap-2">
+              <AppButton
+                v-if="
+                  previewCanRetry &&
+                  !(mediaError && ['audio', 'video'].includes(objectPreview?.kind || ''))
+                "
+                :label="t('重试')"
+                @click="openPreview"
+              />
+              <AppButton :label="t('下载文件')" @click="downloadSelected" />
+            </div>
           </div>
           <template v-else-if="objectPreview">
             <img
@@ -338,14 +351,14 @@ function cacheTaskStatusClass(status: string): string {
               :src="objectPreview.url"
               controls
               autoplay
-              @error="mediaError = t('当前视频编码无法播放或文件无法读取')"
+              @error="mediaError = t('视频无法播放，请下载后使用本地播放器打开。')"
             />
             <audio
               v-else-if="objectPreview.kind === 'audio'"
               :src="objectPreview.url"
               controls
               autoplay
-              @error="mediaError = t('当前音频编码无法播放或文件无法读取')"
+              @error="mediaError = t('音频无法播放，请下载后使用本地播放器打开。')"
             />
             <PdfPreview
               v-else-if="objectPreview.kind === 'pdf' && objectPreview.url"
@@ -392,6 +405,7 @@ function cacheTaskStatusClass(status: string): string {
                 tone="primary"
                 @click="openPreviewExternally"
               />
+              <AppButton :label="t('下载文件')" @click="downloadSelected" />
             </div>
           </template>
         </div>

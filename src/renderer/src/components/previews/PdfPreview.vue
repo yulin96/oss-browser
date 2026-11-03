@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import ErrorMessage from '../ErrorMessage.vue'
 import { computed, nextTick, onBeforeUnmount, ref, shallowRef, watch } from 'vue'
 import {
   ChevronLeft,
@@ -171,7 +172,7 @@ onBeforeUnmount(() => {
     <div v-else-if="error" class="preview-status is-error">
       <TriangleAlert :size="28" />
       <strong>{{ t('PDF 预览失败') }}</strong>
-      <span>{{ error }}</span>
+      <ErrorMessage :message="error" />
     </div>
     <template v-else-if="documentProxy">
       <div class="preview-toolbar pdf-toolbar">

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import ErrorMessage from '../ErrorMessage.vue'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { LoaderCircle, TriangleAlert } from '@lucide/vue'
 import type { PDFDocumentProxy, PDFPageProxy, RenderTask } from 'pdfjs-dist'
@@ -147,7 +148,7 @@ onBeforeUnmount(() => {
     </div>
     <div v-else-if="error" class="pdf-page-status is-error">
       <TriangleAlert :size="22" />
-      <span>{{ error }}</span>
+      <ErrorMessage :message="error" />
     </div>
   </section>
 </template>

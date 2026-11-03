@@ -10,12 +10,14 @@ import {
 import { join } from 'node:path'
 import icon from '../../resources/icon.png?asset'
 import type {
+  AppLocale,
   FloatingUploadRequest,
   FloatingUploadState,
   FloatingUploadTarget,
   FloatingWindowPosition,
   TransferItem
 } from '../shared/types'
+import { translate } from '../shared/i18n'
 import { FloatingUploadStore } from './floating-upload-store'
 import type { OssService } from './oss-service'
 import { configureRendererWindow } from './window-security'
@@ -41,6 +43,7 @@ export class FloatingUploadManager {
   private resizeSequence = 0
   private expansionTarget = false
   private state: FloatingUploadState = {
+    locale: 'zh-CN',
     visible: false,
     expanded: false,
     dockSide: 'right',
@@ -66,6 +69,12 @@ export class FloatingUploadManager {
     return { ...this.state, target: this.state.target ? { ...this.state.target } : undefined }
   }
 
+  setLocale(locale: AppLocale): void {
+    this.state.locale = locale
+    this.updateTrayMenu()
+    this.emitState()
+  }
+
   async setAccount(accountId: string | null): Promise<void> {
     const generation = ++this.accountGeneration
     if (this.resetTimer) clearTimeout(this.resetTimer)
@@ -79,6 +88,7 @@ export class FloatingUploadManager {
     this.activeBatchId = null
     this.transferItems.clear()
     this.state = {
+      locale: this.state.locale,
       visible: false,
       expanded: false,
       dockSide: 'right',
@@ -150,10 +160,11 @@ export class FloatingUploadManager {
   }
 
   showMenu(suggestedTarget?: FloatingUploadTarget): void {
+    const t = (source: string): string => translate(this.state.locale, source)
     const template: MenuItemConstructorOptions[] = []
     if (suggestedTarget) {
       template.push({
-        label: '设为当前目录',
+        label: t('设为当前目录'),
         click: () => {
           void this.setTarget(suggestedTarget).then(() => this.ensureVisible())
         }
@@ -161,10 +172,10 @@ export class FloatingUploadManager {
     }
     if (template.length) template.push({ type: 'separator' })
     template.push(
-      { label: '显示主窗口', click: this.showMainWindow },
-      { label: '关闭悬浮球', click: () => void this.close() },
+      { label: t('显示主窗口'), click: this.showMainWindow },
+      { label: t('关闭悬浮上传'), click: () => void this.close() },
       { type: 'separator' },
-      { label: '退出 OSS Browser', click: this.quitApplication }
+      { label: t('退出 OSS Browser'), click: this.quitApplication }
     )
     Menu.buildFromTemplate(template).popup({
       window: this.window || this.getMainWindow() || undefined
@@ -267,7 +278,7 @@ export class FloatingUploadManager {
         else if (conflicts.length) {
           this.pendingRequest = { target, paths, conflicts }
           this.pendingPreparationId = preparationId
-          this.setStatus('waiting', '需要确认同名文件')
+          this.setStatus('waiting', '请在主窗口确认同名文件')
           this.showMainWindow()
           this.getMainWindow()?.webContents.send('floating-upload:request', this.pendingRequest)
           return
@@ -350,7 +361,10 @@ export class FloatingUploadManager {
       if (generation !== this.accountGeneration) return
       this.state.progress = completed ? 1 : this.state.progress
       this.state.completed = completed ? this.state.total : this.state.completed
-      this.setStatus(completed ? 'success' : 'error', completed ? '上传完成' : '部分文件上传失败')
+      this.setStatus(
+        completed ? 'success' : 'error',
+        completed ? '上传完成' : '部分文件上传失败，请查看传输任务。'
+      )
     } catch (error) {
       if (generation !== this.accountGeneration) return
       this.setStatus('error', error instanceof Error ? error.message : String(error))
@@ -433,12 +447,17 @@ export class FloatingUploadManager {
     this.tray.setToolTip('OSS Browser')
     this.tray.on('click', this.showMainWindow)
     this.tray.on('right-click', () => this.showMenu())
-    this.tray.setContextMenu(
+    this.updateTrayMenu()
+  }
+
+  private updateTrayMenu(): void {
+    const t = (source: string): string => translate(this.state.locale, source)
+    this.tray?.setContextMenu(
       Menu.buildFromTemplate([
-        { label: '显示主窗口', click: this.showMainWindow },
-        { label: '显示悬浮球', click: () => this.window?.showInactive() },
+        { label: t('显示主窗口'), click: this.showMainWindow },
+        { label: t('显示悬浮上传'), click: () => this.window?.showInactive() },
         { type: 'separator' },
-        { label: '退出 OSS Browser', click: this.quitApplication }
+        { label: t('退出 OSS Browser'), click: this.quitApplication }
       ])
     )
   }

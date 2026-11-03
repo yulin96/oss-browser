@@ -1,3 +1,5 @@
+export type AppLocale = 'zh-CN' | 'zh-TW' | 'en-US' | 'ja-JP' | 'ko-KR'
+
 export type EndpointMode = 'public' | 'custom' | 'cname' | 'private'
 
 export interface CdnCredentials {
@@ -229,6 +231,7 @@ export type FloatingUploadStatus =
   'idle' | 'checking' | 'waiting' | 'uploading' | 'success' | 'error'
 
 export interface FloatingUploadState {
+  locale: AppLocale
   visible: boolean
   expanded: boolean
   dockSide: 'left' | 'right'
@@ -267,6 +270,7 @@ export interface UpdateState {
   percent?: number
   message?: string
   releaseNotes?: string
+  errorStage?: 'check' | 'download' | 'open-download'
 }
 
 export interface MultipartUploadInfo {
@@ -413,6 +417,7 @@ export interface OssBrowserApi {
   }
   system: {
     platform: AppPlatform
+    setLocale: (locale: AppLocale) => Promise<void>
     getVersion: () => Promise<string>
     getReleaseNotes: () => Promise<string>
     openExternal: (url: string) => Promise<void>

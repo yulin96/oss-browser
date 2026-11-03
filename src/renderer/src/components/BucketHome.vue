@@ -41,7 +41,6 @@ const emit = defineEmits<{
     <div class="bucket-home-head">
       <div>
         <h1>{{ t('选择 Bucket') }}</h1>
-        <p>{{ t('选择一个 Bucket 开始管理文件') }}</p>
       </div>
       <div class="bucket-home-actions">
         <div class="search-wrap">
@@ -103,7 +102,6 @@ const emit = defineEmits<{
     <div v-if="!buckets.length" class="welcome-state">
       <LucideIcon name="bucket" :icon-node="bucketIcon" :size="48" />
       <h2>{{ t('暂无 Bucket') }}</h2>
-      <p>{{ t('新建 Bucket 后即可开始使用。') }}</p>
     </div>
   </section>
 </template>

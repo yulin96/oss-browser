@@ -2,8 +2,11 @@
 import { Check, CloudUpload, Folder, LoaderCircle, TriangleAlert } from '@lucide/vue'
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import type { FloatingUploadState, FloatingWindowPosition } from '../../shared/types'
+import { locale, t } from './i18n'
+import { describeError } from './utils/errorMessage'
 
 const state = ref<FloatingUploadState>({
+  locale: locale.value,
   visible: false,
   expanded: false,
   dockSide: 'right',
@@ -30,7 +33,9 @@ const statusLabel = computed(() => {
   if (state.value.status === 'uploading') {
     return `${Math.round(state.value.progress * 100)}% · ${state.value.completed}/${state.value.total}`
   }
-  return state.value.message || state.value.target?.prefix || '/'
+  if (state.value.status === 'error' && state.value.message)
+    return describeError(state.value.message).summary
+  return state.value.message ? t(state.value.message) : state.value.target?.prefix || '/'
 })
 
 const statusIcon = computed(() => {
@@ -156,9 +161,13 @@ onMounted(async () => {
   themeQuery.addEventListener('change', applyTheme)
   removeStateListener = window.ossBrowser.floatingUpload.onState((nextState) => {
     state.value = nextState
+    locale.value = nextState.locale
+    document.documentElement.lang = nextState.locale
     applyTheme()
   })
   state.value = await window.ossBrowser.floatingUpload.getState()
+  locale.value = state.value.locale
+  document.documentElement.lang = state.value.locale
 })
 
 onBeforeUnmount(() => {
@@ -190,7 +199,7 @@ onBeforeUnmount(() => {
         class="floating-upload-orb"
         role="button"
         tabindex="0"
-        aria-label="拖动悬浮上传窗口"
+        :aria-label="t('拖动悬浮上传窗口')"
         @pointerdown="startMove"
         @pointermove="move"
         @pointerup="finishMove"
@@ -213,7 +222,11 @@ onBeforeUnmount(() => {
       <div
         class="floating-target"
         :aria-hidden="!state.expanded"
-        :title="`oss://${state.target?.bucket}/${state.target?.prefix || ''}`"
+        :title="
+          state.status === 'error'
+            ? state.message
+            : `oss://${state.target?.bucket}/${state.target?.prefix || ''}`
+        "
       >
         <strong>{{ state.target?.bucket }}</strong>
         <span :class="`status-${state.status}`">{{ statusLabel }}</span>

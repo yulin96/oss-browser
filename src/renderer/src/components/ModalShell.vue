@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { X } from '@lucide/vue'
 import { onBeforeUnmount, onMounted, ref } from 'vue'
+import { t } from '../i18n'
+import AppTooltip from './AppTooltip.vue'
 
 const props = defineProps<{ title: string; width?: string; size?: 'default' | 'large' }>()
 const emit = defineEmits<{ close: [] }>()
@@ -51,9 +53,17 @@ function handleKeydown(event: KeyboardEvent): void {
     >
       <div class="modal-head">
         <div class="modal-title">{{ title }}</div>
-        <div class="icon-button" role="button" tabindex="0" @click="handleClose">
-          <X :size="18" />
-        </div>
+        <AppTooltip :label="t('关闭')">
+          <div
+            class="icon-button"
+            role="button"
+            tabindex="0"
+            :aria-label="t('关闭')"
+            @click="handleClose"
+          >
+            <X :size="18" />
+          </div>
+        </AppTooltip>
       </div>
       <div class="modal-body"><slot /></div>
       <div v-if="$slots.footer" class="modal-footer"><slot name="footer" /></div>

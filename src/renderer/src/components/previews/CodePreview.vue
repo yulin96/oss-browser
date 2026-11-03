@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import ErrorMessage from '../ErrorMessage.vue'
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { Check, CircleCheck, Copy, Eye, Pencil, Save, TriangleAlert, WrapText } from '@lucide/vue'
 import { t } from '../../i18n'
@@ -107,9 +108,9 @@ onBeforeUnmount(() => {
           <CircleCheck :size="14" />
           {{ t('已保存') }}
         </span>
-        <span v-else-if="saveError" class="code-save-status is-error" :title="saveError">
+        <span v-else-if="saveError" class="code-save-status is-error">
           <TriangleAlert :size="14" />
-          {{ t('保存失败') }}：{{ saveError }}
+          {{ t('保存失败') }}
         </span>
       </div>
       <div class="preview-toolbar-actions">
@@ -156,6 +157,7 @@ onBeforeUnmount(() => {
         />
       </div>
     </div>
+    <div v-if="saveError" class="error-strip"><ErrorMessage :message="saveError" /></div>
     <div v-if="editing" class="code-editor-wrap" :class="{ wrap }">
       <pre class="code-editor-highlight" aria-hidden="true"><code
         ref="editorHighlight"

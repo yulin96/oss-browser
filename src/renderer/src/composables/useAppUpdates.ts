@@ -35,7 +35,13 @@ export function useAppUpdates(requestConfirmation: (request: ConfirmationRequest
       return t('新版本 {version} 已下载，重启后安装', {
         version: updateState.value.version || ''
       })
-    if (updateState.value.status === 'error') return t('检查更新失败，请稍后重试')
+    if (updateState.value.status === 'error') {
+      if (updateState.value.errorStage === 'download')
+        return t('下载更新失败，可前往 GitHub 手动下载。')
+      if (updateState.value.errorStage === 'open-download')
+        return t('无法打开下载页面，请前往 GitHub 下载。')
+      return t('检查更新失败，请稍后重试')
+    }
     if (updateState.value.status === 'unsupported') return t('开发模式下不检查更新')
     if (updateState.value.status === 'not-available') return t('当前已是最新版本')
     return t('当前版本：{version}', { version: appVersion.value })
@@ -46,7 +52,12 @@ export function useAppUpdates(requestConfirmation: (request: ConfirmationRequest
     if (updateState.value.status === 'available') return t(manualInstall ? '手动下载' : '下载更新')
     if (updateState.value.status === 'downloading') return `${updateState.value.percent || 0}%`
     if (updateState.value.status === 'downloaded') return t('重启安装')
-    if (updateState.value.status === 'error' && updateState.value.version) return t('手动下载')
+    if (
+      updateState.value.status === 'error' &&
+      updateState.value.errorStage !== 'check' &&
+      updateState.value.version
+    )
+      return t('前往 GitHub')
     return t('检查更新')
   })
 
@@ -76,10 +87,16 @@ export function useAppUpdates(requestConfirmation: (request: ConfirmationRequest
 
   function requestManualUpdate(): void {
     requestConfirmation({
-      title: t('自动更新失败'),
-      description: t('自动更新未能完成，可前往 GitHub 手动下载。'),
+      title: t(
+        updateState.value.errorStage === 'open-download' ? '无法打开下载页面' : '下载更新失败'
+      ),
+      description: t(
+        updateState.value.errorStage === 'open-download'
+          ? '无法打开下载页面，请前往 GitHub 下载。'
+          : '下载更新失败，可前往 GitHub 手动下载。'
+      ),
       details: updateState.value.message,
-      confirmLabel: t('手动下载'),
+      confirmLabel: t('前往 GitHub'),
       action: () =>
         window.ossBrowser.system.openExternal(
           'https://github.com/yulin96/oss-browser/releases/latest'
@@ -97,7 +114,12 @@ export function useAppUpdates(requestConfirmation: (request: ConfirmationRequest
       promptedDownloadedVersion = state.version || 'latest'
       requestUpdateInstall()
     }
-    if (state.status === 'error' && state.version && state.version !== promptedFailedVersion) {
+    if (
+      state.status === 'error' &&
+      state.errorStage !== 'check' &&
+      state.version &&
+      state.version !== promptedFailedVersion
+    ) {
       promptedFailedVersion = state.version
       requestManualUpdate()
     }
@@ -118,14 +140,18 @@ export function useAppUpdates(requestConfirmation: (request: ConfirmationRequest
   async function handleUpdateAction(): Promise<void> {
     if (updateState.value.status === 'available') return requestAvailableUpdate()
     if (updateState.value.status === 'downloaded') return requestUpdateInstall()
-    if (updateState.value.status === 'error' && updateState.value.version)
+    if (
+      updateState.value.status === 'error' &&
+      updateState.value.errorStage !== 'check' &&
+      updateState.value.version
+    )
       return requestManualUpdate()
     if (updateState.value.status === 'checking' || updateState.value.status === 'downloading')
       return
     try {
       handleUpdateState(await window.ossBrowser.updates.check())
     } catch {
-      updateState.value = { status: 'error' }
+      updateState.value = { status: 'error', errorStage: 'check' }
     }
   }
 

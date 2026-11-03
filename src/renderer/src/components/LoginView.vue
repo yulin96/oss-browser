@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import ErrorMessage from './ErrorMessage.vue'
 import {
   ChevronDown,
   CircleCheck,
@@ -243,7 +244,7 @@ function chooseProfile(profile: SavedProfileSummary): void {
             >
           </div>
           <div v-if="errorMessage" :key="errorMessage" class="error-box login-error-shake">
-            <span>{{ errorMessage }}</span>
+            <ErrorMessage :message="errorMessage" />
             <AppTooltip :label="t('关闭')">
               <div
                 class="error-dismiss"
@@ -261,7 +262,7 @@ function chooseProfile(profile: SavedProfileSummary): void {
         </div>
         <div class="login-actions">
           <AppButton
-            :label="auth.cdnCredentials ? t('CDN 已配置') : t('CDN 凭证')"
+            :label="auth.cdnCredentials ? t('修改 CDN 凭证') : t('配置 CDN 凭证')"
             :icon="KeyRound"
             @click="openCdnCredentials()"
           />

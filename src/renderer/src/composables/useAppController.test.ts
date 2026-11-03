@@ -78,6 +78,34 @@ async function fixture(): Promise<{
 }
 
 describe('object action contracts', () => {
+  it('warns about nested contents only when deleting a folder', async () => {
+    const { controller } = await fixture()
+    controller.removeSelected()
+    expect(controller.confirmation.value?.title).toBe('删除所选项目')
+    expect(controller.confirmation.value?.description).not.toContain('全部内容')
+    controller.objects.value = [
+      { name: 'folder/', displayName: 'folder', size: 0, isDirectory: true }
+    ]
+    controller.selectedNames.value = new Set(['folder/'])
+    controller.removeSelected()
+    expect(controller.confirmation.value?.description).toContain('所选文件夹及其中全部内容也会删除')
+  })
+
+  it('disables retry for an oversized preview and still permits downloading the file', async () => {
+    const { controller, download } = await fixture()
+    controller.objects.value[0].size = 6 * 1024 * 1024
+    await controller.openPreview()
+    expect(controller.previewCanRetry.value).toBe(false)
+    expect(controller.previewError.value).toBe('文本预览最大支持 5 MB，请下载后查看。')
+    await controller.downloadSelected()
+    expect(download).toHaveBeenCalledOnce()
+    controller.objects.value = [
+      { name: 'image.png', displayName: 'image.png', size: 100, isDirectory: false }
+    ]
+    controller.selectedNames.value = new Set(['image.png'])
+    await controller.openPreview()
+    expect(controller.previewCanRetry.value).toBe(true)
+  })
   it('uses the configured default domain with no region and ignores an invalid remembered domain', async () => {
     const { controller, defaultDomain, signedUrl } = await fixture()
     vi.spyOn(localStorage, 'getItem').mockImplementation((key) =>

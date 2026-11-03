@@ -136,6 +136,7 @@ const api: OssBrowserApi = {
   },
   system: {
     platform: process.platform as AppPlatform,
+    setLocale: (locale) => ipcRenderer.invoke('system:setLocale', locale),
     getVersion: () => ipcRenderer.invoke('system:getVersion'),
     getReleaseNotes: () => ipcRenderer.invoke('system:getReleaseNotes'),
     openExternal: (url) => ipcRenderer.invoke('system:openExternal', url),

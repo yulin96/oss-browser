@@ -19,6 +19,20 @@ const oldTarget: FloatingUploadTarget = { accountId: 'A', bucket: 'old-bucket', 
 const newTarget: FloatingUploadTarget = { accountId: 'B', bucket: 'new-bucket', prefix: '' }
 
 describe('floating upload account ownership', () => {
+  it('keeps the chosen interface language when switching accounts', async () => {
+    const manager = new FloatingUploadManager(
+      {} as OssService,
+      { get: vi.fn().mockResolvedValue({ enabled: false }) } as unknown as FloatingUploadStore,
+      () => null,
+      vi.fn(),
+      vi.fn()
+    )
+    manager.setLocale('en-US')
+    await manager.setAccount('A')
+    expect(manager.getState().locale).toBe('en-US')
+    await manager.setAccount(null)
+    expect(manager.getState().locale).toBe('en-US')
+  })
   it('ignores saved target settings returned by an older account connection', async () => {
     let finish!: (settings: { target: FloatingUploadTarget; enabled: boolean }) => void
     const get = vi

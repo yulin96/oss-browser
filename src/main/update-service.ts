@@ -18,6 +18,7 @@ function getReleaseNotes(info: UpdateInfo): string | undefined {
 export class UpdateService {
   private state: UpdateState = { status: 'idle' }
   private initialized = false
+  private errorStage: NonNullable<UpdateState['errorStage']> = 'check'
 
   constructor(
     private readonly getWindow: () => BrowserWindow | null,
@@ -70,12 +71,18 @@ export class UpdateService {
   async check(): Promise<UpdateState> {
     if (!app.isPackaged) return { status: 'unsupported' }
     if (this.state.status === 'checking' || this.state.status === 'downloading') return this.state
-    await autoUpdater.checkForUpdates()
+    this.errorStage = 'check'
+    try {
+      await autoUpdater.checkForUpdates()
+    } catch (error) {
+      this.setError(error)
+    }
     return this.state
   }
 
   async download(): Promise<void> {
     if (!app.isPackaged || this.state.status !== 'available') return
+    this.errorStage = this.platform === 'darwin' ? 'open-download' : 'download'
     try {
       if (this.platform === 'darwin') {
         if (!this.state.version) return
@@ -101,7 +108,8 @@ export class UpdateService {
       status: 'error',
       version: this.state.version,
       releaseNotes: this.state.releaseNotes,
-      message: error instanceof Error ? error.message : String(error)
+      message: error instanceof Error ? error.message : String(error),
+      errorStage: this.errorStage
     })
   }
 

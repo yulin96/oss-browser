@@ -174,11 +174,11 @@ export function useTransfers(
   function confirmDeleteAllTransfers(): void {
     const direction = activeTransferTab.value
     requestConfirmation({
-      title: t('删除全部传输任务'),
-      description: t('确定删除全部{name}任务吗？正在传输的任务将被取消。', {
+      title: t('清除全部任务'),
+      description: t('确定清除全部{name}任务吗？正在传输的任务将被取消，文件不会被删除。', {
         name: t(direction === 'upload' ? '上传' : '下载')
       }),
-      confirmLabel: t('删除全部'),
+      confirmLabel: t('清除全部任务'),
       destructive: true,
       action: () => deleteAllTransfers(direction)
     })

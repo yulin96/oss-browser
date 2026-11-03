@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import ErrorMessage from '../ErrorMessage.vue'
 import { computed, ref } from 'vue'
 import DOMPurify from 'dompurify'
 import { marked } from 'marked'
@@ -122,7 +123,7 @@ function handleMarkdownClick(event: MouseEvent): void {
         <TriangleAlert :size="20" />
         <div>
           <strong>{{ t('内容解析失败') }}</strong>
-          <span>{{ parsedData.error }}</span>
+          <ErrorMessage :message="parsedData.error" />
         </div>
       </div>
       <CodePreview v-else :content="parsedData.formatted" language="json" />

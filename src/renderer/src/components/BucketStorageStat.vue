@@ -135,7 +135,7 @@ function toggle(): void {
               }}</strong>
             </div>
             <div class="rounded-lg bg-(--background) px-3 py-2.5">
-              <span class="block text-[11px] text-muted-foreground">{{ t('Object 总数') }}</span>
+              <span class="block text-[11px] text-muted-foreground">{{ t('对象总数') }}</span>
               <strong class="mt-1 block text-sm">{{
                 formatCount(bucketStorageStat.objectCount)
               }}</strong>
@@ -148,7 +148,7 @@ function toggle(): void {
             >
               <span>{{ t('存储类型') }}</span>
               <span class="text-right">{{ t('容量') }}</span>
-              <span class="text-right">{{ t('文件数') }}</span>
+              <span class="text-right">{{ t('对象数') }}</span>
             </div>
             <div
               v-for="item in storageTypes"

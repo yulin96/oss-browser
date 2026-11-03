@@ -11,6 +11,32 @@ afterEach(() => vi.unstubAllGlobals())
 
 describe('update confirmation', () => {
   it.each([
+    ['check', '检查更新失败，请稍后重试', '检查更新', 0],
+    ['download', '下载更新失败，可前往 GitHub 手动下载。', '前往 GitHub', 1],
+    ['open-download', '无法打开下载页面，请前往 GitHub 下载。', '前往 GitHub', 1]
+  ] as const)(
+    'offers recovery appropriate to the %s stage',
+    async (errorStage, description, button, prompts) => {
+      const requestConfirmation = vi.fn<(request: ConfirmationRequest) => void>()
+      vi.stubGlobal('window', {
+        ossBrowser: {
+          system: {
+            platform: 'win32',
+            getVersion: async () => '0.5.12',
+            getReleaseNotes: async () => ''
+          },
+          updates: { getState: async () => ({ status: 'error', version: '0.6.0', errorStage }) },
+          onUpdate: () => vi.fn()
+        }
+      })
+      const updates = useAppUpdates(requestConfirmation)
+      await updates.initializeUpdates()
+      expect(updates.updateDescription.value).toBe(description)
+      expect(updates.updateButtonLabel.value).toBe(button)
+      expect(requestConfirmation).toHaveBeenCalledTimes(prompts)
+    }
+  )
+  it.each([
     ['darwin', '手动下载', '发现新版本 0.6.0，请前往 GitHub 下载'],
     ['win32', '下载更新', '新版本 0.6.0 已发布，是否现在下载？'],
     ['linux', '下载更新', '新版本 0.6.0 已发布，是否现在下载？']

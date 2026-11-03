@@ -21,6 +21,15 @@ function transfer(overrides: Partial<TransferItem> = {}): TransferItem {
 }
 
 describe('useTransfers', () => {
+  it('explains that clearing all tasks cancels transfers without deleting files', () => {
+    const state = useTransfers((request) => {
+      confirmation = request
+    })
+    state.confirmDeleteAllTransfers()
+    expect(confirmation?.title).toBe('清除全部任务')
+    expect(confirmation?.description).toContain('文件不会被删除')
+    expect(cancelAll).not.toHaveBeenCalled()
+  })
   it('ignores old batch progress after resetting the account and ignores progress while connecting', () => {
     let accept = true
     const state = useTransfers(

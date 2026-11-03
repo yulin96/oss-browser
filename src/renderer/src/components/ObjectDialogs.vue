@@ -47,7 +47,7 @@ const {
         <div class="input-wrap"><input v-model.trim="objectForm.target" /></div>
         <template #footer
           ><AppButton :label="t('取消')" @click="modal = null" /><AppButton
-            :label="t('确定')"
+            :label="t('重命名')"
             tone="primary"
             :disabled="!objectForm.target"
             @click="renameSelected"
@@ -86,7 +86,7 @@ const {
         <p class="modal-hint">{{ t('支持其他目录和其他 Bucket。') }}</p>
         <template #footer
           ><AppButton :label="t('取消')" @click="modal = null" /><AppButton
-            :label="t('确定')"
+            :label="t('移动')"
             tone="primary"
             :disabled="!objectForm.target.startsWith('oss://')"
             @click="transferSelected(true)"

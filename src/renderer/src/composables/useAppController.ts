@@ -143,6 +143,7 @@ export function useAppController() {
   const bucketMenu = reactive({ visible: false, x: 0, y: 0 })
   const dragActive = ref(false)
   const floatingUploadState = ref<FloatingUploadState>({
+    locale: 'zh-CN',
     visible: false,
     expanded: false,
     dockSide: 'right',
@@ -156,6 +157,7 @@ export function useAppController() {
   const objectPreview = shallowRef<ObjectPreviewDescriptor | null>(null)
   const previewLoading = ref(false)
   const previewError = ref('')
+  const previewCanRetry = ref(true)
   const previewSaving = ref(false)
   const previewSaved = ref(false)
   const previewSaveError = ref('')
@@ -1385,8 +1387,13 @@ export function useAppController() {
   function removeSelected(): void {
     if (!currentBucket.value || !selectedObjects.value.length) return
     requestConfirmation({
-      title: t('删除文件'),
-      description: t('确定删除选中的 {count} 项吗？', { count: selectedObjects.value.length }),
+      title: t('删除所选项目'),
+      description: t(
+        selectedObjects.value.some((item) => item.isDirectory)
+          ? '确定删除选中的 {count} 项吗？所选文件夹及其中全部内容也会删除。'
+          : '确定删除选中的 {count} 项吗？',
+        { count: selectedObjects.value.length }
+      ),
       confirmLabel: t('删除'),
       destructive: true,
       action: performRemoveSelected
@@ -1706,6 +1713,7 @@ export function useAppController() {
     previewText.value = ''
     previewTextEtag = ''
     previewError.value = ''
+    previewCanRetry.value = true
     previewSaving.value = false
     previewSaved.value = false
     previewSaveError.value = ''
@@ -1714,7 +1722,10 @@ export function useAppController() {
 
     try {
       if (['markdown', 'json', 'yaml', 'csv', 'tsv', 'code', 'text'].includes(definition.kind)) {
-        if (item.size > 5 * 1024 * 1024) throw new Error(t('文本预览最大支持 5 MB'))
+        if (item.size > 5 * 1024 * 1024) {
+          previewCanRetry.value = false
+          throw new Error(t('文本预览最大支持 5 MB，请下载后查看。'))
+        }
         const textObject = await window.ossBrowser.objects.readText(
           currentBucket.value.name,
           item.name
@@ -1723,7 +1734,10 @@ export function useAppController() {
         previewText.value = textObject.content
         previewTextEtag = textObject.etag
       } else if (definition.kind === 'font') {
-        if (item.size > 50 * 1024 * 1024) throw new Error(t('字体预览最大支持 50 MB'))
+        if (item.size > 50 * 1024 * 1024) {
+          previewCanRetry.value = false
+          throw new Error(t('字体预览最大支持 50 MB，请下载后查看。'))
+        }
         const url = await window.ossBrowser.objects.preparePreview(
           currentBucket.value.name,
           item.name
@@ -2001,6 +2015,7 @@ export function useAppController() {
     objectPreview,
     previewLoading,
     previewError,
+    previewCanRetry,
     previewSaving,
     previewSaved,
     previewSaveError,

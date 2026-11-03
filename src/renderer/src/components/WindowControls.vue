@@ -3,6 +3,7 @@ import { Copy, Minus, Square, X } from '@lucide/vue'
 import { onBeforeUnmount, onMounted, ref } from 'vue'
 
 import type { AppPlatform } from '../../../shared/types'
+import { t } from '../i18n'
 
 const props = defineProps<{ platform: AppPlatform }>()
 
@@ -38,8 +39,8 @@ function close(): void {
       class="window-control"
       role="button"
       tabindex="0"
-      title="Minimize"
-      aria-label="Minimize"
+      :title="t('最小化')"
+      :aria-label="t('最小化')"
       @click="minimize"
       @keydown.enter="minimize"
       @keydown.space.prevent="minimize"
@@ -50,8 +51,8 @@ function close(): void {
       class="window-control"
       role="button"
       tabindex="0"
-      :title="maximized ? 'Restore' : 'Maximize'"
-      :aria-label="maximized ? 'Restore' : 'Maximize'"
+      :title="t(maximized ? '还原窗口' : '最大化')"
+      :aria-label="t(maximized ? '还原窗口' : '最大化')"
       @click="toggleMaximize"
       @keydown.enter="toggleMaximize"
       @keydown.space.prevent="toggleMaximize"
@@ -63,8 +64,8 @@ function close(): void {
       class="window-control is-close"
       role="button"
       tabindex="0"
-      title="Close"
-      aria-label="Close"
+      :title="t('关闭')"
+      :aria-label="t('关闭')"
       @click="close"
       @keydown.enter="close"
       @keydown.space.prevent="close"

@@ -115,8 +115,7 @@ const {
         </div>
         <div class="setting-row">
           <div>
-            <strong>{{ t('外观主题') }}</strong
-            ><span>{{ t('选择浅色、深色或跟随系统') }}</span>
+            <strong>{{ t('外观主题') }}</strong>
           </div>
           <div
             class="theme-select-buttons t-tabs"
@@ -168,7 +167,6 @@ const {
             ><span>{{ t('在文件列表中显示图片和视频预览') }}</span>
           </div>
           <label class="setting-switch">
-            <span>{{ t('显示') }}</span>
             <Switch v-model="settings.showImagePreview" :aria-label="t('媒体缩略图')" />
           </label>
         </div>
@@ -178,7 +176,6 @@ const {
             ><span>{{ t('在文件列表中显示图片原始宽高') }}</span>
           </div>
           <label class="setting-switch">
-            <span>{{ t('显示') }}</span>
             <Switch v-model="settings.showImageResolution" :aria-label="t('图片分辨率')" />
           </label>
         </div>
@@ -225,11 +222,10 @@ const {
         <div class="settings-section-title">{{ t('上传下载设置') }}</div>
         <div class="setting-row">
           <div>
-            <strong>{{ t('上传同名文件') }}</strong
-            ><span>{{ t('设置上传遇到同名对象时的默认处理方式') }}</span>
+            <strong>{{ t('同名文件处理') }}</strong>
           </div>
           <div class="select-wrap setting-select">
-            <select v-model="settings.uploadConflictPolicy" :aria-label="t('上传同名文件')">
+            <select v-model="settings.uploadConflictPolicy" :aria-label="t('同名文件处理')">
               <option value="ask">{{ t('每次询问') }}</option>
               <option value="replace">{{ t('直接替换') }}</option>
               <option value="skip">{{ t('直接跳过') }}</option>
@@ -238,12 +234,12 @@ const {
         </div>
         <div class="settings-grid">
           <label
-            >{{ t('同时上传任务') }}
+            >{{ t('同时上传任务数') }}
             <div class="input-wrap">
               <input v-model.number="settings.maxUploadJobs" type="number" min="1" max="10" /></div
           ></label>
           <label
-            >{{ t('同时下载任务') }}
+            >{{ t('同时下载任务数') }}
             <div class="input-wrap">
               <input
                 v-model.number="settings.maxDownloadJobs"
@@ -253,7 +249,7 @@ const {
               /></div
           ></label>
           <label
-            >{{ t('单任务并发分片') }}
+            >{{ t('单任务并发分片数') }}
             <div class="input-wrap">
               <input
                 v-model.number="settings.multipartParallel"
@@ -323,7 +319,7 @@ const {
               :label="profile.hasCdnCredentials ? t('修改 CDN 凭证') : t('配置 CDN 凭证')"
               @click="openCdnCredentials(profile)"
             />
-            <AppButton :label="t('使用')" tone="primary" @click="useProfile(profile)" />
+            <AppButton :label="t('连接')" tone="primary" @click="useProfile(profile)" />
             <AppButton :label="t('删除')" tone="danger" @click="removeProfile(profile)" />
           </div>
         </div>

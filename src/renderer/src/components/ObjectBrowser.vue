@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import ErrorMessage from './ErrorMessage.vue'
 import { computed, ref, watch } from 'vue'
 import {
   Folder,
@@ -155,7 +156,7 @@ function fileNameParts(item: ObjectInfo): {
 
 <template>
   <div v-if="errorMessage" class="error-strip">
-    <span>{{ errorMessage }}</span>
+    <ErrorMessage :message="errorMessage" />
     <AppTooltip :label="t('关闭')">
       <div
         class="error-dismiss"
@@ -196,7 +197,7 @@ function fileNameParts(item: ObjectInfo): {
         <div>{{ t('名称') }}</div>
         <div>{{ t('大小') }}</div>
         <div>{{ t('存储类型') }}</div>
-        <div>{{ t('更新时间') }}</div>
+        <div>{{ t('修改时间') }}</div>
       </div>
       <template v-for="group in selectableGroups" :key="group.key">
         <div v-if="groupMode === 'day'" class="object-group-heading table-group-heading">
@@ -206,8 +207,19 @@ function fileNameParts(item: ObjectInfo): {
             role="checkbox"
             tabindex="0"
             :aria-checked="group.selection"
-            :aria-label="`${group.label}：${t('选择此组全部对象')}`"
-            :title="t(group.selection === true ? '取消选择此组全部对象' : '选择此组全部对象')"
+            :aria-label="
+              t(
+                group.selection === true
+                  ? '取消选择「{group}」的 {count} 项'
+                  : '选择「{group}」的 {count} 项',
+                { group: group.label, count: group.items.length }
+              )
+            "
+            :title="
+              hasMoreObjects && !searchText
+                ? t('选择范围为此组已加载的 {count} 项', { count: group.items.length })
+                : t(group.selection === true ? '取消选择此组全部对象' : '选择此组全部对象')
+            "
             @click.stop="toggleGroup(group)"
             @keydown.enter.prevent="toggleGroup(group)"
             @keydown.space.prevent="toggleGroup(group)"
@@ -344,8 +356,19 @@ function fileNameParts(item: ObjectInfo): {
               role="checkbox"
               tabindex="0"
               :aria-checked="group.selection"
-              :aria-label="`${group.label}：${t('选择此组全部对象')}`"
-              :title="t(group.selection === true ? '取消选择此组全部对象' : '选择此组全部对象')"
+              :aria-label="
+                t(
+                  group.selection === true
+                    ? '取消选择「{group}」的 {count} 项'
+                    : '选择「{group}」的 {count} 项',
+                  { group: group.label, count: group.items.length }
+                )
+              "
+              :title="
+                hasMoreObjects && !searchText
+                  ? t('选择范围为此组已加载的 {count} 项', { count: group.items.length })
+                  : t(group.selection === true ? '取消选择此组全部对象' : '选择此组全部对象')
+              "
               @click.stop="toggleGroup(group)"
               @keydown.enter.prevent="toggleGroup(group)"
               @keydown.space.prevent="toggleGroup(group)"

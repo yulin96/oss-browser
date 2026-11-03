@@ -39,6 +39,26 @@ afterEach(() => {
 })
 
 describe('GitHub update flow', () => {
+  it('distinguishes check failures from download failures even when a version is already known', async () => {
+    const service = new UpdateService(() => null, 'win32')
+    service.initialize()
+    updater.emit('update-available', info)
+    vi.mocked(updater.checkForUpdates).mockRejectedValueOnce(new Error('check failed'))
+    expect(await service.check()).toMatchObject({ status: 'error', errorStage: 'check' })
+    updater.emit('update-available', info)
+    vi.mocked(updater.downloadUpdate).mockRejectedValueOnce(new Error('download failed'))
+    await service.download()
+    expect(service.getState()).toMatchObject({ status: 'error', errorStage: 'download' })
+  })
+
+  it('reports a failed browser launch as an open-download failure on macOS', async () => {
+    const service = new UpdateService(() => null, 'darwin')
+    service.initialize()
+    updater.emit('update-available', info)
+    vi.mocked(shell.openExternal).mockRejectedValueOnce(new Error('browser unavailable'))
+    await service.download()
+    expect(service.getState()).toMatchObject({ status: 'error', errorStage: 'open-download' })
+  })
   it.each(['win32', 'linux'] as const)('keeps application updates on %s', async (platform) => {
     const send = vi.fn()
     const window = { webContents: { send } } as unknown as BrowserWindow

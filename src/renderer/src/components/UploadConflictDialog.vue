@@ -55,7 +55,7 @@ function previewFailed(url?: string): boolean {
       </div>
       <div v-if="showMediaComparison" class="upload-conflict-comparison">
         <figure>
-          <figcaption>{{ t('覆盖前（OSS）') }}</figcaption>
+          <figcaption>{{ t('云端现有文件') }}</figcaption>
           <div class="upload-conflict-preview">
             <img
               v-if="
@@ -63,7 +63,7 @@ function previewFailed(url?: string): boolean {
                 !previewFailed(currentUploadConflict.existingPreviewUrl)
               "
               :src="currentUploadConflict.existingPreviewUrl"
-              :alt="t('覆盖前（OSS）')"
+              :alt="t('云端现有文件')"
               @error="markPreviewFailed(currentUploadConflict.existingPreviewUrl)"
             />
             <video
@@ -77,7 +77,7 @@ function previewFailed(url?: string): boolean {
           </div>
         </figure>
         <figure>
-          <figcaption>{{ t('覆盖后（本地）') }}</figcaption>
+          <figcaption>{{ t('本次上传文件') }}</figcaption>
           <div class="upload-conflict-preview">
             <img
               v-if="
@@ -85,7 +85,7 @@ function previewFailed(url?: string): boolean {
                 !previewFailed(currentUploadConflict.incomingPreviewUrl)
               "
               :src="currentUploadConflict.incomingPreviewUrl"
-              :alt="t('覆盖后（本地）')"
+              :alt="t('本次上传文件')"
               @error="markPreviewFailed(currentUploadConflict.incomingPreviewUrl)"
             />
             <video

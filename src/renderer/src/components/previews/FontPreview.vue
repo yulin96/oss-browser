@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import ErrorMessage from '../ErrorMessage.vue'
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { LoaderCircle, TriangleAlert } from '@lucide/vue'
 import { t } from '../../i18n'
@@ -59,7 +60,7 @@ onBeforeUnmount(() => {
     <div v-else-if="error" class="preview-status is-error">
       <TriangleAlert :size="28" />
       <strong>{{ t('字体加载失败') }}</strong>
-      <span>{{ error }}</span>
+      <ErrorMessage :message="error" />
     </div>
     <template v-else>
       <div class="font-preview-head">
