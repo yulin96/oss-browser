@@ -127,6 +127,65 @@ const selectableGroups = computed<ObjectGroup[]>(() =>
   })
 )
 
+const orderedObjects = computed(() => objectGroups.value.flatMap((group) => group.items))
+let selectionAnchor: string | undefined
+let rangeBase = new Set<string>()
+let rangeSelection: Set<string> | undefined
+
+watch(
+  [filteredObjects, groupMode],
+  () => {
+    selectionAnchor = undefined
+    rangeSelection = undefined
+  },
+  { flush: 'sync' }
+)
+
+function selectItem(item: ObjectInfo, event: MouseEvent): void {
+  const anchorName =
+    selectionAnchor && selectedNames.value.has(selectionAnchor)
+      ? selectionAnchor
+      : [...selectedNames.value].at(-1)
+  const anchorIndex = orderedObjects.value.findIndex((entry) => entry.name === anchorName)
+  if (event.shiftKey && anchorIndex !== -1) {
+    selectionAnchor = anchorName
+    // Repeated Shift clicks resize the range while retaining selections made before it.
+    if (selectedNames.value !== rangeSelection) rangeBase = new Set(selectedNames.value)
+    const targetIndex = orderedObjects.value.findIndex((entry) => entry.name === item.name)
+    const next = new Set(rangeBase)
+    for (const entry of orderedObjects.value.slice(
+      Math.min(anchorIndex, targetIndex),
+      Math.max(anchorIndex, targetIndex) + 1
+    )) {
+      next.add(entry.name)
+    }
+    selectedNames.value = next
+    rangeSelection = selectedNames.value
+    return
+  }
+  toggleSelection(item)
+  selectionAnchor = selectedNames.value.has(item.name) ? item.name : undefined
+  rangeSelection = undefined
+}
+
+function openOrSelectItem(item: ObjectInfo, event: MouseEvent): Promise<void> | void {
+  if (event.shiftKey || event.ctrlKey || event.metaKey) {
+    selectItem(item, event)
+    return
+  }
+  selectionAnchor = item.name
+  rangeSelection = undefined
+  return openItem(item)
+}
+
+function selectCheckbox(item: ObjectInfo, event: MouseEvent): void {
+  selectItem(item, event)
+  const control = event.currentTarget as HTMLElement
+  const checkbox = control instanceof HTMLInputElement ? control : control.querySelector('input')!
+  // A Shift range can keep this item selected despite the browser toggling the checkbox off.
+  checkbox.checked = selectedNames.value.has(item.name)
+}
+
 function toggleGroup(group: ObjectGroup): void {
   const next = new Set(selectedNames.value)
   for (const item of group.items) {
@@ -247,14 +306,14 @@ function fileNameParts(item: ObjectInfo): {
             'favorite-location': isFavoriteDirectory(item),
             'home-location': isHomeDirectory(item)
           }"
-          @click="toggleSelection(item)"
+          @click="selectItem(item, $event)"
           @contextmenu="openContextMenu($event, item)"
         >
           <div @click.stop>
             <input
               type="checkbox"
               :checked="selectedNames.has(item.name)"
-              @change="toggleSelection(item)"
+              @click="selectCheckbox(item, $event)"
             />
           </div>
           <div class="file-name">
@@ -275,7 +334,7 @@ function fileNameParts(item: ObjectInfo): {
               class="file-name-label"
               role="button"
               tabindex="0"
-              @click.stop="openItem(item)"
+              @click.stop="openOrSelectItem(item, $event)"
               @keydown.enter.stop="openItem(item)"
               >{{ item.displayName }}</span
             >
@@ -399,12 +458,16 @@ function fileNameParts(item: ObjectInfo): {
               }"
               role="button"
               tabindex="0"
-              @click="openItem(item)"
+              @click="openOrSelectItem(item, $event)"
               @keydown.enter="openItem(item)"
               @keydown.space.prevent="openItem(item)"
               @contextmenu="openContextMenu($event, item)"
             >
-              <div class="object-card-check" @click.stop="toggleSelection(item)">
+              <div
+                class="object-card-check"
+                @click.stop="selectCheckbox(item, $event)"
+                @keydown.stop
+              >
                 <input type="checkbox" :checked="selectedNames.has(item.name)" />
               </div>
               <div class="object-preview" :class="getObjectVisual(item).kind">
