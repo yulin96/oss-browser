@@ -138,6 +138,9 @@ jobs:
           cp -- "release-assets/oss-browser-${PACKAGE_VERSION}-x64.dmg" \
             "release-assets/oss-browser-latest-x64.dmg"
 
+      - name: Prepare Homebrew cask
+        run: node scripts/prepare-homebrew-cask.mts
+
       - name: Create release and upload files
         shell: bash
         env:
@@ -165,3 +168,22 @@ jobs:
               --repo "${GITHUB_REPOSITORY}" \
               --draft=false
           fi
+
+      - name: Check out Homebrew tap branch
+        uses: actions/checkout@v6
+        with:
+          ref: main
+          path: homebrew-tap
+
+      - name: Update Homebrew cask
+        working-directory: homebrew-tap
+        run: |
+          cp ../.release/oss-browser.rb Casks/oss-browser.rb
+          git add -- Casks/oss-browser.rb
+          if git diff --cached --quiet; then
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m "chore(homebrew): update OSS Browser to ${GITHUB_REF_NAME}"
+          git push origin HEAD:main

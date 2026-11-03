@@ -34,8 +34,10 @@ Update OSS Browser through Homebrew:
 
 ```bash
 brew update
-brew upgrade --cask --greedy-latest yulin96/apps/oss-browser
+brew upgrade --cask yulin96/apps/oss-browser
 ```
+
+Ordinary `brew upgrade` also includes OSS Browser alongside your other installed software.
 
 Uninstall it while keeping local application data:
 
@@ -141,10 +143,14 @@ sudo xattr -r -d com.apple.quarantine /Applications/OSS\ Browser.app
 
 The Homebrew Cask performs this quarantine removal for its own installation automatically.
 
-The release workflow also publishes stable `oss-browser-latest-arm64.dmg` and
-`oss-browser-latest-x64.dmg` aliases. The Cask follows these aliases, so it does not need a version or
-checksum update after each release. Because Homebrew normally skips `version :latest` Casks, use
-`--greedy-latest` when upgrading through Homebrew.
+The Homebrew Cask pins a version, its versioned DMG downloads, and a SHA-256 checksum for each
+architecture. Ordinary `brew upgrade` can update the app without `--greedy-latest`. The release
+workflow computes checksums from the actual packages and, after the GitHub Release is public,
+automatically commits the updated `Casks/oss-browser.rb` to `main`. No manual Cask or script changes
+are needed for subsequent releases; pull the automated commit before starting local development.
+
+The workflow also keeps the stable `oss-browser-latest-arm64.dmg` and
+`oss-browser-latest-x64.dmg` aliases for users with the old Cask.
 
 ## Local Data and Permissions
 

@@ -1,5 +1,12 @@
 # 项目交接
 
+## Homebrew 版本与发布同步（2026-11-03）
+
+- 原配方的 `version :latest` 和 `auto_updates true` 都会让普通 `brew upgrade` 跳过应用。macOS 实际只打开 GitHub DMG 手动安装，不应声明自动更新；现已移除该标记并固定版本、版本化 DMG 地址与 ARM64/x64 独立 SHA-256。
+- `scripts/prepare-homebrew-cask.mts` 从 `release-assets` 的实际 DMG 流式计算摘要，生成 `.release/oss-browser.rb`。发布 Action 仅在 GitHub Release 成功公开后将配方提交到 `main`，避免提前暴露尚不存在的下载地址；稳定 DMG 别名继续兼容旧配方。
+- 后续继续执行 `pnpm release:patch/minor/major`，无需手工更新配方或脚本。Action 会额外生成配方提交，发布完成后本地开发前先拉取远端 `main`。本地修改不会直接更新已安装 Tap，提交推送后需先 `brew update`。
+- 当前 `0.5.15` 的初始校验值来自 GitHub Release 对应版本 DMG 的 `digest`，不能使用本地重新打包文件的摘要替代。
+
 ## 文件多选（2026-11-03）
 
 - `ObjectBrowser.vue` 的列表与网格共用 `useMarqueeSelection.ts`，通过 `data-object-name` 标记可框选对象。对象位置在超过拖动阈值后采集，使用滚动容器内容坐标，保证自动滚动时命中位置正确，普通单击不测量整页对象。
