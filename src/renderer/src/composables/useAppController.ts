@@ -367,7 +367,6 @@ export function useAppController() {
   const fileBrowser = useFileBrowser({
     settings,
     profileId,
-    saveSession,
     closeModal: () => {
       modal.value = null
     },
@@ -456,9 +455,7 @@ export function useAppController() {
     runBrowserTask: browserTask.run,
     requestConfirmation,
     getCurrentBucket: () => currentBucket.value,
-    clearCurrentBucket: () => {
-      currentBucket.value = null
-    },
+    clearCurrentBucket: goBucketHome,
     refreshBuckets,
     setModal: (name) => {
       modal.value = name
@@ -633,14 +630,16 @@ export function useAppController() {
   let domainOptionsPromise: Promise<void> | undefined
   let removeFloatingUploadStateListener: (() => void) | undefined
   let removeFloatingUploadRequestListener: (() => void) | undefined
-  let previewTextEtag = ''
+  let previewTextTarget: { bucket: string; item: ObjectInfo; etag: string } | undefined
 
   onMounted(async () => {
     document.addEventListener('pointerdown', closeFloatingMenus)
+    document.addEventListener('focusin', closeFloatingMenus)
     document.addEventListener('keydown', handleGlobalKeydown)
     document.addEventListener('dragleave', handleDocumentDragLeave)
     window.addEventListener('dragend', resetDragState)
     window.addEventListener('drop', resetDragState)
+    window.addEventListener('blur', closeActions)
     window.addEventListener('blur', resetDragState)
     removeFloatingUploadStateListener = window.ossBrowser.floatingUpload.onState((state) => {
       floatingUploadState.value = state
@@ -648,14 +647,25 @@ export function useAppController() {
     removeFloatingUploadRequestListener = window.ossBrowser.floatingUpload.onRequest((request) => {
       void handleFloatingUploadRequest(request)
     })
-    floatingUploadState.value = await window.ossBrowser.floatingUpload.getState()
-    viewMode.value = localStorage.getItem('oss-browser-view-mode') === 'grid' ? 'grid' : 'list'
-    await initializeUpdates()
+    initializeTransfers()
     try {
-      await initializeSettings()
-      savedProfiles.value = await window.ossBrowser.profiles.list()
-      initializeTransfers()
-      await restoreSession()
+      const [floating, updates, settings, profiles] = await Promise.allSettled([
+        window.ossBrowser.floatingUpload.getState(),
+        initializeUpdates(),
+        initializeSettings(),
+        window.ossBrowser.profiles.list()
+      ])
+      if (floating.status === 'fulfilled') floatingUploadState.value = floating.value
+      if (profiles.status === 'fulfilled') {
+        savedProfiles.value = profiles.value
+        await restoreSession()
+      }
+      const failed = [floating, updates, settings, profiles].find(
+        (result) => result.status === 'rejected'
+      )
+      if (failed?.status === 'rejected') throw failed.reason
+    } catch (reason) {
+      errorMessage.value = reason instanceof Error ? reason.message : String(reason)
     } finally {
       initializing.value = false
     }
@@ -669,10 +679,12 @@ export function useAppController() {
     removeFloatingUploadStateListener?.()
     removeFloatingUploadRequestListener?.()
     document.removeEventListener('pointerdown', closeFloatingMenus)
+    document.removeEventListener('focusin', closeFloatingMenus)
     document.removeEventListener('keydown', handleGlobalKeydown)
     document.removeEventListener('dragleave', handleDocumentDragLeave)
     window.removeEventListener('dragend', resetDragState)
     window.removeEventListener('drop', resetDragState)
+    window.removeEventListener('blur', closeActions)
     window.removeEventListener('blur', resetDragState)
     if (toastTimer) clearTimeout(toastTimer)
     if (shareCopyTimer) clearTimeout(shareCopyTimer)
@@ -786,7 +798,7 @@ export function useAppController() {
     selectedMediaProcesses.value = []
   }
 
-  function closeFloatingMenus(event: PointerEvent): void {
+  function closeFloatingMenus(event: PointerEvent | FocusEvent): void {
     const target = event.target as HTMLElement
     if (
       showTransfers.value &&
@@ -804,12 +816,7 @@ export function useAppController() {
   }
 
   function handleGlobalKeydown(event: KeyboardEvent): void {
-    if (event.key === 'Escape') {
-      showUploadActions.value = false
-      contextMenu.visible = false
-      emptyContextMenu.visible = false
-      bucketMenu.visible = false
-    }
+    if (event.key === 'Escape') closeActions()
   }
 
   function openContextMenu(event: MouseEvent, item: ObjectInfo): void {
@@ -910,25 +917,32 @@ export function useAppController() {
     const generation = accountGeneration
     const result = await authTask.run(() => window.ossBrowser.auth.connect(config))
     if (!result || generation !== accountGeneration) return
+    Object.assign(auth, config, { accessKeySecret: '', stsToken: '' })
     buckets.value = result
     loggedIn.value = true
     loadAccountPreferences()
-    if (auth.remember) {
+    localStorage.removeItem('oss-browser-session')
+    if (config.remember) {
       const profile: SavedProfile = {
-        id: `${auth.endpoint}|${auth.accessKeyId}`,
-        label: auth.alias?.trim() || auth.accessKeyId,
+        id: profileId(),
+        label: config.alias?.trim() || config.accessKeyId,
         config
       }
-      await window.ossBrowser.profiles.save(profile)
+      const saved = await settingsTask.run(async () => {
+        await window.ossBrowser.profiles.save(profile)
+        return true
+      })
       if (generation !== accountGeneration) return
-      saveSession()
-      const profiles = await window.ossBrowser.profiles.list()
-      if (generation !== accountGeneration) return
-      savedProfiles.value = profiles
-    } else {
-      localStorage.removeItem('oss-browser-session')
+      if (saved) {
+        saveSession()
+        const profiles = await settingsTask.run(() => window.ossBrowser.profiles.list())
+        if (generation !== accountGeneration) return
+        if (profiles) savedProfiles.value = profiles
+      } else {
+        auth.remember = false
+      }
     }
-    await openInitialLocation(result, auth.presetPath || '')
+    await openInitialLocation(result, config.presetPath || '')
   }
 
   function clearLoginForm(): void {
@@ -955,7 +969,10 @@ export function useAppController() {
     try {
       const session = JSON.parse(raw) as SessionState
       const profile = savedProfiles.value.find((item) => item.id === session.profileId)
-      if (!profile) return
+      if (!profile) {
+        localStorage.removeItem('oss-browser-session')
+        return
+      }
       const connection = await window.ossBrowser.profiles.connect(profile.id)
       if (generation !== accountGeneration) return
       applyProfileSummary(connection.profile)
@@ -1032,10 +1049,9 @@ export function useAppController() {
   async function logout(): Promise<void> {
     loggedIn.value = false
     resetAccountRuntimeState()
-    const generation = accountGeneration
-    await window.ossBrowser.auth.disconnect()
-    if (generation !== accountGeneration) return
+    clearLoginForm()
     localStorage.removeItem('oss-browser-session')
+    await authTask.run(() => window.ossBrowser.auth.disconnect())
   }
 
   function confirmLogout(): void {
@@ -1093,7 +1109,7 @@ export function useAppController() {
       const details = await run(() =>
         window.ossBrowser.objects.details(target.bucket, target.names[0])
       )
-      if (!details || generation !== accountGeneration) return
+      if (!details || generation !== accountGeneration || headerTarget.value !== target) return
       const headers = Object.fromEntries(
         Object.entries(details.headers).map(([key, value]) => [key.toLowerCase(), value])
       )
@@ -1386,6 +1402,9 @@ export function useAppController() {
 
   function removeSelected(): void {
     if (!currentBucket.value || !selectedObjects.value.length) return
+    const bucket = currentBucket.value.name
+    const names = selectedObjects.value.map((item) => item.name)
+    const generation = accountGeneration
     requestConfirmation({
       title: t('删除所选项目'),
       description: t(
@@ -1396,20 +1415,15 @@ export function useAppController() {
       ),
       confirmLabel: t('删除'),
       destructive: true,
-      action: performRemoveSelected
+      action: async () => {
+        if (generation !== accountGeneration) return
+        const removed = await run(async () => {
+          await window.ossBrowser.objects.remove(bucket, names)
+          return true
+        })
+        if (removed && currentBucket.value?.name === bucket) await loadObjects()
+      }
     })
-  }
-
-  async function performRemoveSelected(): Promise<void> {
-    if (!currentBucket.value || !selectedObjects.value.length) return
-    const done = await run(() =>
-      window.ossBrowser.objects.remove(
-        currentBucket.value!.name,
-        selectedObjects.value.map((item) => item.name)
-      )
-    )
-    if (done === undefined && errorMessage.value) return
-    await loadObjects()
   }
 
   async function renameSelected(): Promise<void> {
@@ -1711,7 +1725,7 @@ export function useAppController() {
     }
     objectPreview.value = descriptor
     previewText.value = ''
-    previewTextEtag = ''
+    previewTextTarget = undefined
     previewError.value = ''
     previewCanRetry.value = true
     previewSaving.value = false
@@ -1726,28 +1740,16 @@ export function useAppController() {
           previewCanRetry.value = false
           throw new Error(t('文本预览最大支持 5 MB，请下载后查看。'))
         }
-        const textObject = await window.ossBrowser.objects.readText(
-          currentBucket.value.name,
-          item.name
-        )
+        const bucket = currentBucket.value.name
+        const textObject = await window.ossBrowser.objects.readText(bucket, item.name)
         if (generation !== previewGeneration) return
         previewText.value = textObject.content
-        previewTextEtag = textObject.etag
-      } else if (definition.kind === 'font') {
-        if (item.size > 50 * 1024 * 1024) {
+        previewTextTarget = { bucket, item, etag: textObject.etag }
+      } else if (definition.kind === 'font' || definition.kind === 'pdf') {
+        if (definition.kind === 'font' && item.size > 50 * 1024 * 1024) {
           previewCanRetry.value = false
           throw new Error(t('字体预览最大支持 50 MB，请下载后查看。'))
         }
-        const url = await window.ossBrowser.objects.preparePreview(
-          currentBucket.value.name,
-          item.name
-        )
-        if (generation !== previewGeneration) {
-          void window.ossBrowser.objects.discardPreview(url)
-          return
-        }
-        objectPreview.value = { ...descriptor, url }
-      } else if (definition.kind === 'pdf') {
         const url = await window.ossBrowser.objects.preparePreview(
           currentBucket.value.name,
           item.name
@@ -1776,55 +1778,45 @@ export function useAppController() {
   }
 
   async function savePreviewText(content = previewText.value): Promise<void> {
-    if (
-      !currentBucket.value ||
-      selectedObjects.value.length !== 1 ||
-      !['text', 'code'].includes(objectPreview.value?.kind || '')
-    )
-      return
-    if (objectPreview.value?.kind === 'code') {
-      if (previewSaving.value || content === previewText.value) return
-      const generation = previewGeneration
-      previewSaving.value = true
-      previewSaved.value = false
-      previewSaveError.value = ''
-      if (previewSavedTimer) clearTimeout(previewSavedTimer)
-      try {
-        const nextEtag = await window.ossBrowser.objects.saveText(
-          currentBucket.value.name,
-          selectedObjects.value[0].name,
-          content,
-          previewTextEtag
-        )
-        if (generation !== previewGeneration) return
-        previewTextEtag = nextEtag
-        previewText.value = content
-        const size = new TextEncoder().encode(content).byteLength
-        selectedObjects.value[0].size = size
-        objectPreview.value = { ...objectPreview.value, size }
-        previewSaved.value = true
-        previewSavedTimer = setTimeout(() => {
-          previewSaved.value = false
-        }, 1800)
-      } catch (reason) {
-        if (generation === previewGeneration)
-          previewSaveError.value = reason instanceof Error ? reason.message : String(reason)
-      } finally {
-        if (generation === previewGeneration) previewSaving.value = false
-      }
-      return
-    }
-    const done = await run(() =>
-      window.ossBrowser.objects.saveText(
-        currentBucket.value!.name,
-        selectedObjects.value[0].name,
+    const target = previewTextTarget
+    const preview = objectPreview.value
+    if (!target || !preview || previewSaving.value) return
+    if (preview.kind === 'code' && content === previewText.value) return
+    const generation = previewGeneration
+    previewSaving.value = true
+    previewSaved.value = false
+    previewSaveError.value = ''
+    if (previewSavedTimer) clearTimeout(previewSavedTimer)
+    try {
+      const nextEtag = await window.ossBrowser.objects.saveText(
+        target.bucket,
+        target.item.name,
         content,
-        previewTextEtag
+        target.etag
       )
-    )
-    if (done === undefined && errorMessage.value) return
-    modal.value = null
-    await loadObjects()
+      if (generation !== previewGeneration) return
+      target.etag = nextEtag
+      const size = new TextEncoder().encode(content).byteLength
+      target.item.size = size
+      objectPreview.value = { ...preview, size }
+      if (preview.kind === 'text') {
+        if (previewText.value === content) {
+          modal.value = null
+          await loadObjects()
+        }
+        return
+      }
+      previewText.value = content
+      previewSaved.value = true
+      previewSavedTimer = setTimeout(() => {
+        previewSaved.value = false
+      }, 1800)
+    } catch (reason) {
+      if (generation === previewGeneration)
+        previewSaveError.value = reason instanceof Error ? reason.message : String(reason)
+    } finally {
+      if (generation === previewGeneration) previewSaving.value = false
+    }
   }
 
   function formatSize(size: number): string {
@@ -1875,7 +1867,7 @@ export function useAppController() {
       void window.ossBrowser.objects.discardPreview(url)
     }
     objectPreview.value = null
-    previewTextEtag = ''
+    previewTextTarget = undefined
     previewLoading.value = false
     previewError.value = ''
     previewSaving.value = false
@@ -1896,6 +1888,7 @@ export function useAppController() {
 
   async function performClearSavedProfile(): Promise<void> {
     await window.ossBrowser.profiles.clear()
+    auth.remember = false
     savedProfiles.value = []
     localStorage.removeItem('oss-browser-session')
   }
@@ -1986,6 +1979,10 @@ export function useAppController() {
 
   async function performRemoveProfile(profile: SavedProfileSummary): Promise<void> {
     await window.ossBrowser.profiles.remove(profile.id)
+    if (profile.id === profileId()) {
+      auth.remember = false
+      localStorage.removeItem('oss-browser-session')
+    }
     savedProfiles.value = await window.ossBrowser.profiles.list()
   }
 
@@ -2207,7 +2204,6 @@ export function useAppController() {
     selectProfileForLogin,
     clearSelectedLoginProfile,
     restoreSession,
-    saveSession,
     profileId,
     logout,
     confirmLogout,
@@ -2235,7 +2231,6 @@ export function useAppController() {
     createFolder,
     applyBucketAcl,
     removeSelected,
-    performRemoveSelected,
     renameSelected,
     transferSelected,
     copySelected,

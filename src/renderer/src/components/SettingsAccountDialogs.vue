@@ -70,7 +70,7 @@ const {
           :key="`${favorite.bucket}/${favorite.prefix}`"
           class="favorite-row"
         >
-          <div role="button" tabindex="0" @click="openFavorite(favorite)">
+          <div v-keyboard-click role="button" tabindex="0" @click="openFavorite(favorite)">
             <Star :size="17" /><span>oss://{{ favorite.bucket }}/{{ favorite.prefix }}</span>
           </div>
           <AppTooltip :label="t('删除收藏')">
@@ -123,6 +123,7 @@ const {
             :data-active="themeMode === 'system' ? '0' : themeMode === 'light' ? '1' : '2'"
           >
             <div
+              v-keyboard-click
               :class="{ active: themeMode === 'system' }"
               role="button"
               tabindex="0"
@@ -132,6 +133,7 @@ const {
               <span>{{ t('跟随系统') }}</span>
             </div>
             <div
+              v-keyboard-click
               :class="{ active: themeMode === 'light' }"
               role="button"
               tabindex="0"
@@ -141,6 +143,7 @@ const {
               <span>{{ t('浅色') }}</span>
             </div>
             <div
+              v-keyboard-click
               :class="{ active: themeMode === 'dark' }"
               role="button"
               tabindex="0"
@@ -325,7 +328,6 @@ const {
         </div>
         <template #footer>
           <AppButton :label="t('清空全部')" tone="danger" @click="clearSavedProfile" />
-          <!-- <AppButton :label="t('关闭')" @click="showProfilesModal = false" /> -->
         </template>
       </ModalShell>
     </Transition>

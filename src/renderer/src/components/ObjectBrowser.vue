@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import ErrorMessage from './ErrorMessage.vue'
 import { computed, ref, watch } from 'vue'
 import {
   Folder,
@@ -10,22 +9,19 @@ import {
   SquareCheck,
   SquareMinus,
   Star,
-  Upload,
-  X
+  Upload
 } from '@lucide/vue'
 import type { ObjectInfo } from '../../../shared/types'
 import type { AppController } from '../composables/useAppController'
 import { useMarqueeSelection } from '../composables/useMarqueeSelection'
 import { locale, storageClassLabel, t } from '../i18n'
 import AppButton from './AppButton.vue'
-import AppTooltip from './AppTooltip.vue'
 
 const props = defineProps<{ controller: AppController }>()
 const {
   getObjectVisual,
   modal,
   dragActive,
-  errorMessage,
   settings,
   fileBrowser,
   currentBucket,
@@ -214,22 +210,6 @@ function fileNameParts(item: ObjectInfo): {
 </script>
 
 <template>
-  <div v-if="errorMessage" class="error-strip">
-    <ErrorMessage :message="errorMessage" />
-    <AppTooltip :label="t('关闭')">
-      <div
-        class="error-dismiss"
-        role="button"
-        tabindex="0"
-        :aria-label="t('关闭')"
-        @click="errorMessage = ''"
-        @keydown.enter="errorMessage = ''"
-        @keydown.space.prevent="errorMessage = ''"
-      >
-        <X :size="16" />
-      </div>
-    </AppTooltip>
-  </div>
   <Transition name="file-content" mode="out-in">
     <div v-if="showFileLoading && !objects.length" key="loading" class="file-loading" role="status">
       <LoaderCircle :size="30" />
@@ -390,7 +370,9 @@ function fileNameParts(item: ObjectInfo): {
         class="load-more"
         role="button"
         tabindex="0"
-        @click="loadObjects(true)"
+        @click.stop="loadObjects(true)"
+        @keydown.enter.prevent="loadObjects(true)"
+        @keydown.space.prevent="loadObjects(true)"
       >
         {{ t('加载更多') }}
       </div>
@@ -556,7 +538,9 @@ function fileNameParts(item: ObjectInfo): {
         class="load-more"
         role="button"
         tabindex="0"
-        @click="loadObjects(true)"
+        @click.stop="loadObjects(true)"
+        @keydown.enter.prevent="loadObjects(true)"
+        @keydown.space.prevent="loadObjects(true)"
       >
         {{ t('加载更多') }}
       </div>

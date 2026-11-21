@@ -6,7 +6,7 @@ This project is inspired by [Alibaba OSS Browser](https://github.com/aliyun/oss-
 
 ## Features
 
-- AccessKey, STS, and authorization-code login
+- AccessKey and STS login
 - Credentials protected by Electron `safeStorage`
 - Bucket, folder, and object creation, upload, download, copy, move, delete, and permission management
 - Direct navigation with `oss://bucket/path/` addresses
@@ -14,8 +14,8 @@ This project is inspired by [Alibaba OSS Browser](https://github.com/aliyun/oss-
 - List and grid views with image thumbnails and file-type icons
 - Preview support for images, video, audio, PDF, Office, and text files
 - Temporary URLs, custom domains, image processing, and video frame extraction
-- CDN cache refresh, RAM user management, temporary authorization codes, and multipart upload management
-- Simplified Chinese, English, and Japanese interface languages
+- CDN cache refresh, RAM user and AccessKey management, and multipart upload management
+- Simplified Chinese, Traditional Chinese, English, Japanese, and Korean interface languages
 - Light, dark, and system appearance modes
 
 ## Install with Homebrew
@@ -46,7 +46,7 @@ brew uninstall --cask yulin96/apps/oss-browser
 ```
 
 Use `brew uninstall --cask --zap yulin96/apps/oss-browser` only when you also want to delete
-local settings, saved accounts, and transfer history.
+local settings, saved accounts, and transfer checkpoints.
 
 ## Development
 
@@ -154,7 +154,7 @@ The workflow also keeps the stable `oss-browser-latest-arm64.dmg` and
 
 ## Local Data and Permissions
 
-Saved credentials are encrypted with the operating system's secure storage. The application also stores account-specific home locations, favorites, display settings, and transfer history locally.
+Saved credentials are encrypted with the operating system's secure storage. The application also stores account-specific home locations, favorites, display settings, and transfer checkpoints locally. The transfer list lasts for the current session.
 
 On macOS, application data is stored under:
 

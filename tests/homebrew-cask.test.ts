@@ -62,6 +62,15 @@ describe('Homebrew release cask', () => {
     expect(await readFile(template, 'utf8')).toBe(original)
   })
 
+  it('reports an unrecognized cask template before writing a stale formula', async () => {
+    const { template, assets, output } = await fixture()
+    await writeFile(template, 'version "old"')
+    await expect(prepareHomebrewCask(template, assets, version, output)).rejects.toThrow(
+      '校验值字段'
+    )
+    await expect(readFile(output)).rejects.toMatchObject({ code: 'ENOENT' })
+  })
+
   it('does not generate a cask when a native DMG is missing', async () => {
     const { template, assets, output } = await fixture()
     await rm(join(assets, `oss-browser-${version}-x64.dmg`))

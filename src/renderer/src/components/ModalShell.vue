@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { X } from '@lucide/vue'
+import { FocusScope } from 'reka-ui'
 import { onBeforeUnmount, onMounted, ref } from 'vue'
 import { t } from '../i18n'
 import AppTooltip from './AppTooltip.vue'
@@ -45,28 +46,34 @@ function handleKeydown(event: KeyboardEvent): void {
 
 <template>
   <div ref="modalMask" class="modal-mask" @mousedown.self="handleClose">
-    <div
-      ref="modalCard"
-      class="modal-card"
-      :class="{ 'is-large': size === 'large' }"
-      :style="size === 'large' ? undefined : { width: width || '480px' }"
-    >
-      <div class="modal-head">
-        <div class="modal-title">{{ title }}</div>
-        <AppTooltip :label="t('关闭')">
-          <div
-            class="icon-button"
-            role="button"
-            tabindex="0"
-            :aria-label="t('关闭')"
-            @click="handleClose"
-          >
-            <X :size="18" />
-          </div>
-        </AppTooltip>
+    <FocusScope as-child loop trapped>
+      <div
+        ref="modalCard"
+        role="dialog"
+        aria-modal="true"
+        :aria-label="title"
+        class="modal-card"
+        :class="{ 'is-large': size === 'large' }"
+        :style="size === 'large' ? undefined : { width: width || '480px' }"
+      >
+        <div class="modal-head">
+          <div class="modal-title">{{ title }}</div>
+          <AppTooltip :label="t('关闭')">
+            <div
+              v-keyboard-click
+              class="icon-button"
+              role="button"
+              tabindex="0"
+              :aria-label="t('关闭')"
+              @click="handleClose"
+            >
+              <X :size="18" />
+            </div>
+          </AppTooltip>
+        </div>
+        <div class="modal-body"><slot /></div>
+        <div v-if="$slots.footer" class="modal-footer"><slot name="footer" /></div>
       </div>
-      <div class="modal-body"><slot /></div>
-      <div v-if="$slots.footer" class="modal-footer"><slot name="footer" /></div>
-    </div>
+    </FocusScope>
   </div>
 </template>

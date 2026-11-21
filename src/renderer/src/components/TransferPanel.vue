@@ -71,6 +71,7 @@ function handleKeydown(event: KeyboardEvent): void {
             :data-active="activeTransferTab === 'upload' ? '0' : '1'"
           >
             <div
+              v-keyboard-click
               :class="{ active: activeTransferTab === 'upload' }"
               role="button"
               tabindex="0"
@@ -82,6 +83,7 @@ function handleKeydown(event: KeyboardEvent): void {
               >
             </div>
             <div
+              v-keyboard-click
               :class="{ active: activeTransferTab === 'download' }"
               role="button"
               tabindex="0"
@@ -96,6 +98,7 @@ function handleKeydown(event: KeyboardEvent): void {
           </div>
           <AppTooltip :label="t('关闭')">
             <div
+              v-keyboard-click
               class="icon-button"
               role="button"
               tabindex="0"
@@ -114,6 +117,7 @@ function handleKeydown(event: KeyboardEvent): void {
           <div class="transfer-head-actions">
             <AppTooltip :label="t('恢复暂停任务')">
               <div
+                v-keyboard-click
                 class="transfer-action"
                 :class="{ disabled: !canResumeTransfers }"
                 :aria-disabled="!canResumeTransfers"
@@ -126,6 +130,7 @@ function handleKeydown(event: KeyboardEvent): void {
             </AppTooltip>
             <AppTooltip :label="t('重试失败任务')">
               <div
+                v-keyboard-click
                 class="transfer-action"
                 :class="{ disabled: !canRetryTransfers }"
                 :aria-disabled="!canRetryTransfers"
@@ -138,6 +143,7 @@ function handleKeydown(event: KeyboardEvent): void {
             </AppTooltip>
             <AppTooltip :label="t('暂停全部')">
               <div
+                v-keyboard-click
                 class="transfer-action"
                 :class="{ disabled: !canPauseTransfers }"
                 :aria-disabled="!canPauseTransfers"
@@ -150,6 +156,7 @@ function handleKeydown(event: KeyboardEvent): void {
             </AppTooltip>
             <AppTooltip :label="t('清除已完成记录')">
               <div
+                v-keyboard-click
                 class="transfer-action"
                 :class="{ disabled: !hasCompletedTransfers }"
                 :aria-disabled="!hasCompletedTransfers"
@@ -162,6 +169,7 @@ function handleKeydown(event: KeyboardEvent): void {
             </AppTooltip>
             <AppTooltip :label="t('清除全部任务')">
               <div
+                v-keyboard-click
                 class="transfer-action danger"
                 :class="{ disabled: !hasVisibleTransfers }"
                 :aria-disabled="!hasVisibleTransfers"

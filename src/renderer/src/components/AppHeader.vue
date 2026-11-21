@@ -85,13 +85,26 @@ function changeLocale(event: Event): void {
           </option>
         </select>
       </div>
-      <div class="transfer-trigger" role="button" tabindex="0" @click="emit('favorites')">
+      <div
+        v-keyboard-click
+        class="transfer-trigger"
+        role="button"
+        tabindex="0"
+        @click="emit('favorites')"
+      >
         <StarCheck :size="16" /> {{ t('收藏夹') }}
       </div>
-      <div class="transfer-trigger" role="button" tabindex="0" @click="emit('cacheRefresh')">
+      <div
+        v-keyboard-click
+        class="transfer-trigger"
+        role="button"
+        tabindex="0"
+        @click="emit('cacheRefresh')"
+      >
         <CloudCog :size="16" /> {{ t('刷新缓存') }}
       </div>
       <div
+        v-keyboard-click
         class="transfer-trigger transfer-panel-trigger"
         role="button"
         tabindex="0"
@@ -102,10 +115,23 @@ function changeLocale(event: Event): void {
           <span class="badge t-badge-dot">{{ transferCount }}</span>
         </span>
       </div>
-      <div class="transfer-trigger" role="button" tabindex="0" @click="emit('settings')">
+      <div
+        v-keyboard-click
+        class="transfer-trigger"
+        role="button"
+        tabindex="0"
+        @click="emit('settings')"
+      >
         <Settings :size="16" /> {{ t('设置') }}
       </div>
-      <div class="account-action" role="button" tabindex="0" @click="emit('logout')">
+      <div
+        v-keyboard-click
+        class="account-action"
+        :aria-label="t('退出登录')"
+        role="button"
+        tabindex="0"
+        @click="emit('logout')"
+      >
         <UserRound :size="16" /><span>{{ accountLabel }}</span
         ><LogOut :size="16" />
       </div>

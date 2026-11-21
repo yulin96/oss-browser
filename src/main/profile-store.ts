@@ -14,6 +14,15 @@ interface StoredProfile {
   encryptedConfig: string
 }
 
+function requireSecureStorage(): void {
+  if (
+    !safeStorage.isEncryptionAvailable() ||
+    (process.platform === 'linux' && safeStorage.getSelectedStorageBackend() === 'basic_text')
+  ) {
+    throw new Error('系统安全存储不可用，请启用系统密钥环，或关闭“记住登录信息”后连接')
+  }
+}
+
 export class ProfileStore {
   private mutationQueue: Promise<unknown> = Promise.resolve()
 
@@ -22,7 +31,7 @@ export class ProfileStore {
   }
 
   async list(): Promise<SavedProfileSummary[]> {
-    if (!safeStorage.isEncryptionAvailable()) throw new Error('系统安全存储当前不可用')
+    requireSecureStorage()
     return this.mutate(async () => {
       const stored = await this.read()
       const { profiles, migrated } = await this.decrypt(stored)
@@ -32,19 +41,19 @@ export class ProfileStore {
   }
 
   async get(id: string): Promise<SavedProfile> {
-    if (!safeStorage.isEncryptionAvailable()) throw new Error('系统安全存储当前不可用')
+    requireSecureStorage()
     return this.mutate(async () => {
       const stored = await this.read()
-      const { profiles, migrated } = await this.decrypt(stored)
+      const target = stored.find((item) => item.id === id)
+      if (!target) throw new Error('未找到已保存账号')
+      const { profiles, migrated } = await this.decrypt([target])
       if (migrated) await writeJsonFileAtomic(this.path, stored)
-      const profile = profiles.find((item) => item.id === id)
-      if (!profile) throw new Error('未找到已保存账号')
-      return profile
+      return profiles[0]
     })
   }
 
   async save(profile: SavedProfile): Promise<void> {
-    if (!safeStorage.isEncryptionAvailable()) throw new Error('系统安全存储当前不可用')
+    requireSecureStorage()
     await this.mutate(async () => {
       const stored = await this.read()
       const next: StoredProfile = {
@@ -106,13 +115,14 @@ export class ProfileStore {
     id: string,
     update: (config: SavedProfile['config']) => SavedProfile['config']
   ): Promise<void> {
-    if (!safeStorage.isEncryptionAvailable()) throw new Error('系统安全存储当前不可用')
+    requireSecureStorage()
     await this.mutate(async () => {
       const stored = await this.read()
-      const { profiles } = await this.decrypt(stored)
-      const profile = profiles.find((item) => item.id === id)
       const target = stored.find((item) => item.id === id)
-      if (!profile || !target) throw new Error('未找到已保存账号')
+      if (!target) throw new Error('未找到已保存账号')
+      const {
+        profiles: [profile]
+      } = await this.decrypt([target])
       target.encryptedConfig = safeStorage
         .encryptString(JSON.stringify(update(profile.config)))
         .toString('base64')

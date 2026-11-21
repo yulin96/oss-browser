@@ -6,6 +6,12 @@ export const translations: Record<Exclude<AppLocale, 'zh-CN'>, Record<string, st
   'zh-TW': zhTW,
   'ko-KR': koKR,
   'en-US': {
+    '系统安全存储不可用，请启用系统密钥环，或关闭“记住登录信息”后连接':
+      'Secure storage is unavailable. Enable the system keyring or turn off “Remember login” and connect again.',
+    '下载目录指向所选位置之外，请选择其他下载目录':
+      'The download folder points outside the selected location. Choose a different folder.',
+    下载对象没有有效的本地文件名: 'This object has no valid local file name.',
+    下载分片长度与预期不一致: 'The downloaded part has an unexpected size.',
     从头上传: 'Restart upload',
     '部分文件上传失败，请查看传输任务。':
       'Some files failed to upload. View transfers for details.',
@@ -540,6 +546,12 @@ export const translations: Record<Exclude<AppLocale, 'zh-CN'>, Record<string, st
     深度冷归档: 'Deep Cold Archive'
   },
   'ja-JP': {
+    '系统安全存储不可用，请启用系统密钥环，或关闭“记住登录信息”后连接':
+      '安全なストレージを利用できません。システムのキーリングを有効にするか、ログイン情報の保存をオフにして接続してください。',
+    '下载目录指向所选位置之外，请选择其他下载目录':
+      'ダウンロード先が選択した場所の外を指しています。別のフォルダーを選択してください。',
+    下载对象没有有效的本地文件名: 'このオブジェクトには有効なローカルファイル名がありません。',
+    下载分片长度与预期不一致: 'ダウンロードしたパートのサイズが想定と異なります。',
     从头上传: '最初からアップロード',
     '部分文件上传失败，请查看传输任务。':
       '一部のファイルをアップロードできませんでした。転送一覧で詳細を確認してください。',

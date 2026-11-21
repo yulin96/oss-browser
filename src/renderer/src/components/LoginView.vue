@@ -77,6 +77,7 @@ function chooseProfile(profile: SavedProfileSummary): void {
       >
         <AppTooltip :label="t('跟随系统')" side="bottom">
           <div
+            v-keyboard-click
             :class="{ active: themeMode === 'system' }"
             role="button"
             tabindex="0"
@@ -88,6 +89,7 @@ function chooseProfile(profile: SavedProfileSummary): void {
         </AppTooltip>
         <AppTooltip :label="t('浅色')" side="bottom">
           <div
+            v-keyboard-click
             :class="{ active: themeMode === 'light' }"
             role="button"
             tabindex="0"
@@ -99,6 +101,7 @@ function chooseProfile(profile: SavedProfileSummary): void {
         </AppTooltip>
         <AppTooltip :label="t('深色')" side="bottom">
           <div
+            v-keyboard-click
             :class="{ active: themeMode === 'dark' }"
             role="button"
             tabindex="0"

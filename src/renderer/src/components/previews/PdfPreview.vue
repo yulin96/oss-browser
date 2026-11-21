@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import ErrorMessage from '../ErrorMessage.vue'
-import { computed, nextTick, onBeforeUnmount, ref, shallowRef, watch } from 'vue'
+import { computed, nextTick, ref, shallowRef, watch } from 'vue'
 import {
   ChevronLeft,
   ChevronRight,
@@ -12,12 +12,7 @@ import {
   ZoomIn,
   ZoomOut
 } from '@lucide/vue'
-import {
-  getDocument,
-  GlobalWorkerOptions,
-  type PDFDocumentLoadingTask,
-  type PDFDocumentProxy
-} from 'pdfjs-dist'
+import { getDocument, GlobalWorkerOptions, type PDFDocumentProxy } from 'pdfjs-dist'
 import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
 import { t } from '../../i18n'
 import AppTooltip from '../AppTooltip.vue'
@@ -40,54 +35,54 @@ const searchMessage = ref('')
 const searching = ref(false)
 const documentProxy = shallowRef<PDFDocumentProxy>()
 
-let loadingTask: PDFDocumentLoadingTask | undefined
 const visiblePages = new Map<number, { ratio: number; top: number }>()
 
 const zoomLabel = computed(() => `${Math.round(scale.value * 100)}%`)
 const pageNumbers = computed(() => Array.from({ length: pageCount.value }, (_, index) => index + 1))
 
-async function loadDocument(): Promise<void> {
-  loading.value = true
-  loadProgress.value = 0
-  error.value = ''
-  searchMessage.value = ''
-  pageNumber.value = 1
-  visiblePages.clear()
-  await destroyDocument()
-
-  try {
-    const task = getDocument({ url: props.url })
-    loadingTask = task
-    task.onProgress = ({ loaded, total }) => {
-      loadProgress.value = total ? Math.round((loaded / total) * 100) : 0
+watch(
+  () => props.url,
+  async (url, _, onCleanup) => {
+    loading.value = true
+    loadProgress.value = 0
+    error.value = ''
+    searchMessage.value = ''
+    pageNumber.value = 1
+    visiblePages.clear()
+    documentProxy.value = undefined
+    let active = true
+    try {
+      const task = getDocument({ url })
+      onCleanup(() => {
+        active = false
+        void task.destroy().catch(() => undefined)
+      })
+      task.onProgress = ({ loaded, total }) => {
+        if (active) loadProgress.value = total ? Math.round((loaded / total) * 100) : 0
+      }
+      const pdf = await task.promise
+      if (!active) return
+      documentProxy.value = pdf
+      pageCount.value = pdf.numPages
+      loading.value = false
+      await nextTick()
+      if (active) await fitWidth()
+    } catch (reason) {
+      if (active) error.value = reason instanceof Error ? reason.message : String(reason)
+    } finally {
+      if (active) loading.value = false
     }
-    const pdf = await task.promise
-    documentProxy.value = pdf
-    pageCount.value = pdf.numPages
-    loading.value = false
-    await nextTick()
-    await fitWidth()
-  } catch (reason) {
-    error.value = reason instanceof Error ? reason.message : String(reason)
-  } finally {
-    loading.value = false
-  }
-}
-
-async function destroyDocument(): Promise<void> {
-  documentProxy.value = undefined
-  if (loadingTask) {
-    await loadingTask.destroy().catch(() => undefined)
-    loadingTask = undefined
-  }
-}
+  },
+  { immediate: true }
+)
 
 async function fitWidth(): Promise<void> {
   const pdf = documentProxy.value
   const target = container.value
   if (!pdf || !target) return
   const page = await pdf.getPage(pageNumber.value)
-  const viewport = page.getViewport({ scale: 1, rotation: rotation.value })
+  if (pdf !== documentProxy.value) return
+  const viewport = page.getViewport({ scale: 1, rotation: (page.rotate + rotation.value) % 360 })
   scale.value = Math.min(4, Math.max(0.25, (target.clientWidth - 52) / viewport.width))
 }
 
@@ -136,13 +131,15 @@ async function searchNext(): Promise<void> {
   searching.value = true
   searchMessage.value = ''
   try {
+    const startPage = pageNumber.value
     for (let offset = 1; offset <= pdf.numPages; offset += 1) {
-      const candidate = ((pageNumber.value - 1 + offset) % pdf.numPages) + 1
+      const candidate = ((startPage - 1 + offset) % pdf.numPages) + 1
       const page = await pdf.getPage(candidate)
       const text = (await page.getTextContent()).items
         .map((item) => ('str' in item ? item.str : ''))
         .join(' ')
         .toLocaleLowerCase()
+      if (pdf !== documentProxy.value) return
       if (text.includes(query)) {
         searchMessage.value = t('已定位到第 {page} 页', { page: candidate })
         scrollToPage(candidate)
@@ -150,16 +147,13 @@ async function searchNext(): Promise<void> {
       }
     }
     searchMessage.value = t('未找到匹配内容')
+  } catch (reason) {
+    if (pdf === documentProxy.value)
+      searchMessage.value = reason instanceof Error ? reason.message : String(reason)
   } finally {
     searching.value = false
   }
 }
-
-watch(() => props.url, loadDocument, { immediate: true })
-
-onBeforeUnmount(() => {
-  void destroyDocument()
-})
 </script>
 
 <template>

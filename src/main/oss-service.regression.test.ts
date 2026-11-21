@@ -1,8 +1,18 @@
 import OSS from 'ali-oss'
 import { app } from 'electron'
-import { link, mkdtemp, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises'
+import {
+  link,
+  mkdtemp,
+  readFile,
+  readdir,
+  realpath,
+  rename,
+  rm,
+  stat,
+  writeFile
+} from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { Readable } from 'node:stream'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { DEFAULT_APP_SETTINGS } from '../shared/app-settings'
@@ -12,7 +22,12 @@ import { OssService } from './oss-service'
 vi.mock('electron', () => ({ app: { getPath: vi.fn(() => tmpdir()) }, nativeImage: {} }))
 vi.mock('node:fs/promises', async (importOriginal) => {
   const actual = await importOriginal<typeof import('node:fs/promises')>()
-  return { ...actual, rename: vi.fn(actual.rename), link: vi.fn(actual.link) }
+  return {
+    ...actual,
+    rename: vi.fn(actual.rename),
+    link: vi.fn(actual.link),
+    realpath: vi.fn(actual.realpath)
+  }
 })
 
 const directories: string[] = []
@@ -60,6 +75,38 @@ function downloadClient(): {
 }
 
 describe('download protection and session isolation', () => {
+  it('rejects an empty directory marker whose resolved directory lies outside the chosen root', async () => {
+    const destination = await directory()
+    const folder = join(destination, 'linked')
+    const actual = await vi.importActual<typeof import('node:fs/promises')>('node:fs/promises')
+    vi.mocked(realpath).mockImplementation(async (path) =>
+      path === folder ? dirname(destination) : actual.realpath(path)
+    )
+    const service = new OssService(vi.fn())
+    installClient(service, { list: vi.fn().mockResolvedValue({ objects: [], isTruncated: false }) })
+    await expect(
+      service.download(
+        'bucket',
+        [{ ...file, name: 'linked/', displayName: 'linked', isDirectory: true }],
+        destination
+      )
+    ).rejects.toThrow('所选位置之外')
+    expect(await readdir(destination)).toEqual([])
+  })
+
+  it('keeps a local file intact when the server omits its size', async () => {
+    const destination = await directory()
+    const path = join(destination, file.name)
+    await writeFile(path, 'original')
+    const client = downloadClient()
+    client.getObjectMeta.mockImplementation(async () => ({ res: { headers: { etag: 'remote' } } }))
+    const service = new OssService(vi.fn(), async () => true)
+    installClient(service, client)
+    expect(await service.download('bucket', [file], destination)).toBe(false)
+    expect(await readFile(path, 'utf8')).toBe('original')
+    expect(client.getStream).not.toHaveBeenCalled()
+  })
+
   it.each([0, 6])('preserves independent sidecar files when downloading %i bytes', async (size) => {
     const destination = await directory()
     const partialPath = join(destination, 'file.txt.ossbrowser.part')
@@ -542,6 +589,37 @@ describe('region and HTTP header contracts', () => {
       expect(new URL(service.signedUrl('test-bucket', 'file.txt', 60)).host).toBe(expected)
     }
   )
+
+  it('follows bucket and RAM user markers and keeps the region from the last page', async () => {
+    const service = new OssService(vi.fn())
+    const listBuckets = vi
+      .spyOn(OSS.prototype, 'listBuckets')
+      .mockResolvedValueOnce({ buckets: [{ name: 'first' }], isTruncated: true, nextMarker: 'b' })
+      .mockResolvedValueOnce({ buckets: [{ name: 'second', region: 'oss-cn-shanghai' }] })
+    const buckets = await service.connect({
+      endpoint: 'oss-cn-hangzhou.aliyuncs.com',
+      endpointMode: 'public',
+      accessKeyId: 'test',
+      accessKeySecret: 'test',
+      secure: true,
+      remember: false
+    })
+    expect(buckets.map((bucket) => bucket.name)).toEqual(['first', 'second'])
+    expect(listBuckets).toHaveBeenLastCalledWith({ marker: 'b' })
+    expect(service.defaultObjectDomain('second')).toBe('second.oss-cn-shanghai.aliyuncs.com')
+
+    const listUsers = vi
+      .fn()
+      .mockResolvedValueOnce({
+        body: { users: { user: [{ userName: 'alice' }] }, isTruncated: true, marker: 'u' }
+      })
+      .mockResolvedValueOnce({ body: { users: { user: [{ userName: 'bob' }] } } })
+    vi.spyOn(service as unknown as { ramClient: () => unknown }, 'ramClient').mockReturnValue({
+      listUsers
+    })
+    expect((await service.listRamUsers()).map((user) => user.userName)).toEqual(['alice', 'bob'])
+    expect(listUsers).toHaveBeenLastCalledWith(expect.objectContaining({ marker: 'u' }))
+  })
 
   it('does not clear a newer connection when an old bucket listing fails', async () => {
     let rejectOld!: (error: Error) => void

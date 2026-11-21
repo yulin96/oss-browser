@@ -284,7 +284,7 @@ export class FloatingUploadManager {
           return
         }
       }
-      await this.performUpload(paths, skipNames, preparationId)
+      await this.performUpload(target, paths, skipNames, preparationId)
     } catch (error) {
       if (generation !== this.accountGeneration) return
       this.setStatus('error', error instanceof Error ? error.message : String(error))
@@ -303,28 +303,18 @@ export class FloatingUploadManager {
       this.setStatus('idle')
       return
     }
-    await this.performUpload(request.paths, skipNames, preparationId || undefined)
+    await this.performUpload(request.target, request.paths, skipNames, preparationId || undefined)
   }
 
   handleTransfer(item: TransferItem): void {
     if (!this.activeBatchId || item.batchId !== this.activeBatchId) return
-    this.transferItems.set(item.id, item)
-    const items = [...this.transferItems.values()]
+    if (item.status === 'running') this.transferItems.set(item.id, item)
+    else this.transferItems.delete(item.id)
     const total = item.batchTotal
-    const completed = Math.max(
-      item.batchDone,
-      items.filter((entry) => entry.status === 'done').length
-    )
-    const progress = total
-      ? Math.min(
-          1,
-          (completed +
-            items
-              .filter((entry) => entry.status === 'running')
-              .reduce((sum, entry) => sum + entry.progress, 0)) /
-            total
-        )
-      : 0
+    const completed = item.batchDone
+    let runningProgress = 0
+    for (const active of this.transferItems.values()) runningProgress += active.progress
+    const progress = total ? Math.min(1, (completed + runningProgress) / total) : 0
     this.state.total = total
     this.state.completed = completed
     this.state.progress = progress
@@ -332,16 +322,12 @@ export class FloatingUploadManager {
   }
 
   private async performUpload(
+    target: FloatingUploadTarget,
     paths: string[],
     skipNames: string[],
     preparationId?: string
   ): Promise<void> {
     const generation = this.accountGeneration
-    const target = this.state.target
-    if (!target) {
-      if (preparationId) this.oss.discardUploadPreparation(preparationId)
-      return
-    }
     this.activeBatchId = null
     this.transferItems.clear()
     this.state.total = paths.length

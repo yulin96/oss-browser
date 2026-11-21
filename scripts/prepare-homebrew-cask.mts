@@ -21,8 +21,10 @@ export async function prepareHomebrewCask(
     checksums.push(hash.digest('hex'))
   }
   const template = await readFile(templatePath, 'utf8')
+  const fields = /^ {2}version .*\r?\n {2}sha256 arm: ".*",\r?\n +intel: ".*"$/m
+  if (!fields.test(template)) throw new Error('Homebrew 配方缺少版本或架构校验值字段')
   const cask = template.replace(
-    /^ {2}version .*\n {2}sha256 arm: ".*",\n +intel: ".*"$/m,
+    fields,
     `  version "${version}"\n  sha256 arm: "${checksums[0]}",\n         intel: "${checksums[1]}"`
   )
   await mkdir(dirname(outputPath), { recursive: true })

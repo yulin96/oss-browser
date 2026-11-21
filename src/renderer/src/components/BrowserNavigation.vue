@@ -42,32 +42,80 @@ const {
 <template>
   <div class="quick-nav">
     <AppTooltip :label="t('后退')" side="top">
-      <div class="nav-icon" :class="{ disabled: navigationIndex <= 0 }" @click="goBack">
+      <div
+        v-keyboard-click
+        class="nav-icon"
+        role="button"
+        tabindex="0"
+        :aria-label="t('后退')"
+        :class="{ disabled: navigationIndex <= 0 }"
+        :aria-disabled="navigationIndex <= 0"
+        @click="goBack"
+      >
         <ArrowLeft :size="18" />
       </div>
     </AppTooltip>
     <AppTooltip :label="t('前进')" side="top">
       <div
+        v-keyboard-click
         class="nav-icon"
+        role="button"
+        tabindex="0"
+        :aria-label="t('前进')"
         :class="{ disabled: navigationIndex >= navigationHistory.length - 1 }"
+        :aria-disabled="navigationIndex >= navigationHistory.length - 1"
         @click="goForward"
       >
         <ArrowRight :size="18" />
       </div>
     </AppTooltip>
     <AppTooltip :label="t('上一级')" side="top">
-      <div class="nav-icon" @click="goUp"><ArrowUp :size="18" /></div>
+      <div
+        v-keyboard-click
+        class="nav-icon"
+        role="button"
+        tabindex="0"
+        :aria-label="t('上一级')"
+        @click="goUp"
+      >
+        <ArrowUp :size="18" />
+      </div>
     </AppTooltip>
     <AppTooltip :label="t('刷新')" side="top">
-      <div class="nav-icon" @click="loadObjects()"><RefreshCw :size="18" /></div>
+      <div
+        v-keyboard-click
+        class="nav-icon"
+        role="button"
+        tabindex="0"
+        :aria-label="t('刷新')"
+        @click="loadObjects()"
+      >
+        <RefreshCw :size="18" />
+      </div>
     </AppTooltip>
     <AppTooltip :label="t('Bucket 首页')" side="top">
-      <div class="nav-icon" @click="goBucketHome">
+      <div
+        v-keyboard-click
+        class="nav-icon"
+        role="button"
+        tabindex="0"
+        :aria-label="t('Bucket 首页')"
+        @click="goBucketHome"
+      >
         <LucideIcon name="bucket" :icon-node="bucketIcon" :size="18" />
       </div>
     </AppTooltip>
     <AppTooltip :label="t('首页')" side="top">
-      <div class="nav-icon" @click="goHome"><Home :size="18" /></div>
+      <div
+        v-keyboard-click
+        class="nav-icon"
+        role="button"
+        tabindex="0"
+        :aria-label="t('首页')"
+        @click="goHome"
+      >
+        <Home :size="18" />
+      </div>
     </AppTooltip>
     <div class="address-wrap">
       <input
@@ -101,7 +149,11 @@ const {
     </div>
     <AppTooltip :label="t('收藏当前目录')" side="top">
       <div
+        v-keyboard-click
         class="nav-icon favorite-nav"
+        role="button"
+        tabindex="0"
+        :aria-label="t('收藏当前目录')"
         :class="{ active: isCurrentFavorite() }"
         @click="toggleFavorite"
       >
@@ -109,7 +161,15 @@ const {
       </div>
     </AppTooltip>
     <AppTooltip :label="t(isCurrentHome() ? '取消首页' : '设为首页')" side="top">
-      <div class="nav-icon home-nav" :class="{ active: isCurrentHome() }" @click="setCurrentAsHome">
+      <div
+        v-keyboard-click
+        class="nav-icon home-nav"
+        role="button"
+        tabindex="0"
+        :aria-label="t(isCurrentHome() ? '取消首页' : '设为首页')"
+        :class="{ active: isCurrentHome() }"
+        @click="setCurrentAsHome"
+      >
         <HousePlus :size="18" />
       </div>
     </AppTooltip>

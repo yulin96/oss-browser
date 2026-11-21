@@ -43,7 +43,6 @@
     "@alicloud/openapi-core": "1.0.8",
     "@alicloud/ram20150501": "1.2.1",
     "@alicloud/sts20150401": "1.2.0",
-    "@electron-toolkit/preload": "^3.0.2",
     "@electron-toolkit/utils": "^4.0.0",
     "@lucide/lab": "0.1.2",
     "@lucide/vue": "^1.30.0",

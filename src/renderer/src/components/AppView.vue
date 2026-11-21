@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '../i18n'
 import { CircleCheck, X } from '@lucide/vue'
 
 import appIcon from '../assets/icon.png'
@@ -34,7 +35,15 @@ const {
       <div v-if="toastMessage" class="success-toast">
         <CircleCheck :size="18" />
         <span>{{ toastMessage }}</span>
-        <div role="button" tabindex="0" @click="toastMessage = ''"><X :size="15" /></div>
+        <div
+          v-keyboard-click
+          role="button"
+          tabindex="0"
+          :aria-label="t('关闭')"
+          @click="toastMessage = ''"
+        >
+          <X :size="15" />
+        </div>
       </div>
     </Transition>
 

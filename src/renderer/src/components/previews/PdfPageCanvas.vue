@@ -49,7 +49,10 @@ async function renderPage(): Promise<void> {
     const naturalViewport = pageProxy.getViewport({ scale: 1 })
     baseWidth.value = naturalViewport.width
     baseHeight.value = naturalViewport.height
-    const viewport = pageProxy.getViewport({ scale: props.scale, rotation: props.rotation })
+    const viewport = pageProxy.getViewport({
+      scale: props.scale,
+      rotation: (pageProxy.rotate + props.rotation) % 360
+    })
     const pixelRatio = Math.min(window.devicePixelRatio || 1, 2)
     const target = canvas.value
     const context = target.getContext('2d')

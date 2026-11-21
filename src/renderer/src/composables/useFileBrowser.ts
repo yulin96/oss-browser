@@ -32,7 +32,6 @@ export type ObjectGroupMode = 'none' | 'day'
 export function useFileBrowser(options: {
   settings: AppSettings
   profileId: () => string
-  saveSession: () => void
   closeModal: () => void
   runBrowserTask: <T>(task: () => Promise<T>) => Promise<T | undefined>
 }): {
@@ -157,7 +156,7 @@ export function useFileBrowser(options: {
   const filteredObjects = computed(() => {
     const direction = sortDirection.value === 'asc' ? 1 : -1
 
-    return [...displayedObjects.value].sort((left, right) => {
+    return displayedObjects.value.toSorted((left, right) => {
       if (left.isDirectory !== right.isDirectory) return left.isDirectory ? -1 : 1
 
       let result = 0
@@ -204,14 +203,25 @@ export function useFileBrowser(options: {
 
   function loadAccountPreferences(): void {
     try {
-      favorites.value = JSON.parse(localStorage.getItem(favoriteStorageKey()) || '[]')
+      const stored: unknown = JSON.parse(localStorage.getItem(favoriteStorageKey()) || '[]')
+      favorites.value = Array.isArray(stored)
+        ? stored.filter(
+            (item) => item && typeof item.bucket === 'string' && typeof item.prefix === 'string'
+          )
+        : []
     } catch {
       favorites.value = []
       localStorage.removeItem(favoriteStorageKey())
     }
     try {
       const raw = localStorage.getItem(homeStorageKey())
-      homeLocation.value = raw ? (JSON.parse(raw) as HomeLocation) : null
+      const home = raw ? JSON.parse(raw) : null
+      homeLocation.value =
+        home &&
+        typeof home.bucket === 'string' &&
+        (home.prefix === undefined || typeof home.prefix === 'string')
+          ? home
+          : null
     } catch {
       homeLocation.value = null
       localStorage.removeItem(homeStorageKey())
@@ -341,13 +351,12 @@ export function useFileBrowser(options: {
     }
     prefix.value = path
     addressInput.value = `oss://${bucket.name}/${path}`
-    if (record) {
+    if (record && navigationHistory.value[navigationIndex.value] !== addressInput.value) {
       navigationHistory.value = navigationHistory.value.slice(0, navigationIndex.value + 1)
       navigationHistory.value.push(addressInput.value)
       navigationIndex.value = navigationHistory.value.length - 1
     }
     await loadObjects()
-    options.saveSession()
   }
 
   async function goToAddress(record = true): Promise<void> {
@@ -386,6 +395,12 @@ export function useFileBrowser(options: {
     if (searchTimer) clearTimeout(searchTimer)
     searchTimer = undefined
     bucketStorageStatGeneration += 1
+    imageGeneration += 1
+    imageQueue.length = 0
+    pendingImageGenerations.clear()
+    nextMarker.value = undefined
+    hasMoreObjects.value = false
+    error.value = ''
     loading.value = false
     currentBucket.value = null
     bucketStorageStat.value = null
@@ -550,7 +565,7 @@ export function useFileBrowser(options: {
         )
         if (generation !== searchGeneration || !isCurrentLocation(bucketName, requestedPrefix))
           return
-        if (result.matches.length) searchObjects.value = [...searchObjects.value, ...result.matches]
+        if (result.matches.length) searchObjects.value.push(...result.matches)
         searchScannedCount.value += result.directories + result.files
         marker = result.isTruncated ? result.nextMarker : undefined
       } while (marker)
@@ -591,7 +606,7 @@ export function useFileBrowser(options: {
   watch(searchText, () => queueObjectSearch())
 
   async function loadObjects(append = false): Promise<void> {
-    if (!currentBucket.value) return
+    if (!currentBucket.value || (append && (loading.value || !nextMarker.value))) return
     const generation = ++loadGeneration
     const bucketName = currentBucket.value.name
     const requestedPrefix = prefix.value
@@ -633,10 +648,10 @@ export function useFileBrowser(options: {
       prefix.value !== requestedPrefix
     )
       return
-    objects.value = append ? [...objects.value, ...result.objects] : result.objects
+    if (append) objects.value.push(...result.objects)
+    else objects.value = result.objects
     nextMarker.value = result.nextMarker
-    hasMoreObjects.value = result.isTruncated
-    selectedNames.value = new Set()
+    hasMoreObjects.value = Boolean(result.isTruncated && result.nextMarker)
     if (!append) {
       startCountingObjects(bucketName, requestedPrefix, result)
       if (searchText.value.trim()) queueObjectSearch(0)

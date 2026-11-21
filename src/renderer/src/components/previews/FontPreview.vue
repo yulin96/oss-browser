@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import ErrorMessage from '../ErrorMessage.vue'
-import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { LoaderCircle, TriangleAlert } from '@lucide/vue'
 import { t } from '../../i18n'
 
@@ -15,7 +15,6 @@ const error = ref('')
 const sample = ref('字体预览 Font Preview 0123456789')
 const fontSize = ref(42)
 const fontFamily = `oss-preview-${crypto.randomUUID()}`
-let loadedFont: FontFace | undefined
 
 const formattedSize = computed(() => {
   if (props.size < 1024) return `${props.size} B`
@@ -23,32 +22,34 @@ const formattedSize = computed(() => {
   return `${(props.size / 1024 / 1024).toFixed(1)} MB`
 })
 
-async function loadFont(): Promise<void> {
-  loading.value = true
-  error.value = ''
-  if (loadedFont) {
-    document.fonts.delete(loadedFont)
-    loadedFont = undefined
-  }
-  try {
-    const response = await fetch(props.url)
-    if (!response.ok) throw new Error(`HTTP ${response.status}`)
-    const font = new FontFace(fontFamily, await response.arrayBuffer())
-    await font.load()
-    document.fonts.add(font)
-    loadedFont = font
-  } catch (reason) {
-    error.value = reason instanceof Error ? reason.message : String(reason)
-  } finally {
-    loading.value = false
-  }
-}
-
-watch(() => props.url, loadFont, { immediate: true })
-
-onBeforeUnmount(() => {
-  if (loadedFont) document.fonts.delete(loadedFont)
-})
+watch(
+  () => props.url,
+  async (url, _, onCleanup) => {
+    const controller = new AbortController()
+    let loadedFont: FontFace | undefined
+    onCleanup(() => {
+      controller.abort()
+      if (loadedFont) document.fonts.delete(loadedFont)
+    })
+    loading.value = true
+    error.value = ''
+    try {
+      const response = await fetch(url, { signal: controller.signal })
+      if (!response.ok) throw new Error(`HTTP ${response.status}`)
+      const font = new FontFace(fontFamily, await response.arrayBuffer())
+      await font.load()
+      if (controller.signal.aborted) return
+      document.fonts.add(font)
+      loadedFont = font
+    } catch (reason) {
+      if (!controller.signal.aborted)
+        error.value = reason instanceof Error ? reason.message : String(reason)
+    } finally {
+      if (!controller.signal.aborted) loading.value = false
+    }
+  },
+  { immediate: true }
+)
 </script>
 
 <template>

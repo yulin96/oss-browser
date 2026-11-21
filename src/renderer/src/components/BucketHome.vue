@@ -59,6 +59,7 @@ const emit = defineEmits<{
       <div
         v-for="bucket in buckets"
         :key="bucket.name"
+        v-keyboard-click
         class="bucket-card"
         role="button"
         tabindex="0"

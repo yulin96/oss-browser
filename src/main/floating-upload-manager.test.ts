@@ -58,6 +58,36 @@ describe('floating upload account ownership', () => {
     expect(manager.getState().target).toEqual(newTarget)
   })
 
+  it('uses the drop destination even if the floating target changes during confirmation', async () => {
+    const oss = {
+      getUploadConflictPolicy: () => 'ask',
+      findUploadConflicts: async () => ({ id: 'draft', conflicts: [{ name: 'file.txt' }] }),
+      upload: vi.fn(async () => true)
+    }
+    const manager = new FloatingUploadManager(
+      oss as unknown as OssService,
+      {
+        get: async () => ({ target: oldTarget, enabled: false }),
+        update: vi.fn()
+      } as unknown as FloatingUploadStore,
+      () => null,
+      vi.fn(),
+      vi.fn()
+    )
+    await manager.setAccount('A')
+    await manager.upload(['/tmp/file.txt'])
+    await manager.setTarget({ ...oldTarget, prefix: 'elsewhere/' })
+    await manager.resolveRequest([])
+    expect(oss.upload).toHaveBeenCalledWith(
+      oldTarget.bucket,
+      oldTarget.prefix,
+      ['/tmp/file.txt'],
+      { skipNames: [], preparationId: 'draft' },
+      expect.any(Function)
+    )
+    await manager.setAccount(null)
+  })
+
   it('does not replace the new account state when an old upload finishes', async () => {
     let finish!: (result: boolean) => void
     let started!: () => void

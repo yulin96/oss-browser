@@ -122,7 +122,13 @@ const {
         @click="pasteToCurrentDirectory"
       />
       <AppTooltip :label="t('取消复制')">
-        <div class="paste-cancel" role="button" tabindex="0" @click="copyBuffer = null">
+        <div
+          v-keyboard-click
+          class="paste-cancel"
+          role="button"
+          tabindex="0"
+          @click="copyBuffer = null"
+        >
           <X :size="16" />
         </div>
       </AppTooltip>
@@ -218,6 +224,7 @@ const {
     >
       <AppTooltip :label="t('列表模式')">
         <div
+          v-keyboard-click
           :class="{ active: viewMode === 'list' }"
           role="button"
           tabindex="0"
@@ -228,6 +235,7 @@ const {
       </AppTooltip>
       <AppTooltip :label="t('图标模式')">
         <div
+          v-keyboard-click
           :class="{ active: viewMode === 'grid' }"
           role="button"
           tabindex="0"

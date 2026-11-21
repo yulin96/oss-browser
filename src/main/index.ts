@@ -164,24 +164,15 @@ function registerMediaProtocol(): void {
     }
 
     if (url.hostname !== 'object') return new Response(null, { status: 404 })
-    const previewUrl = oss.resolveObjectPreview(token)
+    const previewUrl = oss.resolveObjectPreview(token, request.method)
     if (!previewUrl) return new Response(null, { status: 404 })
 
     const range = request.headers.get('range')
     try {
-      if (request.method === 'HEAD') {
-        const response = await net.fetch(previewUrl, {
-          headers: { range: range || 'bytes=0-0' }
-        })
-        return withPreviewCors(
-          new Response(null, {
-            status: response.ok ? 200 : response.status,
-            headers: response.headers
-          })
-        )
-      }
       return withPreviewCors(
         await net.fetch(previewUrl, {
+          method: request.method,
+          signal: request.signal,
           headers: range ? { range } : undefined
         })
       )
@@ -304,7 +295,10 @@ function registerIpc(): void {
       if (generation !== authGeneration) throw new Error('账号已切换，当前登录已取消')
       return buckets
     } catch (error) {
-      if (generation === authGeneration) await floatingUpload.setAccount(null)
+      if (generation === authGeneration) {
+        oss.disconnect()
+        await floatingUpload.setAccount(null)
+      }
       throw error
     }
   })
@@ -333,7 +327,10 @@ function registerIpc(): void {
       if (generation !== authGeneration) throw new Error('账号已切换，当前登录已取消')
       return { profile: toSavedProfileSummary(profile), buckets }
     } catch (error) {
-      if (generation === authGeneration) await floatingUpload.setAccount(null)
+      if (generation === authGeneration) {
+        oss.disconnect()
+        await floatingUpload.setAccount(null)
+      }
       throw error
     }
   })

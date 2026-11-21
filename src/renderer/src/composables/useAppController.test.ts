@@ -91,6 +91,84 @@ describe('object action contracts', () => {
     expect(controller.confirmation.value?.description).toContain('所选文件夹及其中全部内容也会删除')
   })
 
+  it('deletes only the objects named by the original confirmation', async () => {
+    const { controller } = await fixture()
+    const remove = vi.fn(async () => undefined)
+    Object.assign(window.ossBrowser.objects, {
+      remove,
+      list: vi.fn(async () => ({ objects: [], isTruncated: false }))
+    })
+    controller.removeSelected()
+    controller.selectedNames.value = new Set()
+    await controller.confirmation.value!.action()
+    expect(remove).toHaveBeenCalledExactlyOnceWith('bucket', ['file.txt'])
+  })
+
+  it('keeps earlier selections and coalesces repeated load-more clicks', async () => {
+    const { controller } = await fixture()
+    const first = controller.objects.value[0]
+    const list = vi
+      .fn()
+      .mockResolvedValueOnce({ objects: [first], isTruncated: true, nextMarker: 'next' })
+      .mockResolvedValueOnce({ objects: [{ ...first, name: 'two.txt' }], isTruncated: false })
+    Object.assign(window.ossBrowser.objects, {
+      list,
+      scan: vi.fn(async () => ({ directories: 0, files: 1, isTruncated: false }))
+    })
+    await controller.loadObjects()
+    controller.toggleSelection(first)
+    await Promise.all([controller.loadObjects(true), controller.loadObjects(true)])
+    expect(controller.objects.value.map((item) => item.name)).toEqual(['file.txt', 'two.txt'])
+    expect([...controller.selectedNames.value]).toEqual(['file.txt'])
+    expect(list).toHaveBeenCalledTimes(2)
+  })
+
+  it('clears temporary credentials and the remembered session when logging out', async () => {
+    const { controller } = await fixture()
+    Object.assign(window.ossBrowser, { auth: { disconnect: vi.fn(async () => undefined) } })
+    Object.assign(controller.auth, {
+      accessKeySecret: 'temporary',
+      stsToken: 'temporary',
+      cdnCredentials: { accessKeyId: 'test', accessKeySecret: 'temporary' }
+    })
+    await controller.logout()
+    expect(controller.auth.accessKeySecret).toBe('')
+    expect(controller.auth.stsToken).toBe('')
+    expect(controller.auth.cdnCredentials).toBeUndefined()
+    expect(localStorage.removeItem).toHaveBeenCalledWith('oss-browser-session')
+  })
+
+  it('saves the open text file and keeps edits typed while saving', async () => {
+    const { controller } = await fixture()
+    let finish!: (etag: string) => void
+    const saveText = vi.fn(
+      () =>
+        new Promise<string>((resolve) => {
+          finish = resolve
+        })
+    )
+    Object.assign(window.ossBrowser.objects, {
+      readText: async () => ({ content: 'original', etag: 'v1' }),
+      saveText
+    })
+    await controller.openPreview()
+    controller.previewText.value = 'first edit'
+    const saving = controller.savePreviewText()
+    controller.selectedNames.value = new Set()
+    controller.previewText.value = 'later edit'
+    await controller.savePreviewText()
+    expect(saveText).toHaveBeenCalledExactlyOnceWith('bucket', 'file.txt', 'first edit', 'v1')
+    finish('v2')
+    await saving
+    expect(controller.modal.value).toBe('preview')
+    expect(controller.previewText.value).toBe('later edit')
+    const again = controller.savePreviewText()
+    expect(saveText).toHaveBeenLastCalledWith('bucket', 'file.txt', 'later edit', 'v2')
+    finish('v3')
+    await again
+    expect(controller.modal.value).toBeNull()
+  })
+
   it('disables retry for an oversized preview and still permits downloading the file', async () => {
     const { controller, download } = await fixture()
     controller.objects.value[0].size = 6 * 1024 * 1024

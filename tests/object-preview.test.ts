@@ -2,6 +2,10 @@ import { describe, expect, it } from 'vitest'
 import { resolveObjectPreview } from '../src/shared/object-preview'
 
 describe('object preview resolver', () => {
+  it('treats an unknown extension as an ordinary file', () => {
+    expect(resolveObjectPreview('data.constructor').kind).toBe('other')
+  })
+
   it.each([
     ['report.pdf', 'pdf'],
     ['font.woff2', 'font'],

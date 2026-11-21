@@ -203,8 +203,8 @@
             <article class="feature-card">
               <div class="feature-icon">◎</div>
               <span class="tag">身份与权限</span>
-              <h3>AccessKey、STS 与授权码</h3>
-              <p>支持三种凭证接入方式，并提供对象 ACL、RAM 用户管理和临时授权码管理功能。</p>
+              <h3>AccessKey 与 STS 登录</h3>
+              <p>可设置对象访问权限，管理 RAM 用户及其 AccessKey。</p>
             </article>
 
             <article class="feature-card feature-wide">
@@ -245,7 +245,7 @@
               <span>01</span>
               <div>
                 <strong>配置访问凭证</strong>
-                <p>添加 AccessKey、STS 凭证或临时授权码，并配置对应的 Endpoint。</p>
+                <p>填写 AccessKey 或 STS 临时凭证，并配置对应的 Endpoint。</p>
               </div>
             </li>
             <li>
@@ -294,8 +294,7 @@
               <code>03 / LOCAL DATA</code>
               <h3>账号数据保存在本地</h3>
               <p>
-                首页位置、收藏、显示设置和传输记录按账号存储；保存的凭证由 Electron safeStorage
-                保护。
+                首页位置和收藏按账号存储，保存的凭证由 Electron safeStorage 保护。
               </p>
             </article>
             <article>
@@ -326,7 +325,7 @@
             <p>
               保存的凭证通过 Electron
               <code>safeStorage</code>
-              调用操作系统密钥存储能力加密。账号首页、收藏、显示设置与传输记录按账号写入本地应用数据目录。
+              调用操作系统密钥存储能力加密。首页和收藏按账号保存，显示设置与传输断点也保存在本机。传输记录仅在当前会话中显示。
             </p>
             <div class="security-note">
               OSS Browser 是独立维护的第三方项目，并非阿里云官方客户端。发布包由仓库中的 GitHub

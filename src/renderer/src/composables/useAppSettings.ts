@@ -159,11 +159,15 @@ export function useAppSettings(options: {
     () => options.auth.secure,
     async (nextSecure) => {
       if (!options.loggedIn.value) return
-      await window.ossBrowser.auth.setSecure(nextSecure)
-      if (options.auth.remember) {
-        await window.ossBrowser.profiles.setSecure(options.profileId(), nextSecure)
-        options.savedProfiles.value = await window.ossBrowser.profiles.list()
-      }
+      const id = options.profileId()
+      const remember = options.auth.remember
+      await options.run(async () => {
+        await window.ossBrowser.auth.setSecure(nextSecure)
+        if (remember && options.loggedIn.value && options.profileId() === id) {
+          await window.ossBrowser.profiles.setSecure(id, nextSecure)
+          options.savedProfiles.value = await window.ossBrowser.profiles.list()
+        }
+      })
     }
   )
 

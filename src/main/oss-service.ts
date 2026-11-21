@@ -89,6 +89,7 @@ interface PreparedUpload {
   paths: string[]
   entries: UploadEntry[]
   conflictNames: Set<string>
+  previewTokens: string[]
 }
 interface DownloadRange {
   start: number
@@ -147,7 +148,10 @@ export class OssService {
     { direction: TransferDirection; run: () => Promise<void>; transfer: ActiveTransfer }
   >()
   private readonly localMediaPreviews = new Map<string, { localPath: string; expiresAt: number }>()
-  private readonly remoteObjectPreviews = new Map<string, { url: string; expiresAt: number }>()
+  private readonly remoteObjectPreviews = new Map<
+    string,
+    { url: string; headUrl: string; expiresAt: number }
+  >()
   private readonly preparedUploads = new Map<string, PreparedUpload>()
   private readonly pausedDirections = new Set<TransferDirection>()
   private readonly pauseWaiters: Record<TransferDirection, Array<() => void>> = {
@@ -173,6 +177,7 @@ export class OssService {
     this.resetActiveTransfers()
     const generation = this.transferGeneration
     this.preparedUploads.clear()
+    this.localMediaPreviews.clear()
     this.remoteObjectPreviews.clear()
     this.auth = config
     try {
@@ -209,6 +214,7 @@ export class OssService {
     this.auth = null
     this.bucketRegions.clear()
     this.preparedUploads.clear()
+    this.localMediaPreviews.clear()
     this.remoteObjectPreviews.clear()
   }
 
@@ -269,13 +275,24 @@ export class OssService {
   }
 
   async listRamUsers(): Promise<RamUser[]> {
-    const response = await this.ramClient().listUsers(new ListUsersRequest({ maxItems: 1000 }))
-    return (response.body?.users?.user || []).map((user) => ({
-      userName: user.userName || '',
-      displayName: user.displayName,
-      comments: user.comments,
-      createDate: user.createDate
-    }))
+    const generation = this.transferGeneration
+    const client = this.ramClient()
+    const users: RamUser[] = []
+    let marker: string | undefined
+    do {
+      const { body } = await client.listUsers(new ListUsersRequest({ marker, maxItems: 1000 }))
+      this.assertCurrentSession(generation)
+      for (const user of body?.users?.user || []) {
+        users.push({
+          userName: user.userName || '',
+          displayName: user.displayName,
+          comments: user.comments,
+          createDate: user.createDate
+        })
+      }
+      marker = body?.isTruncated ? body.marker : undefined
+    } while (marker)
+    return users
   }
 
   async saveRamUser(
@@ -356,14 +373,17 @@ export class OssService {
 
   async listBuckets(): Promise<BucketInfo[]> {
     const generation = this.transferGeneration
-    const result = await this.client().listBuckets()
-    this.assertCurrentSession(generation)
-    const buckets = (result.buckets || []).map((bucket) => ({
-      name: bucket.name,
-      region: bucket.region,
-      creationDate: bucket.creationDate,
-      storageClass: bucket.storageClass
-    }))
+    const client = this.client()
+    const buckets: BucketInfo[] = []
+    let marker: string | undefined
+    do {
+      const result = await client.listBuckets(marker ? { marker } : {})
+      this.assertCurrentSession(generation)
+      for (const { name, region, creationDate, storageClass } of result.buckets || []) {
+        buckets.push({ name, region, creationDate, storageClass })
+      }
+      marker = result.isTruncated ? result.nextMarker : undefined
+    } while (marker)
     this.bucketRegions.clear()
     for (const bucket of buckets) {
       if (bucket.region) this.bucketRegions.set(bucket.name, bucket.region)
@@ -436,14 +456,15 @@ export class OssService {
   ): Promise<ObjectScanResult> {
     const page = await this.listObjectPage(bucket, prefix, marker, 1000)
     const normalizedKeyword = keyword?.trim().toLocaleLowerCase()
+    const directories = page.objects.reduce((count, item) => count + Number(item.isDirectory), 0)
     return {
       matches: normalizedKeyword
         ? page.objects.filter((item) =>
             item.displayName.toLocaleLowerCase().includes(normalizedKeyword)
           )
         : [],
-      directories: page.objects.filter((item) => item.isDirectory).length,
-      files: page.objects.filter((item) => !item.isDirectory).length,
+      directories,
+      files: page.objects.length - directories,
       nextMarker: page.nextMarker,
       isTruncated: page.isTruncated
     }
@@ -495,8 +516,9 @@ export class OssService {
     const client = this.bucketClient(bucket)
     const expanded: string[] = []
     for (const name of names) {
-      if (name.endsWith('/')) expanded.push(...(await this.listAllObjectNames(client, name)))
-      else expanded.push(name)
+      if (name.endsWith('/')) {
+        for (const key of await this.listAllObjectNames(client, name)) expanded.push(key)
+      } else expanded.push(name)
     }
     await this.deleteObjectNames(client, expanded)
   }
@@ -578,7 +600,7 @@ export class OssService {
             headers: { 'x-oss-forbid-overwrite': 'true' }
           })
         }
-        copiedSourceNames.push(...sourceNames)
+        if (move) for (const name of sourceNames) copiedSourceNames.push(name)
       }
     } catch (error) {
       if ((error as { code?: string }).code === 'FileAlreadyExists') {
@@ -636,6 +658,7 @@ export class OssService {
   }
 
   async refreshCdnCache(request: CacheRefreshRequest): Promise<string> {
+    const generation = this.transferGeneration
     const domain = request.domainName.trim().toLowerCase()
     if (!domain) throw new Error('请选择 CDN 加速域名')
     const paths = request.objectPath
@@ -672,13 +695,14 @@ export class OssService {
           objectType: request.objectType
         })
       )
-    const response = await this.runCdnDomainAction(domainInfo, refresh)
+    const response = await this.runCdnDomainAction(generation, domainInfo, refresh)
     const taskId = response.body?.refreshTaskId
     if (!taskId) throw new Error('CDN 刷新请求未返回任务 ID')
     return taskId
   }
 
   async listCdnRefreshTasks(domainName: string, taskId?: string): Promise<CacheRefreshTask[]> {
+    const generation = this.transferGeneration
     const domain = domainName.trim().toLowerCase()
     if (!domain) throw new Error('请选择 CDN 加速域名')
     const domainInfo = (await this.listCdnDomains()).find(
@@ -686,7 +710,7 @@ export class OssService {
     )
     if (!domainInfo) throw new Error(`当前凭证无法管理 CDN 域名“${domainName}”`)
 
-    return this.runCdnDomainAction(domainInfo, async (source) => {
+    return this.runCdnDomainAction(generation, domainInfo, async (source) => {
       const client = this.cdnClient(source)
       if (taskId) {
         const response = await client.describeRefreshTaskById(
@@ -722,6 +746,7 @@ export class OssService {
   }
 
   async getCdnRefreshQuota(domainName: string): Promise<CacheRefreshQuota> {
+    const generation = this.transferGeneration
     const domain = domainName.trim().toLowerCase()
     if (!domain) throw new Error('请选择 CDN 加速域名')
     const domainInfo = (await this.listCdnDomains()).find(
@@ -729,7 +754,7 @@ export class OssService {
     )
     if (!domainInfo) throw new Error(`当前凭证无法管理 CDN 域名“${domainName}”`)
 
-    const response = await this.runCdnDomainAction(domainInfo, (source) =>
+    const response = await this.runCdnDomainAction(generation, domainInfo, (source) =>
       this.cdnClient(source).describeRefreshQuota(new DescribeRefreshQuotaRequest({}))
     )
     const quota = response.body
@@ -790,12 +815,14 @@ export class OssService {
   }
 
   private async runCdnDomainAction<T>(
+    generation: number,
     domainInfo: CdnDomainInfo,
     action: (source: 'primary' | 'dedicated') => Promise<T>
   ): Promise<T> {
     const preferredSource = domainInfo.credentialSources.includes('dedicated')
       ? 'dedicated'
       : 'primary'
+    this.assertCurrentSession(generation)
     try {
       return await action(preferredSource)
     } catch (error) {
@@ -804,6 +831,7 @@ export class OssService {
         domainInfo.credentialSources.includes('primary') &&
         this.isPermissionDenied(error)
       if (!canRetryPrimary) throw error
+      this.assertCurrentSession(generation)
       return action('primary')
     }
   }
@@ -910,16 +938,13 @@ export class OssService {
   }
 
   async isObjectPublic(bucket: string, name: string): Promise<boolean> {
-    const region = this.bucketRegions.get(bucket)
-    if (!region) return false
-    const objectPath = name
-      .split('/')
-      .map((part) => encodeURIComponent(part))
-      .join('/')
-    const protocol = this.auth?.secure === false ? 'http' : 'https'
+    const url = new URL(this.signedUrl(bucket, name, 60))
+    url.search = ''
     try {
-      const response = await fetch(`${protocol}://${bucket}.${region}.aliyuncs.com/${objectPath}`, {
-        headers: { Range: 'bytes=0-1', 'Cache-Control': 'no-cache' }
+      const response = await fetch(url, {
+        method: 'HEAD',
+        headers: { 'Cache-Control': 'no-cache' },
+        signal: AbortSignal.timeout(this.settings.timeoutSeconds * 1000)
       })
       return response.ok
     } catch {
@@ -960,21 +985,23 @@ export class OssService {
 
   prepareObjectPreview(bucket: string, name: string): string {
     const token = randomUUID()
+    const client = this.bucketClient(bucket)
     this.remoteObjectPreviews.set(token, {
-      url: this.bucketClient(bucket).signatureUrl(name, { expires: 900 }),
+      url: client.signatureUrl(name, { expires: 900 }),
+      headUrl: client.signatureUrl(name, { expires: 900, method: 'HEAD' }),
       expiresAt: Date.now() + 15 * 60 * 1000
     })
     return `oss-browser-media://object/${token}`
   }
 
-  resolveObjectPreview(token: string): string | undefined {
+  resolveObjectPreview(token: string, method = 'GET'): string | undefined {
     const preview = this.remoteObjectPreviews.get(token)
     if (!preview) return undefined
     if (preview.expiresAt <= Date.now()) {
       this.remoteObjectPreviews.delete(token)
       return undefined
     }
-    return preview.url
+    return method === 'HEAD' ? preview.headUrl : preview.url
   }
 
   discardObjectPreview(token: string): void {
@@ -1085,7 +1112,6 @@ export class OssService {
     paths: string[]
   ): Promise<UploadPreparation> {
     const generation = this.transferGeneration
-    this.localMediaPreviews.clear()
     const entries = await this.prepareUploadEntries(prefix, paths)
     this.assertCurrentSession(generation)
     const files = entries.filter((entry) => !entry.isDirectory)
@@ -1127,6 +1153,7 @@ export class OssService {
     })
     this.assertCurrentSession(generation)
     const returnedNames = new Set<string>()
+    const previewTokens: string[] = []
     const conflicts = files.flatMap((file) => {
       if (!conflictNames.has(file.name) || returnedNames.has(file.name)) return []
       returnedNames.add(file.name)
@@ -1153,6 +1180,7 @@ export class OssService {
         }
       } else if (/\.(mp4|mov|mkv|webm|avi|m4v|flv|wmv|mpeg|mpg)$/i.test(file.name)) {
         const previewToken = randomUUID()
+        previewTokens.push(previewToken)
         this.localMediaPreviews.set(previewToken, {
           localPath: file.localPath,
           expiresAt: Date.now() + 60 * 60 * 1000
@@ -1170,12 +1198,16 @@ export class OssService {
       prefix,
       paths: [...paths],
       entries,
-      conflictNames
+      conflictNames,
+      previewTokens
     })
     return { id, conflicts }
   }
 
   discardUploadPreparation(id: string): void {
+    for (const token of this.preparedUploads.get(id)?.previewTokens || []) {
+      this.localMediaPreviews.delete(token)
+    }
     this.preparedUploads.delete(id)
   }
 
@@ -1201,7 +1233,7 @@ export class OssService {
     const prepared = options.preparationId
       ? this.preparedUploads.get(options.preparationId)
       : undefined
-    if (options.preparationId) this.preparedUploads.delete(options.preparationId)
+    if (options.preparationId) this.discardUploadPreparation(options.preparationId)
     if (options.preparationId && (!prepared || prepared.generation !== generation)) {
       throw new Error('上传准备结果已失效，请重新选择上传内容')
     }
@@ -1588,13 +1620,14 @@ export class OssService {
     })
     if (generation !== this.transferGeneration) return false
     for (const discovery of discoveries) {
-      objects.push(...discovery.objects)
+      for (const object of discovery.objects) objects.push(object)
       for (const directory of discovery.directories) directories.add(directory)
     }
     const overwritePaths = new Set<string>()
     const targetPaths = new Set<string>()
     for (const object of objects) {
       const localPath = this.resolveDownloadPath(destination, object.relativePath)
+      if (localPath === resolve(destination)) throw new Error('下载对象没有有效的本地文件名')
       const targetPath = process.platform === 'win32' ? localPath.toLowerCase() : localPath
       if (targetPaths.has(targetPath)) throw new Error(`多个下载对象指向同一本地文件：${localPath}`)
       targetPaths.add(targetPath)
@@ -1610,10 +1643,36 @@ export class OssService {
       return false
     }
     if (generation !== this.transferGeneration) return false
-    for (const directory of [...directories].sort((left, right) => left.length - right.length)) {
-      await mkdir(this.resolveDownloadPath(destination, directory), { recursive: true })
+    const root = await realpath(destination)
+    this.assertCurrentSession(generation)
+    const ensureDirectory = async (directory: string): Promise<string> => {
+      if (directory === destination) return root
+      let resolved: string
+      try {
+        resolved = await realpath(directory)
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
+        const parent = await ensureDirectory(dirname(directory))
+        this.assertCurrentSession(generation)
+        const child = join(parent, basename(directory))
+        await mkdir(child, { recursive: true })
+        resolved = await realpath(child)
+      }
+      const pathFromRoot = relative(root, resolved)
+      if (
+        pathFromRoot === '..' ||
+        pathFromRoot.startsWith(`..${sep}`) ||
+        isAbsolute(pathFromRoot)
+      ) {
+        throw new Error('下载目录指向所选位置之外，请选择其他下载目录')
+      }
+      return resolved
+    }
+    for (const directory of directories) {
+      await ensureDirectory(this.resolveDownloadPath(destination, directory))
       if (generation !== this.transferGeneration) return false
     }
+    if (!objects.length) return true
     const batch = this.newTransferBatch('download', objects.length)
 
     const downloadObject = async (object: {
@@ -1625,8 +1684,7 @@ export class OssService {
       const transfer = this.newTransfer('download', object.name, batch)
       const client = this.bucketClient(bucket)
       await this.runControlledTransfer(transfer, client, async () => {
-        await mkdir(join(localPath, '..'), { recursive: true })
-        const parentPath = await realpath(dirname(localPath))
+        const parentPath = await ensureDirectory(dirname(localPath))
         const canonicalPath = join(parentPath, basename(localPath))
         const targetPath =
           process.platform === 'win32' ? canonicalPath.toLowerCase() : canonicalPath
@@ -1647,7 +1705,8 @@ export class OssService {
           await mkdir(dirname(checkpointPath), { recursive: true })
           const metadata = await client.getObjectMeta(object.name)
           this.assertCurrentSession(generation)
-          const total = Number(metadata.res.headers['content-length'] || 0)
+          const length = metadata.res.headers['content-length']
+          const total = length === undefined || length === '' ? NaN : Number(length)
           const etag = String(metadata.res.headers.etag || '')
           if (!Number.isSafeInteger(total) || total < 0) throw new Error('OSS 返回的对象大小无效')
           if (!etag) throw new Error('OSS 未返回对象 ETag，无法安全执行并行下载')
@@ -1807,6 +1866,8 @@ export class OssService {
                     activeBytes.set(range.start, 0)
                     try {
                       for await (const chunk of stream) {
+                        if (position + chunk.length > range.end)
+                          throw new Error('下载分片长度与预期不一致')
                         let written = 0
                         while (written < chunk.length) {
                           const result = await file.write(
@@ -2007,13 +2068,13 @@ export class OssService {
         files.push({ localPath: path, relativePath: basename(path), isDirectory: false })
       else {
         const children = await this.walk(path)
-        files.push(
-          ...children.map((entry) => ({
+        for (const entry of children) {
+          files.push({
             localPath: entry.path,
             relativePath: join(basename(path), relative(path, entry.path)),
             isDirectory: entry.isDirectory
-          }))
-        )
+          })
+        }
       }
     }
     return files
@@ -2075,25 +2136,25 @@ export class OssService {
     worker: (item: T) => Promise<void>,
     shouldStop: () => boolean = () => false
   ): Promise<void> {
-    const queue = [...items]
+    let nextIndex = 0
+    let failed = false
     let firstError: unknown
     const workers = Array.from(
-      { length: Math.min(Math.max(concurrency, 1), queue.length) },
+      { length: Math.min(Math.max(concurrency, 1), items.length) },
       async () => {
-        while (queue.length && firstError === undefined && !shouldStop()) {
-          const item = queue.shift()
-          if (item === undefined) continue
+        while (nextIndex < items.length && !failed && !shouldStop()) {
+          const item = items[nextIndex++]
           try {
             await worker(item)
           } catch (error) {
-            firstError = error
-            queue.length = 0
+            if (!failed) firstError = error
+            failed = true
           }
         }
       }
     )
     await Promise.all(workers)
-    if (firstError !== undefined) throw firstError
+    if (failed) throw firstError
   }
 
   cancelTransfer(id: string): void {
@@ -2163,6 +2224,7 @@ export class OssService {
       if (batch.direction !== direction) continue
       batch.cancelled = true
       batch.hidden = true
+      this.transferBatches.delete(batch.id)
     }
     for (const [id, retry] of this.retryTransfers) {
       if (retry.direction === direction) this.retryTransfers.delete(id)
@@ -2467,7 +2529,11 @@ export class OssService {
     status: TransferItem['status']
   ): void {
     const statusChanged = transfer.status !== status
-    if (status === 'done' && transfer.status !== 'done') transfer.batch.done += 1
+    if (status === 'done' && transfer.status !== 'done') {
+      transfer.batch.done += 1
+      if (transfer.batch.done === transfer.batch.total)
+        this.transferBatches.delete(transfer.batch.id)
+    }
     transfer.progress = progress
     transfer.status = status
     const now = Date.now()

@@ -83,7 +83,8 @@ export function resolveObjectPreview(name: string): ObjectPreviewDefinition {
   if (['yaml', 'yml'].includes(extension)) return { kind: 'yaml' }
   if (extension === 'csv') return { kind: 'csv' }
   if (extension === 'tsv') return { kind: 'tsv' }
-  if (codeLanguages[extension]) return { kind: 'code', language: codeLanguages[extension] }
+  if (Object.hasOwn(codeLanguages, extension))
+    return { kind: 'code', language: codeLanguages[extension] }
   if (extension === 'txt') return { kind: 'text' }
   return { kind: 'other' }
 }

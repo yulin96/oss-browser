@@ -14,12 +14,13 @@ const emit = defineEmits<{ click: [] }>()
 
 <template>
   <div
+    v-keyboard-click
     class="app-button"
     :class="[`is-${tone || 'default'}`, { 'is-disabled': disabled }]"
     role="button"
+    :aria-disabled="disabled || undefined"
     :tabindex="disabled ? -1 : 0"
     @click="!disabled && emit('click')"
-    @keydown.enter="!disabled && emit('click')"
   >
     <component :is="icon" v-if="icon" :size="15" />
     {{ label }}

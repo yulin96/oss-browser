@@ -1,8 +1,10 @@
 <script setup lang="ts">
-import { ClipboardPaste, FolderPlus, FolderUp, Upload } from '@lucide/vue'
+import { ClipboardPaste, FolderPlus, FolderUp, Upload, X } from '@lucide/vue'
 
 import type { AppController } from '../composables/useAppController'
 import { locale, setLocale, t, type AppLocale } from '../i18n'
+import AppTooltip from './AppTooltip.vue'
+import ErrorMessage from './ErrorMessage.vue'
 import AppHeader from './AppHeader.vue'
 import BrowserNavigation from './BrowserNavigation.vue'
 import BrowserToolbar from './BrowserToolbar.vue'
@@ -15,6 +17,7 @@ const props = defineProps<{ controller: AppController }>()
 const { controller } = props
 const {
   appVersion,
+  errorMessage,
   auth,
   transferSummaries,
   updateState,
@@ -68,6 +71,23 @@ const {
   />
 
   <div class="workspace-full">
+    <div v-if="errorMessage" class="error-strip">
+      <ErrorMessage :message="errorMessage" />
+      <AppTooltip :label="t('关闭')">
+        <div
+          class="error-dismiss"
+          role="button"
+          tabindex="0"
+          :aria-label="t('关闭')"
+          @click="errorMessage = ''"
+          @keydown.enter="errorMessage = ''"
+          @keydown.space.prevent="errorMessage = ''"
+        >
+          <X :size="16" />
+        </div>
+      </AppTooltip>
+    </div>
+
     <BucketHome
       v-if="!currentBucket"
       v-model:search-text="bucketSearchText"

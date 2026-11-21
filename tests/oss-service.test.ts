@@ -154,7 +154,13 @@ describe('OssService object previews', () => {
     const client = {
       list: vi.fn(),
       copy: vi.fn(),
-      signatureUrl: vi.fn().mockReturnValue('https://bucket.example/private.pdf?signature=secret')
+      signatureUrl: vi
+        .fn()
+        .mockImplementation((_name, options) =>
+          options.method === 'HEAD'
+            ? 'https://bucket.example/private.pdf?signature=head'
+            : 'https://bucket.example/private.pdf?signature=secret'
+        )
     }
     useClients(service, { bucket: client })
 
@@ -166,6 +172,14 @@ describe('OssService object previews', () => {
     expect(service.resolveObjectPreview(token)).toBe(
       'https://bucket.example/private.pdf?signature=secret'
     )
+
+    expect(service.resolveObjectPreview(token, 'HEAD')).toBe(
+      'https://bucket.example/private.pdf?signature=head'
+    )
+    expect(client.signatureUrl).toHaveBeenCalledWith('private.pdf', {
+      expires: 900,
+      method: 'HEAD'
+    })
 
     service.discardObjectPreview(token)
     expect(service.resolveObjectPreview(token)).toBeUndefined()
@@ -314,6 +328,26 @@ describe('OssService CDN credentials', () => {
     ).resolves.toBe('primary-task')
     expect(dedicated.refreshObjectCaches).toHaveBeenCalledOnce()
     expect(primary.refreshObjectCaches).toHaveBeenCalledOnce()
+  })
+
+  it('stops a CDN refresh when the account changes during domain lookup', async () => {
+    const service = new OssService(vi.fn())
+    setAuth(service, false)
+    const primary = cdnClient(['primary.example.com'])
+    useCdnClients(service, { primary, dedicated: cdnClient([]) })
+    vi.spyOn(service, 'listCdnDomains').mockImplementation(async () => {
+      service.disconnect()
+      return [{ domainName: 'primary.example.com', credentialSources: ['primary'] }]
+    })
+
+    await expect(
+      service.refreshCdnCache({
+        domainName: 'primary.example.com',
+        objectPath: 'https://primary.example.com/image.png',
+        objectType: 'File'
+      })
+    ).rejects.toThrow('账号已切换')
+    expect(primary.refreshObjectCaches).not.toHaveBeenCalled()
   })
 
   it('rejects incomplete URLs and URLs for another domain before calling CDN', async () => {

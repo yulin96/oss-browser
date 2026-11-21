@@ -57,7 +57,7 @@ export function useBucketOperations(options: {
     bucketActionTarget.value = bucket
     options.closeBucketMenu()
     const acl = await options.runBrowserTask(() => window.ossBrowser.buckets.getAcl(bucket.name))
-    if (!acl) return
+    if (!acl || bucketActionTarget.value?.name !== bucket.name) return
     options.form.acl = acl
     options.setModal('bucket-acl')
   }

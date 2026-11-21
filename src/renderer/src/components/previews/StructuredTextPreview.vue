@@ -55,17 +55,24 @@ const parsedData = computed<{ formatted: string; error: string }>(() => {
 const parsedTable = computed(() => {
   if (props.format !== 'csv' && props.format !== 'tsv')
     return { headers: [], rows: [], errors: [], truncated: false }
-  const result = Papa.parse<string[]>(props.content, {
+  const rows: string[][] = []
+  const errors: Papa.ParseError[] = []
+  let truncated = false
+  Papa.parse<string[]>(props.content, {
     delimiter: props.format === 'tsv' ? '\t' : '',
-    skipEmptyLines: 'greedy'
+    skipEmptyLines: 'greedy',
+    step(result, parser) {
+      errors.push(...result.errors)
+      if (rows.length > maxRows) {
+        truncated = true
+        parser.abort()
+        return
+      }
+      if (result.data.length > maxColumns) truncated = true
+      rows.push(result.data.slice(0, maxColumns))
+    }
   })
-  const rows = result.data.map((row) => row.slice(0, maxColumns))
-  return {
-    headers: rows[0] || [],
-    rows: rows.slice(1, maxRows + 1),
-    errors: result.errors,
-    truncated: rows.length - 1 > maxRows || result.data.some((row) => row.length > maxColumns)
-  }
+  return { headers: rows[0] || [], rows: rows.slice(1), errors, truncated }
 })
 
 function handleMarkdownClick(event: MouseEvent): void {

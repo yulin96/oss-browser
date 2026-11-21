@@ -38,15 +38,16 @@ const emit = defineEmits<{
       <div v-if="details" class="update-release-notes">{{ details }}</div>
       <AlertDialogFooter>
         <div
+          v-keyboard-click
           class="inline-flex h-9 items-center justify-center rounded-md border border-(--border) px-4 text-sm font-medium hover:bg-background"
           role="button"
           tabindex="0"
           @click="emit('update:open', false)"
-          @keydown.enter="emit('update:open', false)"
         >
           {{ t('取消') }}
         </div>
         <div
+          v-keyboard-click
           :class="`inline-flex h-9 items-center justify-center rounded-md px-4 text-sm font-medium ${
             destructive
               ? 'bg-destructive text-white hover:opacity-90'
@@ -55,7 +56,6 @@ const emit = defineEmits<{
           role="button"
           tabindex="0"
           @click="emit('confirm')"
-          @keydown.enter="emit('confirm')"
         >
           {{ confirmLabel }}
         </div>

@@ -1,16 +1,19 @@
 <script setup lang="ts">
 import ErrorMessage from './ErrorMessage.vue'
-import { ref, watch } from 'vue'
+import { defineAsyncComponent, ref, watch } from 'vue'
 import { CircleCheck, Copy, LoaderCircle, RefreshCw, TriangleAlert } from '@lucide/vue'
 import type { ObjectPreviewKind } from '../../../shared/object-preview'
 import type { AppController } from '../composables/useAppController'
 import { t } from '../i18n'
 import AppButton from './AppButton.vue'
 import ModalShell from './ModalShell.vue'
-import CodePreview from './previews/CodePreview.vue'
 import FontPreview from './previews/FontPreview.vue'
-import PdfPreview from './previews/PdfPreview.vue'
-import StructuredTextPreview from './previews/StructuredTextPreview.vue'
+
+const CodePreview = defineAsyncComponent(() => import('./previews/CodePreview.vue'))
+const PdfPreview = defineAsyncComponent(() => import('./previews/PdfPreview.vue'))
+const StructuredTextPreview = defineAsyncComponent(
+  () => import('./previews/StructuredTextPreview.vue')
+)
 
 const props = defineProps<{ controller: AppController }>()
 const {
@@ -41,7 +44,6 @@ const {
   cacheForm,
   selectedMediaProcesses,
   mediaProcessOptions,
-  selectedObjects,
   previewType,
   handleCacheDomainChange,
   showCachePanel,
@@ -315,7 +317,7 @@ function cacheTaskStatusClass(status: string): string {
     <Transition name="modal" appear>
       <ModalShell
         v-if="modal === 'preview'"
-        :title="t('预览：{name}', { name: selectedObjects[0]?.displayName || '' })"
+        :title="t('预览：{name}', { name: objectPreview?.name || '' })"
         width="960px"
         @close="modal = null"
       >
@@ -395,7 +397,13 @@ function cacheTaskStatusClass(status: string): string {
             <div v-else-if="objectPreview.kind === 'text'" class="text-preview">
               <textarea v-model="previewText" spellcheck="false" />
               <div class="text-preview-actions">
-                <AppButton :label="t('保存修改')" tone="primary" @click="savePreviewText()" />
+                <ErrorMessage v-if="previewSaveError" :message="previewSaveError" />
+                <AppButton
+                  :label="t('保存修改')"
+                  tone="primary"
+                  :disabled="previewSaving"
+                  @click="savePreviewText()"
+                />
               </div>
             </div>
             <div v-else class="preview-unknown">

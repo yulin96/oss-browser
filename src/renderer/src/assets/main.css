@@ -826,7 +826,13 @@ input[type='checkbox']:checked::after {
   transform: var(--accent-active);
 }
 .workspace-full {
+  display: flex;
+  flex-direction: column;
   height: calc(100% - 52px);
+}
+.workspace-full > :is(.bucket-home, .content) {
+  flex: 1;
+  min-height: 0;
 }
 .bucket-home {
   height: 100%;
