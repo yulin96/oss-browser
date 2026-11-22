@@ -21,7 +21,7 @@ jobs:
       matrix:
         include:
           - name: macOS
-            os: macos-14
+            os: macos-15
             command: pnpm exec electron-builder --mac dmg zip --arm64 --x64 --publish never
             artifact: release-macos
             files: |
