@@ -1,9 +1,9 @@
 cask "oss-browser" do
   arch arm: "arm64", intel: "x64"
 
-  version "0.5.15"
-  sha256 arm: "efab6ceadda30df672ca829306019eb5dd4b19d1a6a15500ddef1b05800b79f8",
-         intel: "5770ca7a2fb048fc547a2cac3daf94a4b9b35b820f515f3431c314fde5fcea32"
+  version "0.5.17"
+  sha256 arm: "f39e5246b1829c528059f4ce0eaca9d8240ada87629c143617c407c10510899f",
+         intel: "e5a0a6cbb498772b4b5643579e1eb578a10289d0e5d1e18c694620c9500b3194"
 
   url "https://github.com/yulin96/oss-browser/releases/download/v#{version}/oss-browser-#{version}-#{arch}.dmg"
   name "OSS Browser"
